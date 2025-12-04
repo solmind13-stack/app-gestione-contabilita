@@ -111,3 +111,30 @@ export type RiepilogoPrevisioniEntrate = {
   totalePonderato: number;
   totaleIncassato: number;
 };
+
+export type PrevisioneUscita = {
+  id: string;
+  societa: 'LNC' | 'STG';
+  anno: number;
+  mese: string;
+  dataScadenza: string;
+  descrizione: string;
+  categoria: string;
+  sottocategoria: string;
+  importoPrevisto: number;
+  certezza: 'Certa' | 'Probabile' | 'Incerta';
+  probabilita: number; // 0 to 1
+  stato: 'Da pagare' | 'Pagato' | 'Parziale' | 'Annullato';
+  fonteContratto?: string;
+  ricorrenza?: 'Nessuna' | 'Mensile' | 'Annuale' | 'Trimestrale';
+  note?: string;
+  importoEffettivo?: number;
+};
+
+export type RiepilogoPrevisioniUscite = {
+  totalePrevisto: number;
+  totalePonderato: number;
+  totaleEffettivo: number;
+  daPagare: number;
+  percentualePagato: number;
+};
