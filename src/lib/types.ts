@@ -67,3 +67,24 @@ export type User = {
     role: UserRole;
     avatar?: string;
 };
+
+export type Scadenza = {
+  id: string;
+  societa: 'LNC' | 'STG';
+  anno: number;
+  dataScadenza: string;
+  descrizione: string;
+  categoria: string;
+  importoPrevisto: number;
+  importoPagato: number;
+  stato: 'Pagato' | 'Da pagare' | 'Parziale';
+  ricorrenza: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
+  note?: string;
+};
+
+export type RiepilogoScadenze = {
+    totalePrevisto: number;
+    totalePagato: number;
+    daPagare: number;
+    percentualeCompletamento: number;
+};
