@@ -2,9 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  html, body {
+    @apply h-full font-body antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
+
 
 @layer base {
   :root {
@@ -65,8 +71,5 @@ body {
 @layer base {
   * {
     @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
   }
 }
