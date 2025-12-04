@@ -2,8 +2,10 @@
 import type { Movimento, Riepilogo } from './types';
 
 export const movimentiData: Movimento[] = [
+  // LNC Data
   {
-    id: '1',
+    id: 'LNC-1',
+    societa: 'LNC',
     anno: 2025,
     data: '05/07/2025',
     descrizione: 'Affitto Eris',
@@ -15,9 +17,10 @@ export const movimentiData: Movimento[] = [
     note: 'Fattura 7/25'
   },
   {
-    id: '1b',
+    id: 'LNC-1b',
+    societa: 'LNC',
     anno: 2025,
-    data: '05/07/2025', // Duplicated from image for demo
+    data: '05/07/2025',
     descrizione: 'Affitto Eris',
     categoria: 'Immobiliare',
     sottocategoria: 'Affitti',
@@ -27,7 +30,8 @@ export const movimentiData: Movimento[] = [
     note: 'Fattura 8/25'
   },
   {
-    id: '2',
+    id: 'LNC-2',
+    societa: 'LNC',
     anno: 2025,
     data: '07/01/2025',
     descrizione: 'IMU 2024',
@@ -39,7 +43,8 @@ export const movimentiData: Movimento[] = [
     note: 'Pagamento effettuato da Nuccio junior'
   },
   {
-    id: '3',
+    id: 'LNC-3',
+    societa: 'LNC',
     anno: 2025,
     data: '07/01/2025',
     descrizione: 'imu 2024',
@@ -50,8 +55,9 @@ export const movimentiData: Movimento[] = [
     iva: 0,
     note: 'Pagamento effettuato da Nuccio Senior da'
   },
-    {
-    id: '4',
+  {
+    id: 'LNC-4',
+    societa: 'LNC',
     anno: 2025,
     data: '07/01/2025',
     descrizione: 'IMU 2024 case mare',
@@ -63,7 +69,8 @@ export const movimentiData: Movimento[] = [
     note: 'Pagamento effettuato da Nuccio junior'
   },
   {
-    id: '5',
+    id: 'LNC-5',
+    societa: 'LNC',
     anno: 2025,
     data: '07/01/2025',
     descrizione: 'IMU botteghe',
@@ -75,7 +82,8 @@ export const movimentiData: Movimento[] = [
     note: 'Pagamento effettuato da Nuccio junior su'
   },
   {
-    id: '5b',
+    id: 'LNC-5b',
+    societa: 'LNC',
     anno: 2025,
     data: '29/07/2025',
     descrizione: 'IMU terreno b.zacco',
@@ -87,7 +95,8 @@ export const movimentiData: Movimento[] = [
     note: 'Pagam effettuato da Nuccio senior su bon'
   },
   {
-    id: '6',
+    id: 'LNC-6',
+    societa: 'LNC',
     anno: 2025,
     data: '16/07/2025',
     descrizione: 'Taglio erba B.zacco',
@@ -98,8 +107,9 @@ export const movimentiData: Movimento[] = [
     iva: 0,
     note: 'Prelievo a sportello'
   },
-    {
-    id: '7',
+  {
+    id: 'LNC-7',
+    societa: 'LNC',
     anno: 2025,
     data: '16/07/2025',
     descrizione: 'Rimanenza contante',
@@ -111,7 +121,8 @@ export const movimentiData: Movimento[] = [
     note: 'versamento a sportello'
   },
   {
-    id: '8',
+    id: 'LNC-8',
+    societa: 'LNC',
     anno: 2025,
     data: '11/09/2025',
     descrizione: 'Affitto Eris',
@@ -123,7 +134,8 @@ export const movimentiData: Movimento[] = [
     note: 'Fattura 9/25'
   },
   {
-    id: '9',
+    id: 'LNC-9',
+    societa: 'LNC',
     anno: 2025,
     data: '04/11/2025',
     descrizione: 'Affitto ERIS',
@@ -134,8 +146,9 @@ export const movimentiData: Movimento[] = [
     iva: 0.22,
     note: 'Fattura 10/25'
   },
-   {
-    id: '10',
+  {
+    id: 'LNC-10',
+    societa: 'LNC',
     anno: 2025,
     data: '04/11/2025',
     descrizione: 'Affitto ERIS',
@@ -146,6 +159,128 @@ export const movimentiData: Movimento[] = [
     iva: 0.22,
     note: 'Fattura 11/25'
   },
+
+  // STG Data
+  {
+    id: 'STG-1',
+    societa: 'STG',
+    anno: 2025,
+    data: '01/09/2023',
+    descrizione: 'BAPRONLINE PROFILO BASE+DOC+SECURE+SMS',
+    categoria: 'Tasse',
+    sottocategoria: 'F24 Vari',
+    entrata: 0,
+    uscita: 0.50,
+    iva: 0
+  },
+  {
+    id: 'STG-2',
+    societa: 'STG',
+    anno: 2025,
+    data: '30/09/2023',
+    descrizione: 'Recupero imposta di bollo su estratto conto/ren',
+    categoria: 'Gestione Generale',
+    sottocategoria: 'Altre Spese',
+    entrata: 0,
+    uscita: 25.20,
+    iva: 0
+  },
+  {
+    id: 'STG-3',
+    societa: 'STG',
+    anno: 2025,
+    data: '30/09/2023',
+    descrizione: 'Recupero imposta di bollo estratto conto/ren',
+    categoria: 'Gestione Generale',
+    sottocategoria: 'Altre Spese',
+    entrata: 0,
+    uscita: 25.20,
+    iva: 0
+  },
+  {
+    id: 'STG-4',
+    societa: 'STG',
+    anno: 2025,
+    data: '02/10/2023',
+    descrizione: 'BAPRONLINE PROFILO BASE+DOC+SECURE+SMS',
+    categoria: 'Gestione Generale',
+    sottocategoria: 'Spese Bancarie',
+    entrata: 0,
+    uscita: 0.50,
+    iva: 0
+  },
+  {
+    id: 'STG-5',
+    societa: 'STG',
+    anno: 2025,
+    data: '05/01/2024',
+    descrizione: 'Affitto Reggiani',
+    categoria: 'Immobiliare',
+    sottocategoria: 'Affitti',
+    entrata: 610.00,
+    uscita: 0,
+    iva: 0.22
+  },
+  {
+    id: 'STG-6',
+    societa: 'STG',
+    anno: 2025,
+    data: '05/01/2024',
+    descrizione: 'Affitto H&S',
+    categoria: 'Immobiliare',
+    sottocategoria: 'Affitti',
+    entrata: 793.00,
+    uscita: 0,
+    iva: 0.22
+  },
+  {
+    id: 'STG-7',
+    societa: 'STG',
+    anno: 2025,
+    data: '05/01/2024',
+    descrizione: 'Affitto Spazio Pedagogia',
+    categoria: 'Immobiliare',
+    sottocategoria: 'Affitti',
+    entrata: 300.00,
+    uscita: 0,
+    iva: 0
+  },
+  {
+    id: 'STG-8',
+    societa: 'STG',
+    anno: 2025,
+    data: '05/01/2024',
+    descrizione: 'Telefonia Fissa - Telecom Italia',
+    categoria: 'Gestione Generale',
+    sottocategoria: 'Altre Spese',
+    entrata: 0,
+    uscita: 28.39,
+    iva: 0.22
+  },
+  {
+    id: 'STG-9',
+    societa: 'STG',
+    anno: 2025,
+    data: '05/01/2024',
+    descrizione: 'Telefonia mobile Telecom Italia',
+    categoria: 'Gestione Generale',
+    sottocategoria: 'Altre Spese',
+    entrata: 0,
+    uscita: 12.19,
+    iva: 0.22
+  },
+  {
+    id: 'STG-10',
+    societa: 'STG',
+    anno: 2025,
+    data: '16/06/2024',
+    descrizione: 'Tributi - Imu',
+    categoria: 'Tasse',
+    sottocategoria: 'F24 Vari',
+    entrata: 0,
+    uscita: 833.00,
+    iva: 0
+  }
 ];
 
 export const riepilogoMovimenti: Riepilogo = {

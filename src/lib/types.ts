@@ -35,6 +35,7 @@ export type NavItem = {
 
 export type Movimento = {
     id: string;
+    societa: 'LNC' | 'STG';
     anno: number;
     data: string;
     descrizione: string;
