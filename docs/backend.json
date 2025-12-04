@@ -1,0 +1,670 @@
+{
+  "entities": {
+    "Movement": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Movement",
+      "type": "object",
+      "description": "Represents a financial transaction or bank movement.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Movement entity."
+        },
+        "year": {
+          "type": "number",
+          "description": "The year of the movement."
+        },
+        "date": {
+          "type": "string",
+          "description": "The date of the movement.",
+          "format": "date-time"
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the movement."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the movement."
+        },
+        "subCategory": {
+          "type": "string",
+          "description": "The subcategory of the movement."
+        },
+        "grossIncome": {
+          "type": "number",
+          "description": "The gross income amount."
+        },
+        "grossExpenses": {
+          "type": "number",
+          "description": "The gross expense amount."
+        },
+        "vatPercentage": {
+          "type": "number",
+          "description": "The VAT percentage applied."
+        },
+        "netIncome": {
+          "type": "number",
+          "description": "The net income amount (calculated)."
+        },
+        "vatIncome": {
+          "type": "number",
+          "description": "The VAT amount for income (calculated)."
+        },
+        "netExpenses": {
+          "type": "number",
+          "description": "The net expense amount (calculated)."
+        },
+        "vatExpense": {
+          "type": "number",
+          "description": "The VAT amount for expenses (calculated)."
+        },
+        "account": {
+          "type": "string",
+          "description": "The account associated with the movement."
+        },
+        "operator": {
+          "type": "string",
+          "description": "The operator who processed the movement."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "The payment method used."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the movement."
+        },
+        "company": {
+          "type": "string",
+          "description": "The company (LNC or STG) associated with the movement."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The user who created the movement."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp when the movement was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "The timestamp when the movement was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "year",
+        "date",
+        "description",
+        "category",
+        "company",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Deadline": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Deadline",
+      "type": "object",
+      "description": "Represents a fiscal deadline or payment due.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Deadline entity."
+        },
+        "year": {
+          "type": "number",
+          "description": "The year of the deadline."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The date the deadline is due.",
+          "format": "date-time"
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the deadline."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the deadline."
+        },
+        "expectedAmount": {
+          "type": "number",
+          "description": "The expected amount due."
+        },
+        "paidAmount": {
+          "type": "number",
+          "description": "The amount that has been paid."
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the deadline (e.g., Due, Paid, Partial)."
+        },
+        "priority": {
+          "type": "string",
+          "description": "The priority of the deadline (e.g., High, Medium, Low)."
+        },
+        "recurrence": {
+          "type": "string",
+          "description": "The recurrence pattern of the deadline."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the deadline."
+        },
+        "company": {
+          "type": "string",
+          "description": "The company (LNC or STG) associated with the deadline."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The user who created the deadline."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp when the deadline was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "The timestamp when the deadline was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "year",
+        "dueDate",
+        "description",
+        "category",
+        "expectedAmount",
+        "status",
+        "priority",
+        "company",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "IncomeForecast": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "IncomeForecast",
+      "type": "object",
+      "description": "Represents a forecast of future income.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the IncomeForecast entity."
+        },
+        "year": {
+          "type": "number",
+          "description": "The year of the forecast."
+        },
+        "month": {
+          "type": "string",
+          "description": "The month of the forecast."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the forecast."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the forecast."
+        },
+        "subCategory": {
+          "type": "string",
+          "description": "The subcategory of the forecast."
+        },
+        "grossAmount": {
+          "type": "number",
+          "description": "The gross amount of the forecast."
+        },
+        "vatPercentage": {
+          "type": "number",
+          "description": "The VAT percentage applied."
+        },
+        "netAmount": {
+          "type": "number",
+          "description": "The net amount (calculated)."
+        },
+        "vatAmount": {
+          "type": "number",
+          "description": "The VAT amount (calculated)."
+        },
+        "certaintyLevel": {
+          "type": "string",
+          "description": "The level of certainty of the forecast."
+        },
+        "probabilityPercentage": {
+          "type": "number",
+          "description": "The probability percentage (0-1)."
+        },
+        "weightedAmount": {
+          "type": "number",
+          "description": "The weighted amount (calculated)."
+        },
+        "contractSource": {
+          "type": "string",
+          "description": "The source contract related to the forecast."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The due date of the forecast.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the forecast (e.g., To Be Collected, Collected, Partial, Cancelled)."
+        },
+        "actualDate": {
+          "type": "string",
+          "description": "The actual date of the income.",
+          "format": "date-time"
+        },
+        "actualAmount": {
+          "type": "number",
+          "description": "The actual amount received."
+        },
+        "recurrence": {
+          "type": "string",
+          "description": "The recurrence pattern of the forecast."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the forecast."
+        },
+        "company": {
+          "type": "string",
+          "description": "The company (LNC or STG) associated with the forecast."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The user who created the forecast."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp when the forecast was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "The timestamp when the forecast was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "year",
+        "month",
+        "description",
+        "category",
+        "grossAmount",
+        "certaintyLevel",
+        "probabilityPercentage",
+        "company",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ExpenseForecast": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ExpenseForecast",
+      "type": "object",
+      "description": "Represents a forecast of future expenses.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ExpenseForecast entity."
+        },
+        "year": {
+          "type": "number",
+          "description": "The year of the forecast."
+        },
+        "month": {
+          "type": "string",
+          "description": "The month of the forecast."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the forecast."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the forecast."
+        },
+        "subCategory": {
+          "type": "string",
+          "description": "The subcategory of the forecast."
+        },
+        "expectedAmount": {
+          "type": "number",
+          "description": "The expected amount of the expense."
+        },
+        "certaintyLevel": {
+          "type": "string",
+          "description": "The level of certainty of the forecast."
+        },
+        "probabilityPercentage": {
+          "type": "number",
+          "description": "The probability percentage (0-1)."
+        },
+        "weightedAmount": {
+          "type": "number",
+          "description": "The weighted amount (calculated)."
+        },
+        "contractSource": {
+          "type": "string",
+          "description": "The source contract related to the forecast."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The due date of the forecast.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the forecast (e.g., To Be Paid, Paid, Partial, Cancelled)."
+        },
+        "actualDate": {
+          "type": "string",
+          "description": "The actual date of the expense.",
+          "format": "date-time"
+        },
+        "actualAmount": {
+          "type": "number",
+          "description": "The actual amount paid."
+        },
+        "recurrence": {
+          "type": "string",
+          "description": "The recurrence pattern of the forecast."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the forecast."
+        },
+        "company": {
+          "type": "string",
+          "description": "The company (LNC or STG) associated with the forecast."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The user who created the forecast."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp when the forecast was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "The timestamp when the forecast was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "year",
+        "month",
+        "description",
+        "category",
+        "expectedAmount",
+        "certaintyLevel",
+        "probabilityPercentage",
+        "company",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The user's first name."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The user's last name."
+        },
+        "role": {
+          "type": "string",
+          "description": "The user's role (e.g., admin, lnc, stg)."
+        },
+        "lastLogin": {
+          "type": "string",
+          "description": "The timestamp of the user's last login.",
+          "format": "date-time"
+        },
+        "creationDate": {
+          "type": "string",
+          "description": "The timestamp when the user was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "firstName",
+        "lastName",
+        "role",
+        "lastLogin",
+        "creationDate"
+      ]
+    },
+    "ChatHistory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ChatHistory",
+      "type": "object",
+      "description": "Represents a chat history between the user and the AI assistant.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ChatHistory entity."
+        },
+        "message": {
+          "type": "string",
+          "description": "The user's message."
+        },
+        "response": {
+          "type": "string",
+          "description": "The AI assistant's response."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "The timestamp of the chat message.",
+          "format": "date-time"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The user who created the chat message."
+        }
+      },
+      "required": [
+        "id",
+        "message",
+        "response",
+        "timestamp",
+        "createdBy"
+      ]
+    },
+    "InsightsCache": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "InsightsCache",
+      "type": "object",
+      "description": "Represents a cache of AI-generated insights.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the InsightsCache entity."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content of the AI-generated insights."
+        },
+        "generationDate": {
+          "type": "string",
+          "description": "The timestamp when the insights were generated.",
+          "format": "date-time"
+        },
+        "validUntil": {
+          "type": "string",
+          "description": "The timestamp until which the insights are valid.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "content",
+        "generationDate",
+        "validUntil"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/movements/{movementId}",
+        "definition": {
+          "entityName": "Movement",
+          "schema": {
+            "$ref": "#/backend/entities/Movement"
+          },
+          "description": "Represents a financial transaction. Includes denormalized 'company' field for authorization independence.",
+          "params": [
+            {
+              "name": "movementId",
+              "description": "Unique identifier for the Movement document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/deadlines/{deadlineId}",
+        "definition": {
+          "entityName": "Deadline",
+          "schema": {
+            "$ref": "#/backend/entities/Deadline"
+          },
+          "description": "Represents a fiscal deadline. Includes denormalized 'company' field for authorization independence.",
+          "params": [
+            {
+              "name": "deadlineId",
+              "description": "Unique identifier for the Deadline document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/incomeForecasts/{incomeForecastId}",
+        "definition": {
+          "entityName": "IncomeForecast",
+          "schema": {
+            "$ref": "#/backend/entities/IncomeForecast"
+          },
+          "description": "Represents a forecast of future income. Includes denormalized 'company' field for authorization independence.",
+          "params": [
+            {
+              "name": "incomeForecastId",
+              "description": "Unique identifier for the IncomeForecast document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/expenseForecasts/{expenseForecastId}",
+        "definition": {
+          "entityName": "ExpenseForecast",
+          "schema": {
+            "$ref": "#/backend/entities/ExpenseForecast"
+          },
+          "description": "Represents a forecast of future expenses. Includes denormalized 'company' field for authorization independence.",
+          "params": [
+            {
+              "name": "expenseForecastId",
+              "description": "Unique identifier for the ExpenseForecast document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile information, including role for access control.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier for the User document, matching Firebase auth UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/chatHistory/{chatHistoryId}",
+        "definition": {
+          "entityName": "ChatHistory",
+          "schema": {
+            "$ref": "#/backend/entities/ChatHistory"
+          },
+          "description": "Stores the chat history for each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier for the User document, matching Firebase auth UID."
+            },
+            {
+              "name": "chatHistoryId",
+              "description": "Unique identifier for the ChatHistory document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/insightsCache/{insightsCacheId}",
+        "definition": {
+          "entityName": "InsightsCache",
+          "schema": {
+            "$ref": "#/backend/entities/InsightsCache"
+          },
+          "description": "Stores cached AI-generated insights.",
+          "params": [
+            {
+              "name": "insightsCacheId",
+              "description": "Unique identifier for the InsightsCache document."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "This Firestore structure is designed to support a multi-tenant accounting application for two Italian companies, LNC and STG, while adhering to the core design principles of Authorization Independence, Clarity of Intent, DBAC (Database-Based Access Control), and QAPs (Rules are not Filters). The structure uses path-based ownership for user data and denormalization of authorization context to avoid `get()` calls in security rules, crucial for atomic operations.\n\n**Authorization Independence (CRITICAL):**\n*   The `company` field is present in every document within the `movements`, `deadlines`, `incomeForecasts`, and `expenseForecasts` collections. This denormalization allows security rules to directly check the `company` value against the user's role without needing to perform a `get()` operation on a parent document. This ensures authorization independence and enables atomic operations.\n*   The `createdBy` field is also present in every document, indicating the user who created the document. This allows for path-based ownership in the `chatHistory` collection.\n\n**Clarity of Intent (Debuggability):**\n*   The structure clearly separates data for different entities into distinct collections, making the purpose of each collection immediately apparent. The naming conventions are semantic and consistent.\n*   Explicit state modeling is used with the `status` field in `deadlines`, `incomeForecasts`, and `expenseForecasts`.\n\n**DBAC (No Custom Claims):**\n*   User roles are stored directly in the `users` collection, avoiding the use of custom claims. Security rules rely solely on `request.auth.uid` and the user's document in the `users` collection.\n\n**QAPs (Rules are not Filters):**\n*   The segregation of data based on the `company` field (LNC or STG) allows for secure `list` operations. Security rules can filter based on the user's role and the `company` field in the documents, ensuring that users only see the data they are authorized to access.\n\n**Invariants:**\n*   The structure supports the integrity of ownership with the `createdBy` field, timestamps (`createdAt`, `updatedAt`), and denormalized data (`company`). Security rules can enforce that these fields are not modified by unauthorized users.\n\n**Structural Segregation (Homogeneous Security Posture):**\n*   Each collection is designed to hold documents with the same security requirements. For example, all documents in the `movements` collection have the same access control rules based on the `company` field and user's role.\n\n**Access Modeling (Standardization and Consistency):**\n*   **Private Data:** `/users/{userId}` uses path-based ownership.\n*   **Collaborative Data:** The `company` field acts as a membership discriminator, allowing users with the appropriate role to access data associated with their company.\n\nThis structure provides a solid foundation for building a secure and scalable accounting application, while also making it easier to debug and maintain the security rules."
+  }
+}
