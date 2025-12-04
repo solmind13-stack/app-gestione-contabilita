@@ -29,27 +29,6 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Create a test user on first load if it doesn't exist
-    const createTestUser = async () => {
-      try {
-        // We try to sign in first to see if the user exists.
-        await signInWithEmailAndPassword(auth, "m.rossi@example.com", "password123");
-      } catch (error: any) {
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-          try {
-            await createUserWithEmailAndPassword(auth, "m.rossi@example.com", "password123");
-          } catch (creationError) {
-             // User might already exist if another client created it.
-          }
-        }
-      }
-    };
-    if (auth) {
-        createTestUser();
-    }
-  }, [auth]);
-
-  useEffect(() => {
     if (!isUserLoading && user) {
       router.push("/dashboard");
     }
