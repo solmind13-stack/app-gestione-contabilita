@@ -30,7 +30,7 @@ import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Sear
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Movimento, Riepilogo } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { user } from '@/lib/data';
@@ -196,7 +196,7 @@ export default function MovimentiPage() {
                             <Badge variant={movimento.societa === 'LNC' ? 'default' : 'secondary'}>{movimento.societa}</Badge>
                         </TableCell>
                         <TableCell>{movimento.anno}</TableCell>
-                        <TableCell className="whitespace-nowrap">{new Date(movimento.data).toLocaleDateString('it-IT')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDate(movimento.data, 'dd/MM/yyyy')}</TableCell>
                         <TableCell>{movimento.descrizione}</TableCell>
                         <TableCell>
                         <Badge variant="secondary">{movimento.categoria}</Badge>
