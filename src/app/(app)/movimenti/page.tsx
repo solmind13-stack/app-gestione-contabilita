@@ -22,7 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle, Upload, FileText, FileSpreadsheet, FileWord, Image } from 'lucide-react';
+import { PlusCircle, Upload, FileText, FileSpreadsheet, FileCode, Image } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData, riepilogoMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
@@ -61,7 +61,7 @@ export default function MovimentiPage() {
                   <span>Importa da PDF</span>
                 </DropdownMenuItem>
                  <DropdownMenuItem>
-                  <FileWord className="mr-2 h-4 w-4" />
+                  <FileCode className="mr-2 h-4 w-4" />
                   <span>Importa da Word</span>
                 </DropdownMenuItem>
                  <DropdownMenuItem>
