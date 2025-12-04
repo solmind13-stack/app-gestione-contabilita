@@ -40,14 +40,15 @@ const prompt = ai.definePrompt({
 
   Respond in JSON format. Categories, subcategories and IVA percentages must be selected from the lists that follow.
 
-  Categories: Immobiliare, Energia, Fornitori, Gestione Immobili, Gestione Generale, Tasse, Finanziamenti
-  Subcategories (per Immobiliare): Affitti, Depositi Cauzionali, Recupero Spese, Manutenzione Immobili
-  Subcategories (per Energia): Quote CER, Pratiche Contributo, Incentivi GSE, Vendita Energia
-  Subcategories (per Fornitori): Materiali, Servizi, Consulenze, Utenze
-  Subcategories (per Gestione Immobili): Amministrazione, Assicurazioni, Tasse Immobiliari
-  Subcategories (per Gestione Generale): Cancelleria, Trasporti, Varie
-  Subcategories (per Tasse): IVA, IRES, IRAP, IMU, F24
-  Subcategories (per Finanziamenti): Mutui, Prestiti, Interessi
+  Categories: Immobiliare, Energia, Fornitori, Gestione Immobili, Gestione Generale, Tasse, Finanziamenti, Movimenti Interni
+  Subcategories (per Immobiliare): Affitti, Depositi Cauzionali, Recupero Spese, Immobili
+  Subcategories (per Energia): Quote CEF, Pratiche Contributo, Incentivi GSE, Vendita Energia
+  Subcategories (per Fornitori): Materiali, Lavori/Manutenzione, Impianti, Servizi
+  Subcategories (per Gestione Immobili): Spese Condominiali, Manutenzione, Ristrutturazione, Utenze
+  Subcategories (per Gestione Generale): Spese Bancarie, Commercialista, Telefonia, Altre Spese
+  Subcategories (per Tasse): IVA Trimestrale, IMU, IRES, IRAP, F24 Vari, Bolli, Cartelle Esattoriali
+  Subcategories (per Finanziamenti): Rate Mutuo, Rate Prestito, Rimborso
+  Subcategories (per Movimenti Interni): Giroconto, Trasferimento
   IVA Percentages: 0.22, 0.10, 0.04, 0.00
   `,
 });
