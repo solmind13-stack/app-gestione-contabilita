@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileText, FileSpreadsheet, FileCode, Image } from 'lucide-react';
+import { PlusCircle, Upload, FileText, FileSpreadsheet, FileCode, Image, ArrowUp, ArrowDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,7 @@ export default function MovimentiPage() {
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
     const [movimentiData, setMovimentiData] = useState<Movimento[]>(initialMovimenti);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
     const handleAddMovement = (newMovement: Omit<Movimento, 'id' | 'anno'>) => {
         const newEntry: Movimento = {
@@ -52,9 +53,13 @@ export default function MovimentiPage() {
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
 
-    const filteredMovimenti = movimentiData.filter(m => 
-        selectedCompany === 'Tutte' || m.societa === selectedCompany
-    );
+    const filteredMovimenti = movimentiData
+        .filter(m => selectedCompany === 'Tutte' || m.societa === selectedCompany)
+        .sort((a, b) => {
+            const dateA = new Date(a.data).getTime();
+            const dateB = new Date(b.data).getTime();
+            return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        });
 
     const calculateTotals = (data: Movimento[]): Riepilogo => {
         const totaleEntrate = data.reduce((acc, m) => acc + m.entrata, 0);
@@ -143,7 +148,12 @@ export default function MovimentiPage() {
                     <TableRow>
                     <TableHead>Società</TableHead>
                     <TableHead>Anno</TableHead>
-                    <TableHead>Data</TableHead>
+                    <TableHead>
+                        <Button variant="ghost" size="sm" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>
+                            Data
+                            {sortOrder === 'desc' ? <ArrowDown className="ml-2 h-4 w-4" /> : <ArrowUp className="ml-2 h-4 w-4" />}
+                        </Button>
+                    </TableHead>
                     <TableHead>Descrizione</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Sottocategoria</TableHead>
