@@ -151,7 +151,8 @@ export default function PrevisioniEntratePage() {
                             <TableHead>Descrizione</TableHead>
                             <TableHead>Categoria</TableHead>
                             <TableHead className="text-right">Importo Lordo</TableHead>
-                            <TableHead className="text-right">IVA</TableHead>
+                            <TableHead className="text-center">% IVA</TableHead>
+                            <TableHead className="text-right">Importo IVA</TableHead>
                             <TableHead className="text-right">Importo Netto</TableHead>
                             <TableHead className="text-center">Certezza</TableHead>
                             <TableHead className="text-center">% Prob.</TableHead>
@@ -173,6 +174,7 @@ export default function PrevisioniEntratePage() {
                                     <TableCell>{p.descrizione}</TableCell>
                                     <TableCell><Badge variant="outline">{p.categoria}</Badge></TableCell>
                                     <TableCell className="text-right font-medium">{formatCurrency(p.importoLordo)}</TableCell>
+                                    <TableCell className="text-center">{(p.iva * 100).toFixed(0)}%</TableCell>
                                     <TableCell className="text-right">{formatCurrency(iva)}</TableCell>
                                     <TableCell className="text-right">{formatCurrency(netto)}</TableCell>
                                     <TableCell className="text-center">
@@ -201,7 +203,7 @@ export default function PrevisioniEntratePage() {
                         <TableRow>
                             <TableCell colSpan={5} className="font-bold">TOTALI</TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totaleLordo)}</TableCell>
-                            <TableCell colSpan={4}></TableCell>
+                            <TableCell colSpan={5}></TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePonderato)}</TableCell>
                             <TableCell colSpan={2}></TableCell>
                         </TableRow>
