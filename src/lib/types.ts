@@ -43,6 +43,10 @@ export type Movimento = {
     entrata: number;
     uscita: number;
     iva: number;
+    conto?: string;
+    operatore?: string;
+    metodoPag?: string;
+    note?: string;
 };
 
 export type Riepilogo = {

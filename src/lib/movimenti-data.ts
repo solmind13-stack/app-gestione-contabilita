@@ -12,6 +12,19 @@ export const movimentiData: Movimento[] = [
     entrata: 2008.80,
     uscita: 0,
     iva: 0.22,
+    note: 'Fattura 7/25'
+  },
+  {
+    id: '1b',
+    anno: 2025,
+    data: '05/07/2025', // Duplicated from image for demo
+    descrizione: 'Affitto Eris',
+    categoria: 'Immobiliare',
+    sottocategoria: 'Affitti',
+    entrata: 2008.80,
+    uscita: 0,
+    iva: 0.22,
+    note: 'Fattura 8/25'
   },
   {
     id: '2',
@@ -23,6 +36,7 @@ export const movimentiData: Movimento[] = [
     entrata: 0,
     uscita: 86.00,
     iva: 0,
+    note: 'Pagamento effettuato da Nuccio junior'
   },
   {
     id: '3',
@@ -34,6 +48,7 @@ export const movimentiData: Movimento[] = [
     entrata: 0,
     uscita: 121.00,
     iva: 0,
+    note: 'Pagamento effettuato da Nuccio Senior da'
   },
     {
     id: '4',
@@ -45,6 +60,7 @@ export const movimentiData: Movimento[] = [
     entrata: 0,
     uscita: 807.00,
     iva: 0,
+    note: 'Pagamento effettuato da Nuccio junior'
   },
   {
     id: '5',
@@ -56,6 +72,19 @@ export const movimentiData: Movimento[] = [
     entrata: 0,
     uscita: 461.00,
     iva: 0,
+    note: 'Pagamento effettuato da Nuccio junior su'
+  },
+  {
+    id: '5b',
+    anno: 2025,
+    data: '29/07/2025',
+    descrizione: 'IMU terreno b.zacco',
+    categoria: 'Tasse',
+    sottocategoria: 'IMU',
+    entrata: 0,
+    uscita: 2.00,
+    iva: 0,
+    note: 'Pagam effettuato da Nuccio senior su bon'
   },
   {
     id: '6',
@@ -67,6 +96,7 @@ export const movimentiData: Movimento[] = [
     entrata: 0,
     uscita: 400.00,
     iva: 0,
+    note: 'Prelievo a sportello'
   },
     {
     id: '7',
@@ -78,6 +108,7 @@ export const movimentiData: Movimento[] = [
     entrata: 150.00,
     uscita: 0,
     iva: 0,
+    note: 'versamento a sportello'
   },
   {
     id: '8',
@@ -89,6 +120,7 @@ export const movimentiData: Movimento[] = [
     entrata: 2008.80,
     uscita: 0,
     iva: 0.22,
+    note: 'Fattura 9/25'
   },
   {
     id: '9',
@@ -100,6 +132,7 @@ export const movimentiData: Movimento[] = [
     entrata: 2008.80,
     uscita: 0,
     iva: 0.22,
+    note: 'Fattura 10/25'
   },
    {
     id: '10',
@@ -111,6 +144,7 @@ export const movimentiData: Movimento[] = [
     entrata: 2008.80,
     uscita: 0,
     iva: 0.22,
+    note: 'Fattura 11/25'
   },
 ];
 
