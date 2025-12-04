@@ -87,9 +87,8 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
+    // Default values are now set in useEffect to avoid server/client mismatch for Date
     defaultValues: {
-      societa: defaultCompany,
-      data: new Date(),
       descrizione: '',
       importo: 0,
       tipo: 'uscita',
@@ -97,20 +96,30 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
       sottocategoria: '',
       iva: 0.22,
       conto: '',
-      operatore: currentUser?.name || '',
       metodoPag: '',
       note: '',
     },
   });
-
+  
+  // Set default values in useEffect to run only on the client
   useEffect(() => {
-    if (defaultCompany) {
-        form.setValue('societa', defaultCompany);
+    if (isOpen) {
+      form.reset({
+        societa: defaultCompany,
+        data: new Date(), // This now runs only on the client side
+        descrizione: '',
+        importo: 0,
+        tipo: 'uscita',
+        categoria: '',
+        sottocategoria: '',
+        iva: 0.22,
+        conto: '',
+        operatore: currentUser?.name || '',
+        metodoPag: '',
+        note: '',
+      });
     }
-    if (currentUser) {
-        form.setValue('operatore', currentUser.name);
-    }
-  }, [defaultCompany, currentUser, form]);
+  }, [isOpen, defaultCompany, currentUser, form]);
 
   const onSubmit = (data: FormValues) => {
     const newMovement: Omit<Movimento, 'id' | 'anno'> = {
@@ -130,17 +139,6 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
     onAddMovement(newMovement);
     toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato aggiunto alla lista." });
     setIsOpen(false);
-    form.reset({
-        ...form.getValues(),
-        descrizione: '',
-        importo: 0,
-        categoria: '',
-        sottocategoria: '',
-        note: '',
-        conto: '',
-        metodoPag: '',
-        operatore: currentUser.name, // Reset operator to current user
-    });
   };
 
   const handleAiCategorize = useCallback(async () => {

@@ -1,7 +1,7 @@
 // src/app/(app)/movimenti/page.tsx
 "use client";
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -45,7 +45,7 @@ export default function MovimentiPage() {
 
     const handleAddMovement = (newMovement: Omit<Movimento, 'id' | 'anno'>) => {
         const newEntry: Movimento = {
-            id: `new-${Math.random()}`,
+            id: `new-${Date.now()}-${Math.floor(Math.random() * 1000)}`, // More robust temporary ID
             anno: new Date(newMovement.data).getFullYear(),
             ...newMovement,
         };
@@ -55,16 +55,17 @@ export default function MovimentiPage() {
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
 
-    const filteredMovimenti = movimentiData
+    const filteredMovimenti = useMemo(() => movimentiData
         .filter(m => selectedCompany === 'Tutte' || m.societa === selectedCompany)
         .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
         .sort((a, b) => {
             const dateA = new Date(a.data).getTime();
             const dateB = new Date(b.data).getTime();
-            return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-        });
+            return sortOrder === 'asc' ? dateA - dateB : dateB - a.id.localeCompare(b.id);
+        }), [movimentiData, selectedCompany, searchTerm, sortOrder]);
 
-    const calculateTotals = (data: Movimento[]): Riepilogo => {
+    const riepilogo = useMemo((): Riepilogo => {
+        const data = filteredMovimenti;
         const totaleEntrate = data.reduce((acc, m) => acc + m.entrata, 0);
         const totaleUscite = data.reduce((acc, m) => acc + m.uscita, 0);
         const ivaEntrate = data.reduce((acc, m) => acc + (m.entrata > 0 ? calculateIva(m.entrata, m.iva) : 0), 0);
@@ -73,14 +74,12 @@ export default function MovimentiPage() {
         const ivaNetta = ivaEntrate - ivaUscite;
 
         return { totaleEntrate, totaleUscite, saldo, ivaEntrate, ivaUscite, ivaNetta };
-    };
+    }, [filteredMovimenti]);
     
-    const riepilogo = calculateTotals(filteredMovimenti);
-
-    const totalEntrateNette = filteredMovimenti.reduce((acc, m) => acc + (m.entrata > 0 ? calculateNetto(m.entrata, m.iva) : 0), 0);
-    const totalIvaEntrate = filteredMovimenti.reduce((acc, m) => acc + (m.entrata > 0 ? calculateIva(m.entrata, m.iva) : 0), 0);
-    const totalUsciteNette = filteredMovimenti.reduce((acc, m) => acc + (m.uscita > 0 ? calculateNetto(m.uscita, m.iva) : 0), 0);
-    const totalIvaUscite = filteredMovimenti.reduce((acc, m) => acc + (m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0);
+    const totalEntrateNette = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.entrata > 0 ? calculateNetto(m.entrata, m.iva) : 0), 0), [filteredMovimenti]);
+    const totalIvaEntrate = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.entrata > 0 ? calculateIva(m.entrata, m.iva) : 0), 0), [filteredMovimenti]);
+    const totalUsciteNette = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita > 0 ? calculateNetto(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
+    const totalIvaUscite = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
 
     const getPageTitle = () => {
         if (selectedCompany === 'Tutte') return 'Movimenti - Tutte le società';
@@ -196,7 +195,7 @@ export default function MovimentiPage() {
                             <Badge variant={movimento.societa === 'LNC' ? 'default' : 'secondary'}>{movimento.societa}</Badge>
                         </TableCell>
                         <TableCell>{movimento.anno}</TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDate(movimento.data, 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDate(movimento.data)}</TableCell>
                         <TableCell>{movimento.descrizione}</TableCell>
                         <TableCell>
                         <Badge variant="secondary">{movimento.categoria}</Badge>
@@ -275,4 +274,3 @@ export default function MovimentiPage() {
       </Card>
     </div>
   );
-}
