@@ -36,7 +36,7 @@ export default function LoginPage() {
         <Logo className="h-10" />
         <Card className="w-full max-w-sm shadow-xl">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Gestione Contabile LNC-STG</CardTitle>
+            <CardTitle>Gestione Contabile LNC-STG</CardTitle>
             <CardDescription>Accedi al tuo account per continuare</CardDescription>
           </CardHeader>
           <form onSubmit={handleLogin}>
@@ -53,7 +53,7 @@ export default function LoginPage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" required defaultValue="password" />
+                <Input id="password" type="password" required />
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="remember-me" />
