@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { user } from "@/lib/data";
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -24,7 +25,7 @@ export default function LoginPage() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
+    // Simulate API call for prototype
     setTimeout(() => {
       router.push("/dashboard");
     }, 1000);
@@ -37,22 +38,19 @@ export default function LoginPage() {
         <Card className="w-full max-w-sm shadow-xl">
           <CardHeader className="text-center">
             <CardTitle>Gestione Contabile LNC-STG</CardTitle>
-            <CardDescription>Accedi al tuo account per continuare</CardDescription>
+            <CardDescription>Accedi per continuare</CardDescription>
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email Amministratore</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="mario@example.com"
                   required
+                  defaultValue={user.email}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" required />
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="remember-me" />
@@ -71,9 +69,6 @@ export default function LoginPage() {
                 ) : (
                   "Accedi"
                 )}
-              </Button>
-              <Button variant="link" size="sm" className="w-full text-muted-foreground">
-                Password dimenticata?
               </Button>
             </CardFooter>
           </form>
