@@ -8,14 +8,18 @@ import { generateFinancialInsights } from "@/ai/flows/generate-financial-insight
 import type { FinancialInsightsOutput } from "@/ai/flows/generate-financial-insights";
 import { Lightbulb, Sparkles, AlertTriangle, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { mockAiInsights } from "@/lib/data";
 
 export function AiInsights() {
   const [insights, setInsights] = useState<FinancialInsightsOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const [hasError, setHasError] = useState(false);
 
   const fetchInsights = async () => {
     setIsLoading(true);
+    setHasError(false);
     try {
       const result = await generateFinancialInsights({
         companyName: "LNC e STG",
@@ -29,12 +33,7 @@ export function AiInsights() {
         title: "Errore AI",
         description: "Impossibile generare gli insights in questo momento.",
       });
-      // Set mock data on error to prevent empty state in demo
-      setInsights({
-          summary: "La liquidità è buona con €25.430 disponibili. Hai 3 scadenze importanti nei prossimi 7 giorni per un totale di €2.100. Le entrate previste coprono ampiamente le uscite con un margine del 15%.",
-          attentionItems: ["Scadenza pagamento IMU tra 5 giorni.", "Fattura cliente 'Rossi & Co' in ritardo di oltre 20 giorni."],
-          suggestionItems: ["Sollecitare incasso fattura cliente 'Rossi & Co'.", "Considerare di anticipare il pagamento del fornitore 'Beta SRL' per uno sconto."],
-      });
+      setHasError(true);
     } finally {
       setIsLoading(false);
     }
@@ -44,6 +43,12 @@ export function AiInsights() {
     fetchInsights();
   }, []);
 
+  useEffect(() => {
+    if (hasError) {
+      setInsights(mockAiInsights);
+    }
+  }, [hasError]);
+
   const handleRefresh = () => {
     fetchInsights();
     toast({
@@ -51,6 +56,8 @@ export function AiInsights() {
       description: "Sto generando nuovi insights...",
     });
   };
+
+  const displayInsights = !isLoading && insights;
 
   return (
     <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 relative overflow-hidden bg-card/80 backdrop-blur-sm border-primary/20">
@@ -71,7 +78,7 @@ export function AiInsights() {
             <Skeleton className="h-12 w-3/4" />
             <Skeleton className="h-12 w-4/5" />
           </div>
-        ) : (
+        ) : displayInsights ? (
           <>
             <div>
               <h3 className="text-sm font-semibold text-muted-foreground mb-2">Situazione Attuale</h3>
@@ -106,6 +113,8 @@ export function AiInsights() {
               </ul>
             </div>
           </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Nessun insight da mostrare.</p>
         )}
       </CardContent>
     </Card>
