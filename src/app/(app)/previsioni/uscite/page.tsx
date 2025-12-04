@@ -42,6 +42,8 @@ export default function PrevisioniUscitePage() {
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneUscita, direction: 'asc' | 'desc' } | null>({ key: 'dataScadenza', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
 
+    const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
+    const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);
     const calculatePonderato = (importo: number, probabilita: number) => importo * probabilita;
 
     const filteredPrevisioni = useMemo(() => {
@@ -65,8 +67,8 @@ export default function PrevisioniUscitePage() {
 
     const riepilogo = useMemo((): RiepilogoPrevisioniUscite => {
         const data = filteredPrevisioni;
-        const totalePrevisto = data.reduce((acc, p) => acc + p.importoPrevisto, 0);
-        const totalePonderato = data.reduce((acc, p) => acc + calculatePonderato(p.importoPrevisto, p.probabilita), 0);
+        const totalePrevisto = data.reduce((acc, p) => acc + p.importoLordo, 0);
+        const totalePonderato = data.reduce((acc, p) => acc + calculatePonderato(p.importoLordo, p.probabilita), 0);
         const totaleEffettivo = data.reduce((acc, p) => acc + (p.importoEffettivo || 0), 0);
         const daPagare = totalePrevisto - totaleEffettivo;
         const percentualePagato = totalePrevisto > 0 ? (totaleEffettivo / totalePrevisto) * 100 : 0;
@@ -152,7 +154,10 @@ export default function PrevisioniUscitePage() {
                             <TableHead>Descrizione</TableHead>
                             <TableHead>Categoria</TableHead>
                             <TableHead>Sottocategoria</TableHead>
-                            <TableHead className="text-right">Importo Previsto</TableHead>
+                            <TableHead className="text-right">Importo Lordo</TableHead>
+                            <TableHead className="text-right">Importo Netto</TableHead>
+                            <TableHead className="text-center">% IVA</TableHead>
+                            <TableHead className="text-right">Importo IVA</TableHead>
                             <TableHead className="text-center">Certezza</TableHead>
                             <TableHead className="text-center">% Prob.</TableHead>
                             <TableHead className="text-right">Importo Ponderato</TableHead>
@@ -165,7 +170,9 @@ export default function PrevisioniUscitePage() {
                     </TableHeader>
                     <TableBody>
                         {filteredPrevisioni.map((p) => {
-                            const ponderato = calculatePonderato(p.importoPrevisto, p.probabilita);
+                            const netto = calculateNetto(p.importoLordo, p.iva);
+                            const iva = calculateIva(p.importoLordo, p.iva);
+                            const ponderato = calculatePonderato(p.importoLordo, p.probabilita);
                             return (
                                 <TableRow key={p.id}>
                                     <TableCell><Badge variant={p.societa === 'LNC' ? 'default' : 'secondary'}>{p.societa}</Badge></TableCell>
@@ -174,12 +181,15 @@ export default function PrevisioniUscitePage() {
                                     <TableCell>{p.descrizione}</TableCell>
                                     <TableCell><Badge variant="outline">{p.categoria}</Badge></TableCell>
                                     <TableCell>{p.sottocategoria}</TableCell>
-                                    <TableCell className="text-right font-medium text-red-600">{formatCurrency(p.importoPrevisto)}</TableCell>
+                                    <TableCell className="text-right font-medium text-red-600">{formatCurrency(p.importoLordo)}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(netto)}</TableCell>
+                                    <TableCell className="text-center">{(p.iva * 100).toFixed(0)}%</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(iva)}</TableCell>
                                     <TableCell className="text-center">
                                       <Badge className={cn("text-white", {
-                                          "bg-green-500 hover:bg-green-600": p.certezza === 'Certa',
-                                          "bg-yellow-500 hover:bg-yellow-600": p.certezza === 'Probabile',
-                                          "bg-orange-500 hover:bg-orange-600": p.certezza === 'Incerta',
+                                        "bg-green-500 hover:bg-green-600": p.certezza === 'Certa',
+                                        "bg-yellow-500 hover:bg-yellow-600": p.certezza === 'Probabile',
+                                        "bg-orange-500 hover:bg-orange-600": p.certezza === 'Incerta',
                                       })}>{p.certezza}</Badge>
                                     </TableCell>
                                     <TableCell className="text-center">{ (p.probabilita * 100).toFixed(0) }%</TableCell>
@@ -204,7 +214,7 @@ export default function PrevisioniUscitePage() {
                         <TableRow>
                             <TableCell colSpan={6} className="font-bold">TOTALI</TableCell>
                             <TableCell className="text-right font-bold text-red-600">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
-                            <TableCell colSpan={2}></TableCell>
+                            <TableCell colSpan={5}></TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePonderato)}</TableCell>
                             <TableCell colSpan={2}></TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totaleEffettivo)}</TableCell>

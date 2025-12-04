@@ -121,7 +121,8 @@ export type PrevisioneUscita = {
   descrizione: string;
   categoria: string;
   sottocategoria: string;
-  importoPrevisto: number;
+  importoLordo: number;
+  iva: number;
   certezza: 'Certa' | 'Probabile' | 'Incerta';
   probabilita: number; // 0 to 1
   stato: 'Da pagare' | 'Pagato' | 'Parziale' | 'Annullato';
