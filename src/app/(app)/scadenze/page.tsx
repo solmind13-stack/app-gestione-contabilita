@@ -30,6 +30,7 @@ import { PlusCircle, Upload, FileSpreadsheet, FileText, FileCode, Image, Search,
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
 
 import { scadenzeData as initialScadenzeData } from '@/lib/scadenze-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
