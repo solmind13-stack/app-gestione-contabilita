@@ -79,6 +79,8 @@ const CATEGORIE = {
 
 const IVA_PERCENTAGES = [0.22, 0.10, 0.04, 0.00];
 
+const METODI_PAGAMENTO = ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'];
+
 export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCompany, currentUser }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const { toast } = useToast();
@@ -376,17 +378,26 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
                     )}
                 />
                 <FormField
-                    control={form.control}
-                    name="metodoPag"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Metodo Pagamento</FormLabel>
+                  control={form.control}
+                  name="metodoPag"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Metodo Pagamento</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                            <Input {...field} placeholder="Es: Bonifico, Contanti..."/>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleziona..." />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
+                        <SelectContent>
+                          {METODI_PAGAMENTO.map(metodo => (
+                            <SelectItem key={metodo} value={metodo}>{metodo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
                 <FormField
                     control={form.control}
