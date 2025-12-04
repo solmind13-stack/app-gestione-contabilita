@@ -37,7 +37,7 @@ export type Movimento = {
     id: string;
     societa: 'LNC' | 'STG';
     anno: number;
-    data: string;
+    data: string; // Storing date as string in 'YYYY-MM-DD' format for consistency
     descrizione: string;
     categoria: string;
     sottocategoria: string;

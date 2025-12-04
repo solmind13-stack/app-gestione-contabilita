@@ -28,13 +28,25 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlusCircle, Upload, FileText, FileSpreadsheet, FileCode, Image } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { movimentiData } from '@/lib/movimenti-data';
+import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
 import type { Movimento, Riepilogo } from '@/lib/types';
+import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 
 export default function MovimentiPage() {
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
+    const [movimentiData, setMovimentiData] = useState<Movimento[]>(initialMovimenti);
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+    const handleAddMovement = (newMovement: Omit<Movimento, 'id' | 'anno'>) => {
+        const newEntry: Movimento = {
+            id: `new-${Math.random()}`,
+            anno: new Date(newMovement.data).getFullYear(),
+            ...newMovement,
+        };
+        setMovimentiData(prevData => [newEntry, ...prevData]);
+    };
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
@@ -68,6 +80,12 @@ export default function MovimentiPage() {
 
   return (
     <div className="flex flex-col gap-6">
+       <AddMovementDialog
+            isOpen={isDialogOpen}
+            setIsOpen={setIsDialogOpen}
+            onAddMovement={handleAddMovement}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+        />
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex justify-between items-center mb-4">
             <TabsList>
@@ -76,7 +94,7 @@ export default function MovimentiPage() {
                 <TabsTrigger value="STG">STG</TabsTrigger>
             </TabsList>
             <div className="flex gap-2">
-                <Button>
+                <Button onClick={() => setIsDialogOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Aggiungi Movimento
                 </Button>
@@ -153,7 +171,7 @@ export default function MovimentiPage() {
                             <Badge variant={movimento.societa === 'LNC' ? 'default' : 'secondary'}>{movimento.societa}</Badge>
                         </TableCell>
                         <TableCell>{movimento.anno}</TableCell>
-                        <TableCell className="whitespace-nowrap">{movimento.data}</TableCell>
+                        <TableCell className="whitespace-nowrap">{new Date(movimento.data).toLocaleDateString('it-IT')}</TableCell>
                         <TableCell>{movimento.descrizione}</TableCell>
                         <TableCell>
                         <Badge variant="secondary">{movimento.categoria}</Badge>
