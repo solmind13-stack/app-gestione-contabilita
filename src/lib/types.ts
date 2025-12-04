@@ -88,3 +88,26 @@ export type RiepilogoScadenze = {
     daPagare: number;
     percentualeCompletamento: number;
 };
+
+export type PrevisioneEntrata = {
+  id: string;
+  societa: 'LNC' | 'STG';
+  anno: number;
+  mese: string;
+  dataPrevista: string;
+  descrizione: string;
+  categoria: string;
+  sottocategoria: string;
+  importoLordo: number;
+  iva: number;
+  certezza: 'Certa' | 'Probabile' | 'Incerta';
+  probabilita: number; // 0 to 1
+  stato: 'Da incassare' | 'Incassato' | 'Parziale' | 'Annullato';
+  note?: string;
+};
+
+export type RiepilogoPrevisioniEntrate = {
+  totaleLordo: number;
+  totalePonderato: number;
+  totaleIncassato: number;
+};
