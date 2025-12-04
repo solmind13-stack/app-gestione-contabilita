@@ -59,9 +59,11 @@ export type Riepilogo = {
     ivaNetta: number;
 }
 
+export type UserRole = 'admin' | 'editor' | 'viewer';
+
 export type User = {
     name: string;
     email: string;
-    role: 'admin' | 'user';
+    role: UserRole;
     avatar?: string;
 };

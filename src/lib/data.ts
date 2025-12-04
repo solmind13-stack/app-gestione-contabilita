@@ -1,4 +1,4 @@
-import type { Kpi, Transaction, Insight } from './types';
+import type { Kpi, Transaction, Insight, User } from './types';
 
 export const kpiData: Kpi[] = [
   {
@@ -109,9 +109,9 @@ export const recentTransactions: Transaction[] = [
     }
 ];
 
-export const user = {
+export const user: User = {
     name: 'Mario Rossi',
     email: 'm.rossi@example.com',
-    role: 'admin',
+    role: 'admin', // Can be 'admin', 'editor', or 'viewer'
     avatar: 'https://picsum.photos/seed/user-avatar/100/100'
 };
