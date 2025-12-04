@@ -65,15 +65,6 @@ export default function ScadenzePage() {
         return `Scadenze - ${selectedCompany}`;
     };
 
-    const getStatusVariant = (status: Scadenza['stato']): 'default' | 'secondary' | 'destructive' => {
-        switch (status) {
-            case 'Pagato': return 'default';
-            case 'Da pagare': return 'destructive';
-            case 'Parziale': return 'secondary';
-            default: return 'secondary';
-        }
-    };
-
   return (
     <div className="flex flex-col gap-6">
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
@@ -159,12 +150,11 @@ export default function ScadenzePage() {
                                 <TableCell className="text-right font-medium">{formatCurrency(scadenza.importoPrevisto)}</TableCell>
                                 <TableCell className="text-right font-medium">{scadenza.importoPagato > 0 ? formatCurrency(scadenza.importoPagato) : '-'}</TableCell>
                                 <TableCell className="text-center">
-                                    <Badge 
-                                      variant={getStatusVariant(scadenza.stato)}
-                                      className={cn({
-                                        'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': scadenza.stato === 'Pagato',
-                                        'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': scadenza.stato === 'Da pagare',
-                                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': scadenza.stato === 'Parziale',
+                                    <Badge
+                                      className={cn("text-white", {
+                                        "bg-green-500 hover:bg-green-600": scadenza.stato === 'Pagato',
+                                        "bg-red-500 hover:bg-red-600": scadenza.stato === 'Da pagare',
+                                        "bg-yellow-500 hover:bg-yellow-600": scadenza.stato === 'Parziale',
                                       })}
                                     >{scadenza.stato}</Badge>
                                 </TableCell>

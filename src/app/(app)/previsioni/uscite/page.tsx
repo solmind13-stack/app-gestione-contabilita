@@ -88,25 +88,6 @@ export default function PrevisioniUscitePage() {
         return sortConfig.direction === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
     };
     
-    const getStatusVariant = (status: PrevisioneUscita['stato']): 'default' | 'secondary' | 'destructive' | 'outline' => {
-        switch (status) {
-            case 'Pagato': return 'default';
-            case 'Da pagare': return 'destructive';
-            case 'Annullato': return 'outline';
-            case 'Parziale': return 'secondary';
-            default: return 'secondary';
-        }
-    };
-
-    const getCertezzaVariant = (certezza: PrevisioneUscita['certezza']): 'default' | 'secondary' | 'outline' => {
-        switch (certezza) {
-            case 'Certa': return 'default';
-            case 'Probabile': return 'secondary';
-            case 'Incerta': return 'outline';
-            default: return 'secondary';
-        }
-    };
-
     const getPageTitle = () => {
         if (selectedCompany === 'Tutte') return 'Previsioni Uscite - Tutte le società';
         return `Previsioni Uscite - ${selectedCompany}`;
@@ -194,12 +175,23 @@ export default function PrevisioniUscitePage() {
                                     <TableCell><Badge variant="outline">{p.categoria}</Badge></TableCell>
                                     <TableCell>{p.sottocategoria}</TableCell>
                                     <TableCell className="text-right font-medium text-red-600">{formatCurrency(p.importoPrevisto)}</TableCell>
-                                    <TableCell className="text-center"><Badge variant={getCertezzaVariant(p.certezza)}>{p.certezza}</Badge></TableCell>
+                                    <TableCell className="text-center">
+                                      <Badge className={cn("text-white", {
+                                          "bg-green-500 hover:bg-green-600": p.certezza === 'Certa',
+                                          "bg-yellow-500 hover:bg-yellow-600": p.certezza === 'Probabile',
+                                          "bg-orange-500 hover:bg-orange-600": p.certezza === 'Incerta',
+                                      })}>{p.certezza}</Badge>
+                                    </TableCell>
                                     <TableCell className="text-center">{ (p.probabilita * 100).toFixed(0) }%</TableCell>
                                     <TableCell className="text-right font-semibold">{formatCurrency(ponderato)}</TableCell>
                                     <TableCell>{p.fonteContratto}</TableCell>
                                     <TableCell className="text-center">
-                                        <Badge variant={getStatusVariant(p.stato)}>{p.stato}</Badge>
+                                        <Badge className={cn("text-white", {
+                                            "bg-green-500 hover:bg-green-600": p.stato === 'Pagato',
+                                            "bg-red-500 hover:bg-red-600": p.stato === 'Da pagare',
+                                            "bg-yellow-500 hover:bg-yellow-600": p.stato === 'Parziale',
+                                            "bg-gray-500 hover:bg-gray-600": p.stato === 'Annullato',
+                                        })}>{p.stato}</Badge>
                                     </TableCell>
                                     <TableCell className="text-right">{p.importoEffettivo ? formatCurrency(p.importoEffettivo) : '-'}</TableCell>
                                     <TableCell>{p.ricorrenza}</TableCell>
