@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { useToast } from '@/hooks/use-toast';
-import type { Movimento } from '@/lib/types';
+import type { Movimento, User } from '@/lib/types';
 import { it } from 'date-fns/locale';
 
 const FormSchema = z.object({
@@ -63,6 +63,7 @@ interface AddMovementDialogProps {
   setIsOpen: (open: boolean) => void;
   onAddMovement: (movement: Omit<Movimento, 'id' | 'anno'>) => void;
   defaultCompany?: 'LNC' | 'STG';
+  currentUser: User;
 }
 
 const CATEGORIE = {
@@ -77,10 +78,8 @@ const CATEGORIE = {
 };
 
 const IVA_PERCENTAGES = [0.22, 0.10, 0.04, 0.00];
-const OPERATORI = ['Socio', 'Collaboratore', 'Amministratore'];
 
-
-export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCompany }: AddMovementDialogProps) {
+export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCompany, currentUser }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const { toast } = useToast();
 
@@ -96,7 +95,7 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
       sottocategoria: '',
       iva: 0.22,
       conto: '',
-      operatore: '',
+      operatore: currentUser?.name || '',
       metodoPag: '',
       note: '',
     },
@@ -106,7 +105,10 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
     if (defaultCompany) {
         form.setValue('societa', defaultCompany);
     }
-  }, [defaultCompany, form]);
+    if (currentUser) {
+        form.setValue('operatore', currentUser.name);
+    }
+  }, [defaultCompany, currentUser, form]);
 
   const onSubmit = (data: FormValues) => {
     const newMovement: Omit<Movimento, 'id' | 'anno'> = {
@@ -126,7 +128,17 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
     onAddMovement(newMovement);
     toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato aggiunto alla lista." });
     setIsOpen(false);
-    form.reset();
+    form.reset({
+        ...form.getValues(),
+        descrizione: '',
+        importo: 0,
+        categoria: '',
+        sottocategoria: '',
+        note: '',
+        conto: '',
+        metodoPag: '',
+        operatore: currentUser.name, // Reset operator to current user
+    });
   };
 
   const handleAiCategorize = useCallback(async () => {
@@ -350,22 +362,15 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField
+                 <FormField
                     control={form.control}
                     name="operatore"
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Operatore</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Seleziona..."/>
-                            </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {OPERATORI.map(op => <SelectItem key={op} value={op}>{op}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                         <FormControl>
+                            <Input {...field} disabled />
+                        </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}

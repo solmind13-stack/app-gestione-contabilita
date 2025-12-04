@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
 import type { Movimento, Riepilogo } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
+import { user } from '@/lib/data';
 
 export default function MovimentiPage() {
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
@@ -85,6 +86,7 @@ export default function MovimentiPage() {
             setIsOpen={setIsDialogOpen}
             onAddMovement={handleAddMovement}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+            currentUser={user}
         />
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex justify-between items-center mb-4">

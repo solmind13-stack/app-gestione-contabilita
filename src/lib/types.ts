@@ -58,3 +58,10 @@ export type Riepilogo = {
     ivaUscite: number;
     ivaNetta: number;
 }
+
+export type User = {
+    name: string;
+    email: string;
+    role: 'admin' | 'user';
+    avatar?: string;
+};
