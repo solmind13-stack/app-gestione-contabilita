@@ -32,3 +32,24 @@ export type NavItem = {
     label: string;
     subItems?: { href: string; label: string }[];
 };
+
+export type Movimento = {
+    id: string;
+    anno: number;
+    data: string;
+    descrizione: string;
+    categoria: string;
+    sottocategoria: string;
+    entrata: number;
+    uscita: number;
+    iva: number;
+};
+
+export type Riepilogo = {
+    totaleEntrate: number;
+    totaleUscite: number;
+    saldo: number;
+    ivaEntrate: number;
+    ivaUscite: number;
+    ivaNetta: number;
+}
