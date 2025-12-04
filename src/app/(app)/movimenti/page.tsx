@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileText, FileSpreadsheet, FileCode, Image, ArrowUp, ArrowDown } from 'lucide-react';
+import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
@@ -34,12 +34,14 @@ import { formatCurrency } from '@/lib/utils';
 import type { Movimento, Riepilogo } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { user } from '@/lib/data';
+import { Input } from '@/components/ui/input';
 
 export default function MovimentiPage() {
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
     const [movimentiData, setMovimentiData] = useState<Movimento[]>(initialMovimenti);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const handleAddMovement = (newMovement: Omit<Movimento, 'id' | 'anno'>) => {
         const newEntry: Movimento = {
@@ -55,6 +57,7 @@ export default function MovimentiPage() {
 
     const filteredMovimenti = movimentiData
         .filter(m => selectedCompany === 'Tutte' || m.societa === selectedCompany)
+        .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
         .sort((a, b) => {
             const dateA = new Date(a.data).getTime();
             const dateB = new Date(b.data).getTime();
@@ -94,42 +97,52 @@ export default function MovimentiPage() {
             currentUser={user}
         />
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             <TabsList>
                 <TabsTrigger value="Tutte">Tutte</TabsTrigger>
                 <TabsTrigger value="LNC">LNC</TabsTrigger>
                 <TabsTrigger value="STG">STG</TabsTrigger>
             </TabsList>
-            <div className="flex gap-2">
-                <Button onClick={() => setIsDialogOpen(true)}>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Aggiungi Movimento
+            <div className="flex w-full md:w-auto items-center gap-2">
+                <div className="relative flex-grow">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Cerca per descrizione..."
+                        className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <Button onClick={() => setIsDialogOpen(true)} className="flex-shrink-0">
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Aggiungi
                 </Button>
                 <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
-                    <Upload className="mr-2 h-4 w-4" />
-                    Importa
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuItem>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    <span>Importa da Excel</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                    <FileText className="mr-2 h-4 w-4" />
-                    <span>Importa da PDF</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                    <FileCode className="mr-2 h-4 w-4" />
-                    <span>Importa da Word</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                    <Image className="mr-2 h-4 w-4" />
-                    <span>Importa da Immagine</span>
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="flex-shrink-0">
+                            <Upload className="mr-2 h-4 w-4" />
+                            Importa
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuItem>
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        <span>Importa da Excel</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span>Importa da PDF</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                        <FileCode className="mr-2 h-4 w-4" />
+                        <span>Importa da Word</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                        <Image className="mr-2 h-4 w-4" />
+                        <span>Importa da Immagine</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
                 </DropdownMenu>
             </div>
         </div>
