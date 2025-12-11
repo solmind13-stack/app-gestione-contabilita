@@ -34,7 +34,7 @@ const SettingsListManager = ({ title, items, setItems }: { title: string, items:
 
   const handleAddItem = () => {
     if (newItem && !items.includes(newItem)) {
-      setItems([...items, newItem]);
+      setItems([...items, newItem].sort());
       setNewItem('');
     }
   };
@@ -65,6 +65,7 @@ const SettingsListManager = ({ title, items, setItems }: { title: string, items:
             value={newItem} 
             onChange={(e) => setNewItem(e.target.value)}
             placeholder={`Nuovo ${title.slice(0, -1).toLowerCase()}...`}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
           />
           <Button onClick={handleAddItem}>
             <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
@@ -90,11 +91,16 @@ export default function ImpostazioniPage() {
       setNewCategory('');
     }
   };
+  
+  const handleRemoveCategory = (categoryToRemove: string) => {
+    const { [categoryToRemove as keyof CategoryData]: _, ...remainingCategories } = categories;
+    setCategories(remainingCategories);
+  };
 
   const handleAddSubcategory = (category: string) => {
     if (newSubcategory.value && !categories[category as keyof CategoryData].includes(newSubcategory.value)) {
       const updatedCategories = { ...categories };
-      updatedCategories[category as keyof CategoryData].push(newSubcategory.value);
+      updatedCategories[category as keyof CategoryData] = [...updatedCategories[category as keyof CategoryData], newSubcategory.value].sort();
       setCategories(updatedCategories);
       setNewSubcategory({ category: '', value: '' });
     }
@@ -106,10 +112,6 @@ export default function ImpostazioniPage() {
     setCategories(updatedCategories);
   };
   
-  const handleRemoveCategory = (categoryToRemove: string) => {
-    const { [categoryToRemove as keyof CategoryData]: _, ...remainingCategories } = categories;
-    setCategories(remainingCategories);
-  };
 
 
   return (
@@ -162,6 +164,7 @@ export default function ImpostazioniPage() {
                             value={newSubcategory.category === category ? newSubcategory.value : ''}
                             onChange={(e) => setNewSubcategory({ category, value: e.target.value })}
                             placeholder="Nuova sottocategoria..."
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddSubcategory(category)}
                           />
                           <Button size="sm" onClick={() => handleAddSubcategory(category)}>Aggiungi</Button>
                         </div>
@@ -178,6 +181,7 @@ export default function ImpostazioniPage() {
                     value={newCategory} 
                     onChange={(e) => setNewCategory(e.target.value)}
                     placeholder="Nome nuova categoria..."
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
                 />
                 <Button onClick={handleAddCategory}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Crea Categoria
