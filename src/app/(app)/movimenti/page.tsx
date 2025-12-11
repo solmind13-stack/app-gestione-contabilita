@@ -59,49 +59,11 @@ export default function MovimentiPage() {
         setIsSuggesting(true);
         toast({
             title: "Funzionalità AI in sviluppo",
-            description: "L'analisi dei movimenti per suggerire scadenze è temporaneamente disattivata per ottimizzazione.",
+            description: "L'analisi dei movimenti per suggerire scadenze è temporaneamente disattivata per ottimizzazione e per evitare il superamento dei limiti API.",
         });
         setIsSuggesting(false);
-        // Original AI call is commented out to prevent API quota errors
-        /*
-        try {
-            const movementsToAnalyze = filteredMovimenti
-                .filter(m => m.uscita > 0)
-                .map(m => ({ description: m.descrizione, amount: m.uscita }));
-
-            const result = await suggestDeadlines({ movements: movementsToAnalyze });
-
-            if (result.suggestions && result.suggestions.length > 0) {
-                result.suggestions.forEach(suggestion => {
-                    toast({
-                        title: "✨ Suggerimento Scadenza AI",
-                        description: `"${suggestion.originalMovementDescription}" sembra una scadenza. Vuoi aggiungerla?`,
-                        action: (
-                            <Button size="sm" onClick={() => handleAddScadenzaFromSuggestion(suggestion)}>
-                                <BellRing className="mr-2 h-4 w-4" />
-                                Aggiungi
-                            </Button>
-                        ),
-                        duration: 10000,
-                    });
-                });
-            } else {
-                toast({
-                    title: "Nessun suggerimento",
-                    description: "Nessuna nuova scadenza ricorrente trovata tra i movimenti.",
-                });
-            }
-        } catch (error) {
-            console.error("Error suggesting deadlines:", error);
-            toast({
-                variant: "destructive",
-                title: "Errore AI",
-                description: "Impossibile analizzare i movimenti in questo momento.",
-            });
-        } finally {
-            setIsSuggesting(false);
-        }
-        */
+        // La chiamata originale all'AI è stata disabilitata per prevenire errori di quota.
+        // Quando pronta, la logica sottostante può essere riattivata.
     };
 
     const handleAddScadenzaFromSuggestion = (suggestion: DeadlineSuggestion) => {
