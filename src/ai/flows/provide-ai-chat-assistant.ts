@@ -18,7 +18,7 @@ const ProvideAiChatAssistantInputSchema = z.object({
   // For this example, we'll pass a summary string.
   financialData: z.string().describe('A string containing a summary of movements, deadlines, and forecasts.'),
   chatHistory: z
-    .array(z.object({role: z.enum(['user', 'assistant']), content: z.string()}))
+    .array(z.object({role: z.enum(['user', 'model']), content: z.string()}))
     .optional()
     .describe('Previous chat messages.'),
 });
@@ -48,14 +48,15 @@ Le tue capacità principali sono:
 Dati Finanziari a tua disposizione:
 {{{financialData}}}
 
-Here's the user's query: {{{query}}}
-
 {{#if chatHistory}}
-  Here's the chat history:
-  {{#each chatHistory}}
-    {{role}}: {{content}}
-  {{/each}}
+Storico della conversazione:
+{{#each chatHistory}}
+{{#if (eq role "user")}}Domanda Utente: {{content}}{{/if}}
+{{#if (eq role "model")}}Tua Risposta: {{content}}{{/if}}
+{{/each}}
 {{/if}}
+
+Domanda corrente dell'utente: {{{query}}}
 `,
 });
 
