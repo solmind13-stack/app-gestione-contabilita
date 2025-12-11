@@ -41,11 +41,32 @@ import { useToast } from '@/hooks/use-toast';
 export default function PrevisioniUscitePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
-    const [previsioni, setPrevisioni] = useState<PrevisioneUscita[]>(initialData);
+    const [previsioni, setPrevisioni] = useState<PrevisioneUscita[]>([]);
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneUscita, direction: 'asc' | 'desc' } | null>({ key: 'dataScadenza', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingForecast, setEditingForecast] = useState<PrevisioneUscita | null>(null);
+
+    // Load data from localStorage on initial render
+    useEffect(() => {
+        try {
+            const storedData = localStorage.getItem('previsioniUscite');
+            setPrevisioni(storedData ? JSON.parse(storedData) : initialData);
+        } catch (error) {
+            console.error("Failed to parse previsioniUscite from localStorage", error);
+            setPrevisioni(initialData);
+        }
+    }, []);
+
+    // Persist data to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('previsioniUscite', JSON.stringify(previsioni));
+        } catch (error) {
+            console.error("Failed to save previsioniUscite to localStorage", error);
+        }
+    }, [previsioni]);
+
 
     const handleAddForecast = (newForecast: Omit<PrevisioneUscita, 'id' | 'anno'>) => {
         const newEntry: PrevisioneUscita = {
@@ -122,26 +143,6 @@ export default function PrevisioniUscitePage() {
         if (selectedCompany === 'Tutte') return 'Previsioni Uscite - Tutte le società';
         return `Previsioni Uscite - ${selectedCompany}`;
     };
-
-    useEffect(() => {
-        const handleStorageChange = () => {
-            const storedData = localStorage.getItem('previsioniUscite');
-            if (storedData) {
-                setPrevisioni(JSON.parse(storedData));
-            }
-        };
-
-        window.addEventListener('storage', handleStorageChange);
-        handleStorageChange(); // Initial check
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-        };
-    }, []);
-
-    useEffect(() => {
-        localStorage.setItem('previsioniUscite', JSON.stringify(previsioni));
-    }, [previsioni]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -288,7 +289,7 @@ export default function PrevisioniUscitePage() {
                                     <TableCell className="text-center">
                                         <Badge className={cn("text-white", {
                                             "bg-green-600 hover:bg-green-700": p.stato === 'Pagato',
-                                            "bg-red-600 hover:bg-red-700": p.stato === 'Da pagare',
+                                            "bg-red-600 hover:bg-red-600": p.stato === 'Da pagare',
                                             "bg-orange-500 hover:bg-orange-600": p.stato === 'Parziale',
                                             "bg-gray-500 hover:bg-gray-600": p.stato === 'Annullato',
                                         })}>{p.stato}</Badge>

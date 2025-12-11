@@ -36,9 +36,30 @@ import type { PrevisioneEntrata, RiepilogoPrevisioniEntrate } from '@/lib/types'
 
 export default function PrevisioniEntratePage() {
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
-    const [previsioni, setPrevisioni] = useState<PrevisioneEntrata[]>(initialData);
+    const [previsioni, setPrevisioni] = useState<PrevisioneEntrata[]>([]);
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneEntrata, direction: 'asc' | 'desc' } | null>({ key: 'dataPrevista', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Load data from localStorage on initial render
+    useEffect(() => {
+        try {
+            const storedData = localStorage.getItem('previsioniEntrate');
+            setPrevisioni(storedData ? JSON.parse(storedData) : initialData);
+        } catch (error) {
+            console.error("Failed to parse previsioniEntrate from localStorage", error);
+            setPrevisioni(initialData);
+        }
+    }, []);
+
+    // Persist data to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('previsioniEntrate', JSON.stringify(previsioni));
+        } catch (error) {
+            console.error("Failed to save previsioniEntrate to localStorage", error);
+        }
+    }, [previsioni]);
+
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);
@@ -90,27 +111,6 @@ export default function PrevisioniEntratePage() {
         if (selectedCompany === 'Tutte') return 'Previsioni Entrate - Tutte le società';
         return `Previsioni Entrate - ${selectedCompany}`;
     };
-
-    useEffect(() => {
-        const handleStorageChange = () => {
-            const storedData = localStorage.getItem('previsioniEntrate');
-            if (storedData) {
-                setPrevisioni(JSON.parse(storedData));
-            }
-        };
-
-        window.addEventListener('storage', handleStorageChange);
-        handleStorageChange(); // Initial check
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-        };
-    }, []);
-
-    useEffect(() => {
-        localStorage.setItem('previsioniEntrate', JSON.stringify(previsioni));
-    }, [previsioni]);
-
 
   return (
     <div className="flex flex-col gap-6">

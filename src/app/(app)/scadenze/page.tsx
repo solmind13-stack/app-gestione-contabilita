@@ -30,7 +30,6 @@ import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 
 import { scadenzeData as initialScadenzeData } from '@/lib/scadenze-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
@@ -48,20 +47,18 @@ export default function ScadenzePage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
 
+    // Load data from localStorage on initial render
     useEffect(() => {
         try {
             const storedData = localStorage.getItem('scadenze');
-            if (storedData) {
-                setScadenze(JSON.parse(storedData));
-            } else {
-                setScadenze(initialScadenzeData);
-            }
+            setScadenze(storedData ? JSON.parse(storedData) : initialScadenzeData);
         } catch (error) {
             console.error("Failed to parse scadenze from localStorage", error);
             setScadenze(initialScadenzeData);
         }
     }, []);
 
+    // Persist data to localStorage whenever it changes
     useEffect(() => {
         try {
             localStorage.setItem('scadenze', JSON.stringify(scadenze));
@@ -324,5 +321,3 @@ export default function ScadenzePage() {
     </div>
   );
 }
-
-    

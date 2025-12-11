@@ -55,39 +55,31 @@ export default function MovimentiPage() {
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
     const [isSuggesting, setIsSuggesting] = useState(false);
     
+    // Load data from localStorage on initial render
     useEffect(() => {
         try {
             const storedMovimenti = localStorage.getItem('movimenti');
+            setMovimentiData(storedMovimenti ? JSON.parse(storedMovimenti) : initialMovimenti);
+
             const storedPrevisioniEntrate = localStorage.getItem('previsioniEntrate');
+            setPrevisioniEntrate(storedPrevisioniEntrate ? JSON.parse(storedPrevisioniEntrate) : initialPrevisioniEntrate);
+
             const storedPrevisioniUscite = localStorage.getItem('previsioniUscite');
+            setPrevisioniUscite(storedPrevisioniUscite ? JSON.parse(storedPrevisioniUscite) : initialPrevisioniUscite);
             
-            if (storedMovimenti) {
-                setMovimentiData(JSON.parse(storedMovimenti));
-            } else {
-                setMovimentiData(initialMovimenti);
-            }
-
-            if (storedPrevisioniEntrate) {
-                setPrevisioniEntrate(JSON.parse(storedPrevisioniEntrate));
-            } else {
-                setPrevisioniEntrate(initialPrevisioniEntrate);
-            }
-
-            if (storedPrevisioniUscite) {
-                setPrevisioniUscite(JSON.parse(storedPrevisioniUscite));
-            } else {
-                setPrevisioniUscite(initialPrevisioniUscite);
-            }
+            const storedScadenze = localStorage.getItem('scadenze');
+            setScadenze(storedScadenze ? JSON.parse(storedScadenze) : scadenzeData);
 
         } catch (error) {
             console.error("Failed to parse data from localStorage", error);
             setMovimentiData(initialMovimenti);
             setPrevisioniEntrate(initialPrevisioniEntrate);
             setPrevisioniUscite(initialPrevisioniUscite);
+            setScadenze(scadenzeData);
         }
-        setScadenze(scadenzeData);
     }, []);
 
+    // Persist data to localStorage whenever it changes
     useEffect(() => {
         try {
             localStorage.setItem('movimenti', JSON.stringify(movimentiData));
@@ -99,30 +91,67 @@ export default function MovimentiPage() {
     const handleAiSuggestDeadlines = async () => {
         setIsSuggesting(true);
         toast({
-            title: "Funzionalità AI in sviluppo",
-            description: "L'analisi dei movimenti per suggerire scadenze è temporaneamente disattivata per ottimizzazione e per evitare il superamento dei limiti API.",
+            title: "Analisi AI in corso...",
+            description: "Sto analizzando i movimenti recenti per suggerire nuove scadenze.",
         });
-        setIsSuggesting(false);
+
+        try {
+            const movementsToAnalyze = movimentiData.slice(0, 20).map(m => ({ description: m.descrizione, amount: m.uscita > 0 ? m.uscita : m.entrata }));
+            if (movementsToAnalyze.length === 0) {
+                 toast({
+                    variant: "default",
+                    title: "Nessun movimento da analizzare",
+                    description: "Aggiungi prima qualche movimento.",
+                });
+                setIsSuggesting(false);
+                return;
+            }
+
+            const result = await suggestDeadlines({ movements: movementsToAnalyze });
+
+            if (result.suggestions.length > 0) {
+                 result.suggestions.forEach(handleADDScadenzaFromSuggestion);
+                 toast({
+                     title: `${result.suggestions.length} nuove scadenze suggerite!`,
+                     description: "Le nuove scadenze sono state aggiunte alla pagina Scadenze.",
+                     className: "bg-green-100 dark:bg-green-900"
+                 });
+            } else {
+                 toast({
+                    title: "Nessuna nuova scadenza trovata",
+                    description: "L'AI non ha identificato nuovi pagamenti ricorrenti.",
+                });
+            }
+        } catch (error: any) {
+             toast({
+                variant: "destructive",
+                title: "Errore durante l'analisi AI",
+                description: "Potresti aver superato i limiti di quota del piano gratuito. Riprova tra poco.",
+            });
+        } finally {
+            setIsSuggesting(false);
+        }
     };
 
-    const handleAddScadenzaFromSuggestion = (suggestion: DeadlineSuggestion) => {
+    const handleADDScadenzaFromSuggestion = (suggestion: DeadlineSuggestion) => {
         const newScadenza: Scadenza = {
-            id: `scad-${Date.now()}`,
+            id: `scad-ai-${Date.now()}`,
             societa: selectedCompany !== 'Tutte' ? selectedCompany : 'LNC', 
             anno: new Date().getFullYear(),
             dataScadenza: new Date().toISOString().split('T')[0],
-            descrizione: suggestion.description,
+            descrizione: `[SUGGERITO] ${suggestion.description}`,
             categoria: suggestion.category,
             importoPrevisto: suggestion.amount,
             importoPagato: 0,
             stato: 'Da pagare',
             ricorrenza: suggestion.recurrence,
+            note: `Suggerito da AI basato su movimento: "${suggestion.originalMovementDescription}"`
         };
-        setScadenze(prev => [newScadenza, ...prev]);
-        toast({
-            title: "Scadenza Aggiunta!",
-            description: `La scadenza "${suggestion.description}" è stata aggiunta.`,
-            className: "bg-green-100 dark:bg-green-900"
+        
+        setScadenze(prev => {
+            const newScadenze = [newScadenza, ...prev];
+            localStorage.setItem('scadenze', JSON.stringify(newScadenze));
+            return newScadenze;
         });
     };
 
@@ -427,5 +456,3 @@ export default function MovimentiPage() {
     </div>
   );
 }
-
-    

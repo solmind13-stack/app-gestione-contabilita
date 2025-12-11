@@ -1,7 +1,7 @@
 // src/app/(app)/assistente-ai/page.tsx
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,48 +11,96 @@ import { Send, Sparkles, Loader2 } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { provideAiChatAssistant } from '@/ai/flows/provide-ai-chat-assistant';
+import type { Movimento, Scadenza, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 
 type Message = {
-  role: 'user' | 'assistant';
+  role: 'user' | 'model';
   content: string;
 };
-
-// Risposta di esempio stabile per evitare errori API
-const MOCK_AI_RESPONSE = "Attualmente, le chiamate dirette all'intelligenza artificiale sono in fase di ottimizzazione per garantire la stabilità. Questa è una risposta di esempio. L'interfaccia è pronta per essere collegata a un servizio stabile non appena disponibile.";
 
 export default function AssistenteAiPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [financialData, setFinancialData] = useState<string>('');
   const { user } = useUser();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  const loadDataFromStorage = useCallback(() => {
+    try {
+      const movimenti = localStorage.getItem('movimenti');
+      const scadenze = localStorage.getItem('scadenze');
+      const previsioniEntrate = localStorage.getItem('previsioniEntrate');
+      const previsioniUscite = localStorage.getItem('previsioniUscite');
+      
+      const allData = {
+        movimenti: movimenti ? JSON.parse(movimenti) : [],
+        scadenze: scadenze ? JSON.parse(scadenze) : [],
+        previsioniEntrate: previsioniEntrate ? JSON.parse(previsioniEntrate) : [],
+        previsioniUscite: previsioniUscite ? JSON.parse(previsioniUscite) : [],
+      };
+
+      setFinancialData(JSON.stringify(allData, null, 2));
+
+    } catch (error) {
+      console.error("Failed to load data from localStorage for AI Assistant:", error);
+      toast({
+        variant: "destructive",
+        title: "Errore nel Caricamento Dati",
+        description: "Impossibile caricare i dati finanziari per l'assistente. Le risposte potrebbero non essere accurate.",
+      });
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadDataFromStorage();
+  }, [loadDataFromStorage]);
+
 
   const handleSendMessage = async () => {
     if (input.trim() === '' || isLoading) return;
 
     const userMessage: Message = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setIsLoading(true);
-
-    // Simula una chiamata AI con un ritardo per l'UX
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const assistantMessage: Message = { role: 'assistant', content: MOCK_AI_RESPONSE };
-    setMessages(prev => [...prev, assistantMessage]);
     
-    toast({
-        title: "Modalità di Esempio Attiva",
-        description: "L'assistente AI sta usando risposte predefinite per garantire la stabilità dell'app.",
-    });
+    // Reload data just before making the call to ensure it's fresh
+    loadDataFromStorage();
 
-    setIsLoading(false);
+    try {
+      const result = await provideAiChatAssistant({
+        query: currentInput,
+        financialData: financialData,
+        company: 'Tutte', // Or make this dynamic
+        chatHistory: messages.map(m => ({ role: m.role, content: m.content })),
+      });
+      
+      const assistantMessage: Message = { role: 'model', content: result.response };
+      setMessages(prev => [...prev, assistantMessage]);
+
+    } catch (error) {
+       console.error("Error calling AI assistant:", error);
+       const errorMessage: Message = { 
+         role: 'model', 
+         content: "Mi dispiace, ma al momento non riesco a rispondere. Potresti aver superato il limite di richieste del piano gratuito. Riprova tra qualche istante."
+       };
+       setMessages(prev => [...prev, errorMessage]);
+       toast({
+        variant: "destructive",
+        title: "Errore Assistente AI",
+        description: "Impossibile ottenere una risposta dall'AI. Controlla la console per maggiori dettagli.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-      // Use setTimeout to ensure the scroll happens after the new message is rendered.
       setTimeout(() => {
         scrollAreaRef.current?.scrollTo({
           top: scrollAreaRef.current.scrollHeight,
@@ -71,7 +119,7 @@ export default function AssistenteAiPage() {
             Assistente Finanziario AI
           </CardTitle>
           <CardDescription>
-            Poni domande sui tuoi dati. Attualmente in modalità di esempio per garantire stabilità.
+            Poni domande sui tuoi dati finanziari. L'assistente è collegato ai dati in tempo reale.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
@@ -91,7 +139,7 @@ export default function AssistenteAiPage() {
                       message.role === 'user' ? 'justify-end' : 'justify-start'
                     )}
                   >
-                    {message.role === 'assistant' && (
+                    {message.role === 'model' && (
                       <Avatar className="h-9 w-9 border">
                         <AvatarFallback><Sparkles /></AvatarFallback>
                       </Avatar>
