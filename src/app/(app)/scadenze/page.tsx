@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -80,13 +80,44 @@ export default function ScadenzePage() {
             return sortOrder === 'asc' ? dateA - dateB : dateB - a.id.localeCompare(b.id);
         }), [scadenze, selectedCompany, searchTerm, sortOrder]);
     
-    const riepilogo = useMemo((): RiepilogoScadenze => {
+    const { riepilogo, scadenzeMese, scadenzeUrgenti, scadenzeScadute } = useMemo(() => {
         const data = filteredScadenze;
+        const oggi = new Date();
+        const setteGiorniFa = new Date(oggi);
+        setteGiorniFa.setDate(oggi.getDate() + 7);
+
+        const scadenzeNelMese = data.filter(s => {
+            const dataScadenza = new Date(s.dataScadenza);
+            return dataScadenza.getMonth() === oggi.getMonth() && dataScadenza.getFullYear() === oggi.getFullYear() && s.stato !== 'Pagato';
+        });
+
+        const scadenzeUrg = data.filter(s => {
+            const dataScadenza = new Date(s.dataScadenza);
+            return dataScadenza >= oggi && dataScadenza <= setteGiorniFa && s.stato !== 'Pagato';
+        });
+
+        const scadenzeOverdue = data.filter(s => new Date(s.dataScadenza) < oggi && s.stato !== 'Pagato');
+
         const totalePrevisto = data.reduce((acc, s) => acc + s.importoPrevisto, 0);
         const totalePagato = data.reduce((acc, s) => acc + s.importoPagato, 0);
         const daPagare = totalePrevisto - totalePagato;
         const percentualeCompletamento = totalePrevisto > 0 ? (totalePagato / totalePrevisto) * 100 : 0;
-        return { totalePrevisto, totalePagato, daPagare, percentualeCompletamento };
+        
+        return {
+            riepilogo: { totalePrevisto, totalePagato, daPagare, percentualeCompletamento },
+            scadenzeMese: {
+                importo: scadenzeNelMese.reduce((acc, s) => acc + s.importoPrevisto, 0),
+                conteggio: scadenzeNelMese.length
+            },
+            scadenzeUrgenti: {
+                importo: scadenzeUrg.reduce((acc, s) => acc + s.importoPrevisto, 0),
+                conteggio: scadenzeUrg.length
+            },
+            scadenzeScadute: {
+                importo: scadenzeOverdue.reduce((acc, s) => acc + (s.importoPrevisto - s.importoPagato), 0),
+                conteggio: scadenzeOverdue.length
+            }
+        };
     }, [filteredScadenze]);
 
     const getPageTitle = () => {
@@ -105,6 +136,54 @@ export default function ScadenzePage() {
         defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
         currentUser={user}
       />
+
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Scadenze nel Mese</CardTitle>
+                <CalendarClock className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(scadenzeMese.importo)}</div>
+                <p className="text-xs text-muted-foreground">{scadenzeMese.conteggio} scadenze questo mese</p>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Scadenze Urgenti</CardTitle>
+                <AlertTriangle className="h-5 w-5 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold text-orange-500">{formatCurrency(scadenzeUrgenti.importo)}</div>
+                <p className="text-xs text-muted-foreground">{scadenzeUrgenti.conteggio} scadenze nei prossimi 7 giorni</p>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Scadute</CardTitle>
+                <History className="h-5 w-5 text-red-500" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold text-red-500">{formatCurrency(scadenzeScadute.importo)}</div>
+                <p className="text-xs text-muted-foreground">{scadenzeScadute.conteggio} scadenze non pagate</p>
+            </CardContent>
+        </Card>
+        <Card>
+             <CardHeader>
+              <CardTitle className="text-sm font-medium">Riepilogo Generale</CardTitle>
+          </CardHeader>
+          <CardContent>
+                <div className="space-y-2">
+                    <div className="flex justify-between font-medium text-sm">
+                        <span>% Pagato</span>
+                        <span>{riepilogo.percentualeCompletamento.toFixed(0)}%</span>
+                    </div>
+                    <Progress value={riepilogo.percentualeCompletamento} />
+                </div>
+          </CardContent>
+        </Card>
+    </div>
+
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             <TabsList>
@@ -220,36 +299,6 @@ export default function ScadenzePage() {
             </CardContent>
         </Card>
         </Tabs>
-
-        <Card className="w-full md:w-1/2 lg:w-1/3">
-          <CardHeader>
-              <CardTitle>Riepilogo Scadenze {selectedCompany !== 'Tutte' ? selectedCompany : 'Totale'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-              <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                      <span className="text-muted-foreground">Totale Previsto:</span>
-                      <span className="font-medium">{formatCurrency(riepilogo.totalePrevisto)}</span>
-                  </div>
-                   <div className="flex justify-between">
-                      <span className="text-muted-foreground">Totale Pagato:</span>
-                      <span className="font-medium">{formatCurrency(riepilogo.totalePagato)}</span>
-                  </div>
-                   <div className="flex justify-between font-bold text-base">
-                      <span className="text-red-600 dark:text-red-400">Da Pagare:</span>
-                      <span className="text-red-600 dark:text-red-400">{formatCurrency(riepilogo.daPagare)}</span>
-                  </div>
-                  <Separator className="my-4" />
-                  <div className="space-y-2">
-                    <div className="flex justify-between font-medium">
-                        <span>% Completamento</span>
-                        <span>{riepilogo.percentualeCompletamento.toFixed(0)}%</span>
-                    </div>
-                    <Progress value={riepilogo.percentualeCompletamento} />
-                  </div>
-              </div>
-          </CardContent>
-      </Card>
     </div>
   );
 }
