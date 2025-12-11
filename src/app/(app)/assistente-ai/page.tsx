@@ -55,7 +55,7 @@ export default function AssistenteAiPage() {
 
     try {
       // Prepare the chat history, truncating long messages if necessary.
-      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 1000) }));
+      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 2000) }));
 
       const aiInput: ProvideAiChatAssistantInput = {
         query: input,
@@ -65,7 +65,7 @@ export default function AssistenteAiPage() {
       };
 
       const result = await provideAiChatAssistant(aiInput);
-
+      
       const assistantMessage: Message = { role: 'assistant', content: result.response };
       setMessages(prev => [...prev, assistantMessage]);
 

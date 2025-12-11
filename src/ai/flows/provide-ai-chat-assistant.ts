@@ -75,7 +75,7 @@ const provideAiChatAssistantFlow = ai.defineFlow(
       // Return a controlled error response instead of letting the flow crash.
       return {
         response:
-          'Mi dispiace, ma al momento non riesco a elaborare la tua richiesta. Ciò potrebbe essere dovuto a un volume elevato di domande o al superamento dei limiti di utilizzo. Riprova tra qualche istante.',
+          'Mi dispiace, ma al momento non riesco a elaborare la tua richiesta. Ciò potrebbe essere dovuto a un volume elevato di domande o al superamento dei limiti di utilizzo del piano gratuito. Riprova tra qualche istante.',
       };
     }
   }
