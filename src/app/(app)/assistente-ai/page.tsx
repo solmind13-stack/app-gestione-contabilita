@@ -32,7 +32,7 @@ export default function AssistenteAiPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Memoize the financial data summary so it's computed only once.
+  // Memoize the financial data summary so it's computed only once per page load.
   const financialDataSummary = useMemo(() => {
     const realFinancialData = {
       movimenti: movimentiData,
