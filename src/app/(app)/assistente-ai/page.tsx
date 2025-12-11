@@ -67,14 +67,14 @@ export default function AssistenteAiPage() {
       const assistantMessage: Message = { role: 'assistant', content: result.response };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error("Error calling AI assistant:", error);
-      toast({
-        variant: "destructive",
-        title: "Errore Assistente AI",
-        description: "Impossibile ottenere una risposta in questo momento.",
-      });
-       const errorMessage: Message = { role: 'assistant', content: "Mi dispiace, non sono in grado di rispondere in questo momento. Riprova più tardi." };
+       console.error("Error calling AI assistant:", error);
+       const errorMessage: Message = { role: 'assistant', content: "Mi dispiace, si è verificato un errore e non sono in grado di rispondere in questo momento. Ciò potrebbe essere dovuto ai limiti di richieste API. Riprova più tardi." };
        setMessages(prev => [...prev, errorMessage]);
+       toast({
+         variant: "destructive",
+         title: "Errore Assistente AI",
+         description: "Impossibile ottenere una risposta. Potresti aver superato la quota API.",
+       });
     } finally {
       setIsLoading(false);
     }

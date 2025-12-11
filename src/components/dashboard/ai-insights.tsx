@@ -17,9 +17,23 @@ export function AiInsights() {
   const { toast } = useToast();
   const [hasError, setHasError] = useState(false);
 
-  const fetchInsights = async () => {
+  const fetchInsights = async (useMock = false) => {
     setIsLoading(true);
     setHasError(false);
+
+    if (useMock) {
+        setInsights(mockAiInsights);
+        setIsLoading(false);
+        setHasError(true);
+        toast({
+            variant: "destructive",
+            title: "Errore AI",
+            description: "Visualizzazione dei dati di esempio a causa di un errore.",
+        });
+        return;
+    }
+
+
     try {
       const result = await generateFinancialInsights({
         companyName: "LNC e STG",
@@ -28,11 +42,6 @@ export function AiInsights() {
       setInsights(result);
     } catch (error) {
       console.error("Error fetching AI insights:", error);
-      toast({
-        variant: "destructive",
-        title: "Errore AI",
-        description: "Impossibile generare gli insights in questo momento.",
-      });
       setHasError(true);
     } finally {
       setIsLoading(false);
@@ -45,7 +54,7 @@ export function AiInsights() {
 
   useEffect(() => {
     if (hasError) {
-      setInsights(mockAiInsights);
+      fetchInsights(true);
     }
   }, [hasError]);
 
