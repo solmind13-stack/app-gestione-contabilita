@@ -58,9 +58,12 @@ export default function MovimentiPage() {
     const handleAiSuggestDeadlines = async () => {
         setIsSuggesting(true);
         toast({
-            title: "Analisi AI in corso...",
-            description: "Sto analizzando i movimenti per trovare potenziali scadenze.",
+            title: "Funzionalità AI in sviluppo",
+            description: "L'analisi dei movimenti per suggerire scadenze è temporaneamente disattivata per ottimizzazione.",
         });
+        setIsSuggesting(false);
+        // Original AI call is commented out to prevent API quota errors
+        /*
         try {
             const movementsToAnalyze = filteredMovimenti
                 .filter(m => m.uscita > 0)
@@ -98,6 +101,7 @@ export default function MovimentiPage() {
         } finally {
             setIsSuggesting(false);
         }
+        */
     };
 
     const handleAddScadenzaFromSuggestion = (suggestion: DeadlineSuggestion) => {
