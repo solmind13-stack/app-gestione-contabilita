@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,54 +16,24 @@ export function AiInsights() {
   const [insights, setInsights] = useState<FinancialInsightsOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-  const [hasError, setHasError] = useState(false);
 
-  const fetchInsights = async (useMock = false) => {
+  const fetchInsights = async () => {
     setIsLoading(true);
-    setHasError(false);
-
-    if (useMock) {
-        setInsights(mockAiInsights);
-        setIsLoading(false);
-        setHasError(true);
-        toast({
-            variant: "destructive",
-            title: "Errore AI",
-            description: "Visualizzazione dei dati di esempio a causa di un errore.",
-        });
-        return;
-    }
-
-
-    try {
-      const result = await generateFinancialInsights({
-        companyName: "LNC e STG",
-        financialData: "Dati aggregati di esempio...", // In a real app, you'd pass actual data
-      });
-      setInsights(result);
-    } catch (error) {
-      console.error("Error fetching AI insights:", error);
-      setHasError(true);
-    } finally {
-      setIsLoading(false);
-    }
+    // Temporarily load mock data directly to avoid API rate limit errors
+    setInsights(mockAiInsights);
+    setIsLoading(false);
   };
 
   useEffect(() => {
     fetchInsights();
   }, []);
 
-  useEffect(() => {
-    if (hasError) {
-      fetchInsights(true);
-    }
-  }, [hasError]);
 
   const handleRefresh = () => {
     fetchInsights();
     toast({
       title: "Aggiornamento",
-      description: "Sto generando nuovi insights...",
+      description: "Sto generando nuovi insights (dati di esempio).",
     });
   };
 
