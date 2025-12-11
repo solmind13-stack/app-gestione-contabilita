@@ -1,23 +1,24 @@
 // src/app/(app)/assistente-ai/page.tsx
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Send, Sparkles, Loader2 } from 'lucide-react';
-import { provideAiChatAssistant, type ProvideAiChatAssistantInput } from '@/ai/flows/provide-ai-chat-assistant';
 import { useUser } from '@/firebase';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import type { Movimento, Scadenza, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 
 type Message = {
   role: 'user' | 'assistant';
   content: string;
 };
+
+// Risposta di esempio stabile per evitare errori API
+const MOCK_AI_RESPONSE = "Attualmente, le chiamate dirette all'intelligenza artificiale sono in fase di ottimizzazione per garantire la stabilità. Questa è una risposta di esempio. L'interfaccia è pronta per essere collegata a un servizio stabile non appena disponibile.";
 
 export default function AssistenteAiPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -27,29 +28,6 @@ export default function AssistenteAiPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const financialDataSummary = useMemo(() => {
-    try {
-        const movimenti = localStorage.getItem('movimenti');
-        const scadenze = localStorage.getItem('scadenze');
-        const previsioniEntrate = localStorage.getItem('previsioniEntrate');
-        const previsioniUscite = localStorage.getItem('previsioniUscite');
-        
-        const realFinancialData = {
-            movimenti: movimenti ? JSON.parse(movimenti) : [],
-            scadenze: scadenze ? JSON.parse(scadenze) : [],
-            previsioniEntrate: previsioniEntrate ? JSON.parse(previsioniEntrate) : [],
-            previsioniUscite: previsioniUscite ? JSON.parse(previsioniUscite) : []
-        };
-        
-        return JSON.stringify(realFinancialData, null, 2);
-    } catch (error) {
-        console.error("Error reading from localStorage for AI assistant:", error);
-        // Return a stringified empty object as a fallback
-        return JSON.stringify({ movimenti: [], scadenze: [], previsioniEntrate: [], previsioniUscite: [] });
-    }
-  }, []);
-
-
   const handleSendMessage = async () => {
     if (input.trim() === '' || isLoading) return;
 
@@ -58,34 +36,18 @@ export default function AssistenteAiPage() {
     setInput('');
     setIsLoading(true);
 
-    try {
-      // Prepare the chat history, truncating long messages if necessary.
-      const chatHistory = messages.map(m => ({ role: m.role as 'user' | 'model', content: m.content.substring(0, 2000) }));
+    // Simula una chiamata AI con un ritardo per l'UX
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-      const aiInput: ProvideAiChatAssistantInput = {
-        query: input,
-        company: 'Tutte', // This could be made dynamic in the future
-        financialData: financialDataSummary,
-        chatHistory: chatHistory,
-      };
+    const assistantMessage: Message = { role: 'assistant', content: MOCK_AI_RESPONSE };
+    setMessages(prev => [...prev, assistantMessage]);
+    
+    toast({
+        title: "Modalità di Esempio Attiva",
+        description: "L'assistente AI sta usando risposte predefinite per garantire la stabilità dell'app.",
+    });
 
-      const result = await provideAiChatAssistant(aiInput);
-      
-      const assistantMessage: Message = { role: 'assistant', content: result.response };
-      setMessages(prev => [...prev, assistantMessage]);
-
-    } catch (error) {
-       console.error("Error calling AI assistant:", error);
-       const errorMessage: Message = { role: 'assistant', content: "Mi dispiace, si è verificato un errore e non sono in grado di rispondere in questo momento. Ciò potrebbe essere dovuto al superamento dei limiti di richieste API. Riprova più tardi." };
-       setMessages(prev => [...prev, errorMessage]);
-       toast({
-         variant: "destructive",
-         title: "Errore Assistente AI",
-         description: "Impossibile ottenere una risposta. Potresti aver superato la quota API gratuita.",
-       });
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -109,7 +71,7 @@ export default function AssistenteAiPage() {
             Assistente Finanziario AI
           </CardTitle>
           <CardDescription>
-            Poni domande sui tuoi dati, chiedi previsioni di liquidità o consigli su come gestire i pagamenti.
+            Poni domande sui tuoi dati. Attualmente in modalità di esempio per garantire stabilità.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
@@ -197,5 +159,3 @@ export default function AssistenteAiPage() {
     </div>
   );
 }
-
-    
