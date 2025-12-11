@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, AlertCircle } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, AlertCircle, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -34,12 +34,39 @@ import { Progress } from '@/components/ui/progress';
 import { previsioniUsciteData as initialData } from '@/lib/previsioni-uscite-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { PrevisioneUscita, RiepilogoPrevisioniUscite } from '@/lib/types';
+import { AddExpenseForecastDialog } from '@/components/previsioni/add-expense-forecast-dialog';
+import { user } from '@/lib/data';
+import { useToast } from '@/hooks/use-toast';
 
 export default function PrevisioniUscitePage() {
+    const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
     const [previsioni, setPrevisioni] = useState<PrevisioneUscita[]>(initialData);
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneUscita, direction: 'asc' | 'desc' } | null>({ key: 'dataScadenza', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [editingForecast, setEditingForecast] = useState<PrevisioneUscita | null>(null);
+
+    const handleAddForecast = (newForecast: Omit<PrevisioneUscita, 'id' | 'anno'>) => {
+        const newEntry: PrevisioneUscita = {
+            id: `new-${Date.now()}`,
+            anno: new Date(newForecast.dataScadenza).getFullYear(),
+            ...newForecast,
+        };
+        setPrevisioni(prevData => [newEntry, ...prevData]);
+        toast({ title: "Previsione Aggiunta", description: "La nuova previsione di uscita è stata aggiunta." });
+    };
+
+    const handleEditForecast = (updatedForecast: PrevisioneUscita) => {
+        setPrevisioni(prevData => prevData.map(p => p.id === updatedForecast.id ? updatedForecast : p));
+        setEditingForecast(null);
+        toast({ title: "Previsione Aggiornata", description: "La previsione è stata modificata." });
+    };
+
+    const handleOpenDialog = (forecast?: PrevisioneUscita) => {
+        setEditingForecast(forecast || null);
+        setIsDialogOpen(true);
+    };
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);
@@ -52,10 +79,12 @@ export default function PrevisioniUscitePage() {
 
       if (sortConfig !== null) {
         sortableItems.sort((a, b) => {
-          if (a[sortConfig.key] < b[sortConfig.key]) {
+          const valA = a[sortConfig.key];
+          const valB = b[sortConfig.key];
+          if (valA < valB) {
             return sortConfig.direction === 'asc' ? -1 : 1;
           }
-          if (a[sortConfig.key] > b[sortConfig.key]) {
+          if (valA > valB) {
             return sortConfig.direction === 'asc' ? 1 : -1;
           }
           return 0;
@@ -116,6 +145,15 @@ export default function PrevisioniUscitePage() {
 
   return (
     <div className="flex flex-col gap-6">
+        <AddExpenseForecastDialog
+            isOpen={isDialogOpen}
+            setIsOpen={setIsDialogOpen}
+            onAddForecast={handleAddForecast}
+            onEditForecast={handleEditForecast}
+            forecastToEdit={editingForecast}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+            currentUser={user}
+        />
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
              <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -166,7 +204,7 @@ export default function PrevisioniUscitePage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button onClick={() => {}} className="flex-shrink-0">
+                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
@@ -217,6 +255,7 @@ export default function PrevisioniUscitePage() {
                             <TableHead className="text-right">Importo Effettivo</TableHead>
                             <TableHead>Ricorrenza</TableHead>
                             <TableHead>Note</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -257,6 +296,11 @@ export default function PrevisioniUscitePage() {
                                     <TableCell className="text-right">{p.importoEffettivo ? formatCurrency(p.importoEffettivo) : '-'}</TableCell>
                                     <TableCell>{p.ricorrenza}</TableCell>
                                     <TableCell>{p.note}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)}>
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
                             )
                         })}
@@ -269,7 +313,7 @@ export default function PrevisioniUscitePage() {
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePonderato)}</TableCell>
                             <TableCell colSpan={2}></TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totaleEffettivo)}</TableCell>
-                            <TableCell colSpan={2}></TableCell>
+                            <TableCell colSpan={3}></TableCell>
                         </TableRow>
                     </TableFooter>
                 </Table>
