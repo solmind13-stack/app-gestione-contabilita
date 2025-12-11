@@ -13,6 +13,12 @@ import { useUser } from '@/firebase';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
+// Import data sources
+import { movimentiData } from '@/lib/movimenti-data';
+import { scadenzeData } from '@/lib/scadenze-data';
+import { previsioniEntrateData } from '@/lib/previsioni-entrate-data';
+import { previsioniUsciteData } from '@/lib/previsioni-uscite-data';
+
 type Message = {
   role: 'user' | 'assistant';
   content: string;
@@ -35,16 +41,24 @@ export default function AssistenteAiPage() {
     setIsLoading(true);
 
     try {
-      // In a real application, you'd gather actual, structured data.
-      // For this example, we're sending a placeholder summary.
-      const financialDataSummary = "Dati finanziari aggregati: Movimenti, Scadenze, Previsioni Entrate e Uscite.";
+      // 1. Gather all real data from the app's data sources.
+      const realFinancialData = {
+        movimenti: movimentiData,
+        scadenze: scadenzeData,
+        previsioniEntrate: previsioniEntrateData,
+        previsioniUscite: previsioniUsciteData
+      };
+      
+      // 2. Convert the data to a JSON string for the AI.
+      const financialDataSummary = JSON.stringify(realFinancialData, null, 2);
 
-      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 200) })); // Keep history concise
+
+      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 500) })); // Keep history concise
 
       const aiInput: ProvideAiChatAssistantInput = {
         query: input,
         company: 'Tutte', // This could be dynamic based on a selector
-        financialData: financialDataSummary,
+        financialData: financialDataSummary, // 3. Pass the real data to the AI.
         chatHistory: chatHistory,
       };
 
