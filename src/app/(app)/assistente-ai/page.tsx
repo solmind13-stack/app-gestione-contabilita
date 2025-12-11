@@ -1,7 +1,7 @@
 // src/app/(app)/assistente-ai/page.tsx
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,6 +32,19 @@ export default function AssistenteAiPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  // Memoize the financial data summary so it's computed only once.
+  const financialDataSummary = useMemo(() => {
+    const realFinancialData = {
+      movimenti: movimentiData,
+      scadenze: scadenzeData,
+      previsioniEntrate: previsioniEntrateData,
+      previsioniUscite: previsioniUsciteData
+    };
+    // Stringify the data to be passed to the AI flow.
+    return JSON.stringify(realFinancialData, null, 2);
+  }, []);
+
+
   const handleSendMessage = async () => {
     if (input.trim() === '' || isLoading) return;
 
@@ -41,20 +54,12 @@ export default function AssistenteAiPage() {
     setIsLoading(true);
 
     try {
-      const realFinancialData = {
-        movimenti: movimentiData,
-        scadenze: scadenzeData,
-        previsioniEntrate: previsioniEntrateData,
-        previsioniUscite: previsioniUsciteData
-      };
-      
-      const financialDataSummary = JSON.stringify(realFinancialData, null, 2);
-
-      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 500) }));
+      // Prepare the chat history, truncating long messages if necessary.
+      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 1000) }));
 
       const aiInput: ProvideAiChatAssistantInput = {
         query: input,
-        company: 'Tutte',
+        company: 'Tutte', // This could be made dynamic in the future
         financialData: financialDataSummary,
         chatHistory: chatHistory,
       };
@@ -63,14 +68,15 @@ export default function AssistenteAiPage() {
 
       const assistantMessage: Message = { role: 'assistant', content: result.response };
       setMessages(prev => [...prev, assistantMessage]);
+
     } catch (error) {
        console.error("Error calling AI assistant:", error);
-       const errorMessage: Message = { role: 'assistant', content: "Mi dispiace, si è verificato un errore e non sono in grado di rispondere in questo momento. Ciò potrebbe essere dovuto ai limiti di richieste API. Riprova più tardi." };
+       const errorMessage: Message = { role: 'assistant', content: "Mi dispiace, si è verificato un errore e non sono in grado di rispondere in questo momento. Ciò potrebbe essere dovuto al superamento dei limiti di richieste API. Riprova più tardi." };
        setMessages(prev => [...prev, errorMessage]);
        toast({
          variant: "destructive",
          title: "Errore Assistente AI",
-         description: "Impossibile ottenere una risposta. Potresti aver superato la quota API.",
+         description: "Impossibile ottenere una risposta. Potresti aver superato la quota API gratuita.",
        });
     } finally {
       setIsLoading(false);
@@ -79,10 +85,13 @@ export default function AssistenteAiPage() {
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
+      // Use setTimeout to ensure the scroll happens after the new message is rendered.
+      setTimeout(() => {
+        scrollAreaRef.current?.scrollTo({
+          top: scrollAreaRef.current.scrollHeight,
+          behavior: 'smooth',
+        });
+      }, 100);
     }
   }, [messages]);
 
@@ -103,7 +112,7 @@ export default function AssistenteAiPage() {
             <div className="space-y-6">
               {messages.length === 0 ? (
                  <div className="text-center text-muted-foreground p-8">
-                    <p>Inizia a chattare!</p>
+                    <p>Inizia a chattare con il tuo assistente finanziario!</p>
                     <p className="text-sm">Puoi chiedere: "Qual è la mia liquidità prevista per la fine del mese?" o "Come posso scaglionare i pagamenti di dicembre?".</p>
                  </div>
               ) : (
@@ -130,10 +139,10 @@ export default function AssistenteAiPage() {
                     >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
-                     {message.role === 'user' && (
+                     {message.role === 'user' && user && (
                        <Avatar className="h-9 w-9 border">
-                         {user?.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || 'User'}/>}
-                         <AvatarFallback>{user?.displayName?.charAt(0) || 'U'}</AvatarFallback>
+                         {user.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || 'User'}/>}
+                         <AvatarFallback>{user.displayName?.charAt(0) || 'U'}</AvatarFallback>
                        </Avatar>
                      )}
                   </div>
@@ -145,7 +154,8 @@ export default function AssistenteAiPage() {
                             <AvatarFallback><Sparkles /></AvatarFallback>
                         </Avatar>
                         <div className="max-w-xl rounded-lg px-4 py-3 bg-muted flex items-center">
-                            <Loader2 className="h-5 w-5 animate-spin"/>
+                            <Loader2 className="h-5 w-5 animate-spin mr-2"/>
+                            <span>Analizzo...</span>
                         </div>
                     </div>
                 )}
