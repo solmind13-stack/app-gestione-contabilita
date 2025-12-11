@@ -41,7 +41,15 @@ const generateNarrativeReportFlow = ai.defineFlow(
     outputSchema: GenerateNarrativeReportOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    try {
+      const {output} = await prompt(input);
+      return output!;
+    } catch (error) {
+      console.error('Error in generateNarrativeReportFlow:', error);
+      return {
+        report:
+          'Spiacenti, non è stato possibile generare il report in questo momento. Ciò potrebbe essere dovuto a un volume elevato di richieste o al superamento dei limiti di utilizzo del piano gratuito. Riprova tra qualche istante.',
+      };
+    }
   }
 );
