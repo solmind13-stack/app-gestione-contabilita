@@ -71,7 +71,7 @@ const CATEGORIE = {
   Energia: ['Quote CEF', 'Pratiche Contributo', 'Incentivi GSE', 'Vendita Energia'],
   Fornitori: ['Materiali', 'Lavori/Manutenzione', 'Impianti', 'Servizi'],
   'Gestione Immobili': ['Spese Condominiali', 'Manutenzione', 'Ristrutturazione', 'Utenze'],
-  'Gestione Generale': ['Spese Bancarie', 'Commercialista', 'Telefonia', 'Altre Spese'],
+  'Gestione Generale': ['Spese Bancarie', 'Commercialista', 'Telefonia', 'Altre Spese', 'Gestione'],
   Tasse: ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali'],
   Finanziamenti: ['Rate Mutuo', 'Rate Prestito', 'Rimborso'],
   'Movimenti Interni': ['Giroconto', 'Trasferimento'],
