@@ -1,7 +1,7 @@
 // src/app/(app)/scadenze/page.tsx
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -42,11 +42,33 @@ import { useToast } from '@/hooks/use-toast';
 export default function ScadenzePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
-    const [scadenze, setScadenze] = useState<Scadenza[]>(initialScadenzeData);
+    const [scadenze, setScadenze] = useState<Scadenza[]>([]);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
+
+    useEffect(() => {
+        try {
+            const storedData = localStorage.getItem('scadenze');
+            if (storedData) {
+                setScadenze(JSON.parse(storedData));
+            } else {
+                setScadenze(initialScadenzeData);
+            }
+        } catch (error) {
+            console.error("Failed to parse scadenze from localStorage", error);
+            setScadenze(initialScadenzeData);
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('scadenze', JSON.stringify(scadenze));
+        } catch (error) {
+            console.error("Failed to save scadenze to localStorage", error);
+        }
+    }, [scadenze]);
 
     const handleAddDeadline = (newDeadline: Omit<Scadenza, 'id' | 'anno' | 'importoPagato' | 'stato'>) => {
         const newEntry: Scadenza = {
@@ -302,3 +324,5 @@ export default function ScadenzePage() {
     </div>
   );
 }
+
+    

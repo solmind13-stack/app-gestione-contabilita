@@ -1,7 +1,7 @@
 // src/app/(app)/movimenti/page.tsx
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -44,16 +44,57 @@ import { scadenzeData } from '@/lib/scadenze-data';
 export default function MovimentiPage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
-    const [movimentiData, setMovimentiData] = useState<Movimento[]>(initialMovimenti);
-    const [previsioniEntrate, setPrevisioniEntrate] = useState<PrevisioneEntrata[]>(initialPrevisioniEntrate);
-    const [previsioniUscite, setPrevisioniUscite] = useState<PrevisioneUscita[]>(initialPrevisioniUscite);
-    const [scadenze, setScadenze] = useState<Scadenza[]>(scadenzeData);
+    const [movimentiData, setMovimentiData] = useState<Movimento[]>([]);
+    const [previsioniEntrate, setPrevisioniEntrate] = useState<PrevisioneEntrata[]>([]);
+    const [previsioniUscite, setPrevisioniUscite] = useState<PrevisioneUscita[]>([]);
+    const [scadenze, setScadenze] = useState<Scadenza[]>([]);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
     const [isSuggesting, setIsSuggesting] = useState(false);
+    
+    useEffect(() => {
+        try {
+            const storedMovimenti = localStorage.getItem('movimenti');
+            const storedPrevisioniEntrate = localStorage.getItem('previsioniEntrate');
+            const storedPrevisioniUscite = localStorage.getItem('previsioniUscite');
+            
+            if (storedMovimenti) {
+                setMovimentiData(JSON.parse(storedMovimenti));
+            } else {
+                setMovimentiData(initialMovimenti);
+            }
+
+            if (storedPrevisioniEntrate) {
+                setPrevisioniEntrate(JSON.parse(storedPrevisioniEntrate));
+            } else {
+                setPrevisioniEntrate(initialPrevisioniEntrate);
+            }
+
+            if (storedPrevisioniUscite) {
+                setPrevisioniUscite(JSON.parse(storedPrevisioniUscite));
+            } else {
+                setPrevisioniUscite(initialPrevisioniUscite);
+            }
+
+        } catch (error) {
+            console.error("Failed to parse data from localStorage", error);
+            setMovimentiData(initialMovimenti);
+            setPrevisioniEntrate(initialPrevisioniEntrate);
+            setPrevisioniUscite(initialPrevisioniUscite);
+        }
+        setScadenze(scadenzeData);
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('movimenti', JSON.stringify(movimentiData));
+        } catch (error) {
+            console.error("Failed to save movimenti to localStorage", error);
+        }
+    }, [movimentiData]);
 
     const handleAiSuggestDeadlines = async () => {
         setIsSuggesting(true);
@@ -62,17 +103,14 @@ export default function MovimentiPage() {
             description: "L'analisi dei movimenti per suggerire scadenze è temporaneamente disattivata per ottimizzazione e per evitare il superamento dei limiti API.",
         });
         setIsSuggesting(false);
-        // La chiamata originale all'AI è stata disabilitata per prevenire errori di quota.
-        // Quando pronta, la logica sottostante può essere riattivata.
     };
 
     const handleAddScadenzaFromSuggestion = (suggestion: DeadlineSuggestion) => {
-        // This is a simplified version. A real implementation would open a pre-filled dialog.
         const newScadenza: Scadenza = {
             id: `scad-${Date.now()}`,
-            societa: selectedCompany !== 'Tutte' ? selectedCompany : 'LNC', // Default or guess
+            societa: selectedCompany !== 'Tutte' ? selectedCompany : 'LNC', 
             anno: new Date().getFullYear(),
-            dataScadenza: new Date().toISOString().split('T')[0], // Placeholder, should be edited by user
+            dataScadenza: new Date().toISOString().split('T')[0],
             descrizione: suggestion.description,
             categoria: suggestion.category,
             importoPrevisto: suggestion.amount,
@@ -90,8 +128,6 @@ export default function MovimentiPage() {
 
 
     const checkForForecastUpdate = (movement: Movimento) => {
-        // Simple matching logic: same company, similar description (case-insensitive) and same gross amount.
-        // This could be made more sophisticated.
         const isEntrata = movement.entrata > 0;
         const amount = isEntrata ? movement.entrata : movement.uscita;
 
@@ -104,7 +140,9 @@ export default function MovimentiPage() {
             );
 
             if (matchedForecast) {
-                setPrevisioniEntrate(prev => prev.map(p => p.id === matchedForecast.id ? { ...p, stato: 'Incassato' } : p));
+                const updatedPrevisioni = previsioniEntrate.map(p => p.id === matchedForecast.id ? { ...p, stato: 'Incassato' } : p)
+                setPrevisioniEntrate(updatedPrevisioni);
+                localStorage.setItem('previsioniEntrate', JSON.stringify(updatedPrevisioni));
                 toast({
                     title: "Previsione Aggiornata!",
                     description: `La previsione di entrata "${matchedForecast.descrizione}" è stata segnata come "Incassato".`,
@@ -119,7 +157,9 @@ export default function MovimentiPage() {
                 p.importoLordo === amount
             );
              if (matchedForecast) {
-                setPrevisioniUscite(prev => prev.map(p => p.id === matchedForecast.id ? { ...p, stato: 'Pagato', importoEffettivo: amount } : p));
+                const updatedPrevisioni = previsioniUscite.map(p => p.id === matchedForecast.id ? { ...p, stato: 'Pagato', importoEffettivo: amount } : p)
+                setPrevisioniUscite(updatedPrevisioni);
+                localStorage.setItem('previsioniUscite', JSON.stringify(updatedPrevisioni));
                 toast({
                     title: "Previsione Aggiornata!",
                     description: `La previsione di uscita "${matchedForecast.descrizione}" è stata segnata come "Pagato".`,
@@ -387,3 +427,5 @@ export default function MovimentiPage() {
     </div>
   );
 }
+
+    

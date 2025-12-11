@@ -12,12 +12,7 @@ import { provideAiChatAssistant, type ProvideAiChatAssistantInput } from '@/ai/f
 import { useUser } from '@/firebase';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-
-// Import data sources
-import { movimentiData } from '@/lib/movimenti-data';
-import { scadenzeData } from '@/lib/scadenze-data';
-import { previsioniEntrateData } from '@/lib/previsioni-entrate-data';
-import { previsioniUsciteData } from '@/lib/previsioni-uscite-data';
+import type { Movimento, Scadenza, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -32,16 +27,26 @@ export default function AssistenteAiPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Memoize the financial data summary so it's computed only once per page load.
   const financialDataSummary = useMemo(() => {
-    const realFinancialData = {
-      movimenti: movimentiData,
-      scadenze: scadenzeData,
-      previsioniEntrate: previsioniEntrateData,
-      previsioniUscite: previsioniUsciteData
-    };
-    // Stringify the data to be passed to the AI flow.
-    return JSON.stringify(realFinancialData, null, 2);
+    try {
+        const movimenti = localStorage.getItem('movimenti');
+        const scadenze = localStorage.getItem('scadenze');
+        const previsioniEntrate = localStorage.getItem('previsioniEntrate');
+        const previsioniUscite = localStorage.getItem('previsioniUscite');
+        
+        const realFinancialData = {
+            movimenti: movimenti ? JSON.parse(movimenti) : [],
+            scadenze: scadenze ? JSON.parse(scadenze) : [],
+            previsioniEntrate: previsioniEntrate ? JSON.parse(previsioniEntrate) : [],
+            previsioniUscite: previsioniUscite ? JSON.parse(previsioniUscite) : []
+        };
+        
+        return JSON.stringify(realFinancialData, null, 2);
+    } catch (error) {
+        console.error("Error reading from localStorage for AI assistant:", error);
+        // Return a stringified empty object as a fallback
+        return JSON.stringify({ movimenti: [], scadenze: [], previsioniEntrate: [], previsioniUscite: [] });
+    }
   }, []);
 
 
@@ -192,3 +197,5 @@ export default function AssistenteAiPage() {
     </div>
   );
 }
+
+    
