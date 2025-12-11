@@ -14,6 +14,9 @@ import {z} from 'genkit';
 const ProvideAiChatAssistantInputSchema = z.object({
   query: z.string().describe('The user question about their financial data.'),
   company: z.enum(['LNC', 'STG', 'Tutte']).describe('The company to filter data by.'),
+  // In a real app, you would pass real, structured data here.
+  // For this example, we'll pass a summary string.
+  financialData: z.string().describe('A string containing a summary of movements, deadlines, and forecasts.'),
   chatHistory: z
     .array(z.object({role: z.enum(['user', 'assistant']), content: z.string()}))
     .optional()
@@ -36,16 +39,23 @@ const prompt = ai.definePrompt({
   output: {schema: ProvideAiChatAssistantOutputSchema},
   prompt: `Sei un assistente finanziario esperto per la gestione contabile di due società italiane: LNC (La Nuova Costruzione, immobiliare) e STG (Staygreen, affitti e comunità energetiche).
 Hai accesso ai dati di movimenti bancari, scadenze, previsioni entrate e uscite. Rispondi sempre in italiano. Formatta gli importi in euro con due decimali (es: €1.234,56). Quando fornisci dati numerici sii preciso.
-Per le analisi, spiega brevemente il ragionamento. Se non hai abbastanza dati per rispondere, dillo chiaramente. Puoi suggerire azioni concrete quando appropriato.
+
+Le tue capacità principali sono:
+1.  **Analisi e Risposte Puntuali:** Rispondi a domande specifiche sui dati forniti.
+2.  **Previsione di Liquidità:** Se l'utente chiede la disponibilità economica per un certo periodo (giorno, settimana, mese), analizza tutti i dati (movimenti passati, scadenze future, previsioni di entrata e uscita con la loro probabilità) per calcolare un saldo di cassa previsto. Spiega i calcoli chiave.
+3.  **Ottimizzazione Pagamenti:** Se l'utente chiede come scaglionare i pagamenti, analizza la liquidità prevista e le scadenze. Suggerisci un piano ottimale, indicando quali pagamenti potrebbero essere posticipati o anticipati per mantenere un cash flow positivo, se possibile.
+
+Dati Finanziari a tua disposizione:
+{{{financialData}}}
 
 Here's the user's query: {{{query}}}
 
-{% if chatHistory %}
+{{#if chatHistory}}
   Here's the chat history:
-  {% each chatHistory %}
-    {{this.role}}: {{this.content}}
-  {% endeach %}
-{% endif %}
+  {{#each chatHistory}}
+    {{role}}: {{content}}
+  {{/each}}
+{{/if}}
 `,
 });
 
