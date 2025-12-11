@@ -1,7 +1,7 @@
 // src/app/(app)/previsioni/uscite/page.tsx
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -94,6 +94,26 @@ export default function PrevisioniUscitePage() {
         if (selectedCompany === 'Tutte') return 'Previsioni Uscite - Tutte le società';
         return `Previsioni Uscite - ${selectedCompany}`;
     };
+
+    useEffect(() => {
+        const handleStorageChange = () => {
+            const storedData = localStorage.getItem('previsioniUscite');
+            if (storedData) {
+                setPrevisioni(JSON.parse(storedData));
+            }
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        handleStorageChange(); // Initial check
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('previsioniUscite', JSON.stringify(previsioni));
+    }, [previsioni]);
 
   return (
     <div className="flex flex-col gap-6">

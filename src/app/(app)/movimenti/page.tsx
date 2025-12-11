@@ -29,20 +29,68 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Search, FileSpreadsheet, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
+import { previsioniEntrateData as initialPrevisioniEntrate } from '@/lib/previsioni-entrate-data';
+import { previsioniUsciteData as initialPrevisioniUscite } from '@/lib/previsioni-uscite-data';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Movimento, Riepilogo } from '@/lib/types';
+import type { Movimento, Riepilogo, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { user } from '@/lib/data';
 import { Input } from '@/components/ui/input';
+import { useToast } from "@/hooks/use-toast";
 
 export default function MovimentiPage() {
+    const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
     const [movimentiData, setMovimentiData] = useState<Movimento[]>(initialMovimenti);
+    const [previsioniEntrate, setPrevisioniEntrate] = useState<PrevisioneEntrata[]>(initialPrevisioniEntrate);
+    const [previsioniUscite, setPrevisioniUscite] = useState<PrevisioneUscita[]>(initialPrevisioniUscite);
+
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
+
+    const checkForForecastUpdate = (movement: Movimento) => {
+        // Simple matching logic: same company, similar description (case-insensitive) and same gross amount.
+        // This could be made more sophisticated.
+        const isEntrata = movement.entrata > 0;
+        const amount = isEntrata ? movement.entrata : movement.uscita;
+
+        if (isEntrata) {
+            const matchedForecast = previsioniEntrate.find(p =>
+                p.societa === movement.societa &&
+                p.stato === 'Da incassare' &&
+                movement.descrizione.toLowerCase().includes(p.descrizione.toLowerCase().substring(0,10)) &&
+                p.importoLordo === amount
+            );
+
+            if (matchedForecast) {
+                setPrevisioniEntrate(prev => prev.map(p => p.id === matchedForecast.id ? { ...p, stato: 'Incassato' } : p));
+                toast({
+                    title: "Previsione Aggiornata!",
+                    description: `La previsione di entrata "${matchedForecast.descrizione}" è stata segnata come "Incassato".`,
+                    className: 'bg-green-100 dark:bg-green-900'
+                });
+            }
+        } else { // Uscita
+            const matchedForecast = previsioniUscite.find(p =>
+                p.societa === movement.societa &&
+                p.stato === 'Da pagare' &&
+                movement.descrizione.toLowerCase().includes(p.descrizione.toLowerCase().substring(0,10)) &&
+                p.importoLordo === amount
+            );
+             if (matchedForecast) {
+                setPrevisioniUscite(prev => prev.map(p => p.id === matchedForecast.id ? { ...p, stato: 'Pagato', importoEffettivo: amount } : p));
+                toast({
+                    title: "Previsione Aggiornata!",
+                    description: `La previsione di uscita "${matchedForecast.descrizione}" è stata segnata come "Pagato".`,
+                    className: 'bg-green-100 dark:bg-green-900'
+                });
+            }
+        }
+    };
+
 
     const handleAddMovement = (newMovement: Omit<Movimento, 'id' | 'anno'>) => {
         const newEntry: Movimento = {
@@ -51,10 +99,12 @@ export default function MovimentiPage() {
             ...newMovement,
         };
         setMovimentiData(prevData => [newEntry, ...prevData]);
+        checkForForecastUpdate(newEntry);
     };
     
     const handleEditMovement = (updatedMovement: Movimento) => {
         setMovimentiData(prevData => prevData.map(m => m.id === updatedMovement.id ? updatedMovement : m));
+        checkForForecastUpdate(updatedMovement);
         setEditingMovement(null);
     };
 
@@ -294,4 +344,3 @@ export default function MovimentiPage() {
     </div>
   );
 }
-    

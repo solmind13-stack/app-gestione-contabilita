@@ -1,7 +1,7 @@
 // src/app/(app)/previsioni/entrate/page.tsx
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -91,6 +91,27 @@ export default function PrevisioniEntratePage() {
         if (selectedCompany === 'Tutte') return 'Previsioni Entrate - Tutte le società';
         return `Previsioni Entrate - ${selectedCompany}`;
     };
+
+    useEffect(() => {
+        const handleStorageChange = () => {
+            const storedData = localStorage.getItem('previsioniEntrate');
+            if (storedData) {
+                setPrevisioni(JSON.parse(storedData));
+            }
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        handleStorageChange(); // Initial check
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('previsioniEntrate', JSON.stringify(previsioni));
+    }, [previsioni]);
+
 
   return (
     <div className="flex flex-col gap-6">
