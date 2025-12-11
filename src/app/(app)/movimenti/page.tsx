@@ -25,19 +25,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Search, FileSpreadsheet, Pencil } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Search, FileSpreadsheet, Pencil, Sparkles, BellRing } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { previsioniEntrateData as initialPrevisioniEntrate } from '@/lib/previsioni-entrate-data';
 import { previsioniUsciteData as initialPrevisioniUscite } from '@/lib/previsioni-uscite-data';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Movimento, Riepilogo, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
+import type { Movimento, Riepilogo, PrevisioneEntrata, PrevisioneUscita, DeadlineSuggestion, Scadenza } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { user } from '@/lib/data';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
+import { suggestDeadlines } from '@/ai/flows/suggest-deadlines-from-movements';
+import { scadenzeData } from '@/lib/scadenze-data';
 
 export default function MovimentiPage() {
     const { toast } = useToast();
@@ -45,11 +47,81 @@ export default function MovimentiPage() {
     const [movimentiData, setMovimentiData] = useState<Movimento[]>(initialMovimenti);
     const [previsioniEntrate, setPrevisioniEntrate] = useState<PrevisioneEntrata[]>(initialPrevisioniEntrate);
     const [previsioniUscite, setPrevisioniUscite] = useState<PrevisioneUscita[]>(initialPrevisioniUscite);
+    const [scadenze, setScadenze] = useState<Scadenza[]>(scadenzeData);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
+    const [isSuggesting, setIsSuggesting] = useState(false);
+
+    const handleAiSuggestDeadlines = async () => {
+        setIsSuggesting(true);
+        toast({
+            title: "Analisi AI in corso...",
+            description: "Sto analizzando i movimenti per trovare potenziali scadenze.",
+        });
+        try {
+            const movementsToAnalyze = filteredMovimenti
+                .filter(m => m.uscita > 0)
+                .map(m => ({ description: m.descrizione, amount: m.uscita }));
+
+            const result = await suggestDeadlines({ movements: movementsToAnalyze });
+
+            if (result.suggestions && result.suggestions.length > 0) {
+                result.suggestions.forEach(suggestion => {
+                    toast({
+                        title: "✨ Suggerimento Scadenza AI",
+                        description: `"${suggestion.originalMovementDescription}" sembra una scadenza. Vuoi aggiungerla?`,
+                        action: (
+                            <Button size="sm" onClick={() => handleAddScadenzaFromSuggestion(suggestion)}>
+                                <BellRing className="mr-2 h-4 w-4" />
+                                Aggiungi
+                            </Button>
+                        ),
+                        duration: 10000,
+                    });
+                });
+            } else {
+                toast({
+                    title: "Nessun suggerimento",
+                    description: "Nessuna nuova scadenza ricorrente trovata tra i movimenti.",
+                });
+            }
+        } catch (error) {
+            console.error("Error suggesting deadlines:", error);
+            toast({
+                variant: "destructive",
+                title: "Errore AI",
+                description: "Impossibile analizzare i movimenti in questo momento.",
+            });
+        } finally {
+            setIsSuggesting(false);
+        }
+    };
+
+    const handleAddScadenzaFromSuggestion = (suggestion: DeadlineSuggestion) => {
+        // This is a simplified version. A real implementation would open a pre-filled dialog.
+        const newScadenza: Scadenza = {
+            id: `scad-${Date.now()}`,
+            societa: selectedCompany !== 'Tutte' ? selectedCompany : 'LNC', // Default or guess
+            anno: new Date().getFullYear(),
+            dataScadenza: new Date().toISOString().split('T')[0], // Placeholder, should be edited by user
+            descrizione: suggestion.description,
+            categoria: suggestion.category,
+            importoPrevisto: suggestion.amount,
+            importoPagato: 0,
+            stato: 'Da pagare',
+            ricorrenza: suggestion.recurrence,
+        };
+        setScadenze(prev => [newScadenza, ...prev]);
+        toast({
+            title: "Scadenza Aggiunta!",
+            description: `La scadenza "${suggestion.description}" è stata aggiunta.`,
+            className: "bg-green-100 dark:bg-green-900"
+        });
+    };
+
 
     const checkForForecastUpdate = (movement: Movimento) => {
         // Simple matching logic: same company, similar description (case-insensitive) and same gross amount.
@@ -176,6 +248,10 @@ export default function MovimentiPage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+                 <Button variant="outline" onClick={handleAiSuggestDeadlines} disabled={isSuggesting}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Suggerisci Scadenze
+                </Button>
                 <Button onClick={() => handleOpenDialog()} className="flex-shrink-0">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
@@ -286,7 +362,8 @@ export default function MovimentiPage() {
                           </Button>
                         </TableCell>
                     </TableRow>
-                    )})}
+                    );
+})}
                 </TableBody>
                 <TableFooter>
                     <TableRow>

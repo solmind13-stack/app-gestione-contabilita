@@ -25,8 +25,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, FileText, FileCode, Image, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -35,12 +35,41 @@ import { Separator } from '@/components/ui/separator';
 import { scadenzeData as initialScadenzeData } from '@/lib/scadenze-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { Scadenza, RiepilogoScadenze } from '@/lib/types';
+import { user } from '@/lib/data';
+import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ScadenzePage() {
+    const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
     const [scadenze, setScadenze] = useState<Scadenza[]>(initialScadenzeData);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
+
+    const handleAddDeadline = (newDeadline: Omit<Scadenza, 'id' | 'anno' | 'importoPagato' | 'stato'>) => {
+        const newEntry: Scadenza = {
+            id: `new-${Date.now()}`,
+            anno: new Date(newDeadline.dataScadenza).getFullYear(),
+            importoPagato: 0,
+            stato: 'Da pagare',
+            ...newDeadline,
+        };
+        setScadenze(prevData => [newEntry, ...prevData]);
+        toast({ title: "Scadenza Aggiunta", description: "La nuova scadenza è stata aggiunta." });
+    };
+
+    const handleEditDeadline = (updatedDeadline: Scadenza) => {
+        setScadenze(prevData => prevData.map(d => d.id === updatedDeadline.id ? updatedDeadline : d));
+        setEditingDeadline(null);
+        toast({ title: "Scadenza Aggiornata", description: "La scadenza è stata modificata." });
+    };
+
+    const handleOpenDialog = (deadline?: Scadenza) => {
+        setEditingDeadline(deadline || null);
+        setIsDialogOpen(true);
+    };
 
     const filteredScadenze = useMemo(() => scadenze
         .filter(s => selectedCompany === 'Tutte' || s.societa === selectedCompany)
@@ -67,6 +96,15 @@ export default function ScadenzePage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <AddDeadlineDialog
+        isOpen={isDialogOpen}
+        setIsOpen={setIsDialogOpen}
+        onAddDeadline={handleAddDeadline}
+        onEditDeadline={handleEditDeadline}
+        deadlineToEdit={editingDeadline}
+        defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+        currentUser={user}
+      />
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             <TabsList>
@@ -85,7 +123,7 @@ export default function ScadenzePage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button onClick={() => {}} className="flex-shrink-0">
+                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
@@ -133,6 +171,7 @@ export default function ScadenzePage() {
                             <TableHead className="text-center">Stato</TableHead>
                             <TableHead>Ricorrenza</TableHead>
                             <TableHead>Note</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -160,6 +199,11 @@ export default function ScadenzePage() {
                                 </TableCell>
                                 <TableCell>{scadenza.ricorrenza}</TableCell>
                                 <TableCell>{scadenza.note}</TableCell>
+                                <TableCell className="text-right">
+                                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(scadenza)}>
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
@@ -168,7 +212,7 @@ export default function ScadenzePage() {
                             <TableCell colSpan={5} className="font-bold">TOTALI</TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePagato)}</TableCell>
-                            <TableCell colSpan={3}></TableCell>
+                            <TableCell colSpan={4}></TableCell>
                         </TableRow>
                     </TableFooter>
                 </Table>
@@ -195,7 +239,7 @@ export default function ScadenzePage() {
                       <span className="text-red-600 dark:text-red-400">Da Pagare:</span>
                       <span className="text-red-600 dark:text-red-400">{formatCurrency(riepilogo.daPagare)}</span>
                   </div>
-                  <Separator />
+                  <Separator className="my-4" />
                   <div className="space-y-2">
                     <div className="flex justify-between font-medium">
                         <span>% Completamento</span>

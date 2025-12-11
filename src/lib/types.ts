@@ -139,3 +139,11 @@ export type RiepilogoPrevisioniUscite = {
   daPagare: number;
   percentualePagato: number;
 };
+
+export type DeadlineSuggestion = {
+    description: string;
+    category: string;
+    recurrence: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
+    amount: number;
+    originalMovementDescription: string;
+};
