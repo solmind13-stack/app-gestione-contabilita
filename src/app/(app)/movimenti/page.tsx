@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Search, FileSpreadsheet } from 'lucide-react';
+import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Search, FileSpreadsheet, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
@@ -42,15 +42,26 @@ export default function MovimentiPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
+    const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
 
     const handleAddMovement = (newMovement: Omit<Movimento, 'id' | 'anno'>) => {
         const newEntry: Movimento = {
-            id: `new-${Date.now()}-${Math.floor(Math.random() * 1000)}`, // More robust temporary ID
+            id: `new-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             anno: new Date(newMovement.data).getFullYear(),
             ...newMovement,
         };
         setMovimentiData(prevData => [newEntry, ...prevData]);
     };
+    
+    const handleEditMovement = (updatedMovement: Movimento) => {
+        setMovimentiData(prevData => prevData.map(m => m.id === updatedMovement.id ? updatedMovement : m));
+        setEditingMovement(null);
+    };
+
+    const handleOpenDialog = (movement?: Movimento) => {
+        setEditingMovement(movement || null);
+        setIsDialogOpen(true);
+    }
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
@@ -92,6 +103,8 @@ export default function MovimentiPage() {
             isOpen={isDialogOpen}
             setIsOpen={setIsDialogOpen}
             onAddMovement={handleAddMovement}
+            onEditMovement={handleEditMovement}
+            movementToEdit={editingMovement}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
             currentUser={user}
         />
@@ -113,7 +126,7 @@ export default function MovimentiPage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button onClick={() => setIsDialogOpen(true)} className="flex-shrink-0">
+                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
@@ -180,6 +193,7 @@ export default function MovimentiPage() {
                     <TableHead>Operatore</TableHead>
                     <TableHead>Metodo Pag.</TableHead>
                     <TableHead>Note</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -216,6 +230,11 @@ export default function MovimentiPage() {
                         <TableCell>{movimento.operatore}</TableCell>
                         <TableCell>{movimento.metodoPag}</TableCell>
                         <TableCell>{movimento.note}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(movimento)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                     </TableRow>
                     )})}
                 </TableBody>
@@ -229,7 +248,7 @@ export default function MovimentiPage() {
                     <TableCell className="text-right font-bold">{formatCurrency(totalIvaEntrate)}</TableCell>
                     <TableCell className="text-right font-bold">{formatCurrency(totalUsciteNette)}</TableCell>
                     <TableCell className="text-right font-bold">{formatCurrency(totalIvaUscite)}</TableCell>
-                    <TableCell colSpan={4}></TableCell>
+                    <TableCell colSpan={5}></TableCell>
                     </TableRow>
                 </TableFooter>
                 </Table>
@@ -275,3 +294,4 @@ export default function MovimentiPage() {
     </div>
   );
 }
+    

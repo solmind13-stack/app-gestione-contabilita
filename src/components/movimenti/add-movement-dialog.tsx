@@ -62,6 +62,8 @@ interface AddMovementDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onAddMovement: (movement: Omit<Movimento, 'id' | 'anno'>) => void;
+  onEditMovement: (movement: Movimento) => void;
+  movementToEdit?: Movimento | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: User;
 }
@@ -81,48 +83,82 @@ const IVA_PERCENTAGES = [0.22, 0.10, 0.04, 0.00];
 
 const METODI_PAGAMENTO = ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'];
 
-export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCompany, currentUser }: AddMovementDialogProps) {
+export function AddMovementDialog({
+  isOpen,
+  setIsOpen,
+  onAddMovement,
+  onEditMovement,
+  movementToEdit,
+  defaultCompany,
+  currentUser,
+}: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const { toast } = useToast();
 
+  const isEditMode = !!movementToEdit;
+
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
-    // Default values are now set in useEffect to avoid server/client mismatch for Date
-    defaultValues: {
-      descrizione: '',
-      importo: 0,
-      tipo: 'uscita',
-      categoria: '',
-      sottocategoria: '',
-      iva: 0.22,
-      conto: '',
-      metodoPag: '',
-      note: '',
-    },
   });
-  
-  // Set default values in useEffect to run only on the client
+
   useEffect(() => {
     if (isOpen) {
-      form.reset({
-        societa: defaultCompany,
-        data: new Date(), // This now runs only on the client side
-        descrizione: '',
-        importo: 0,
-        tipo: 'uscita',
-        categoria: '',
-        sottocategoria: '',
-        iva: 0.22,
-        conto: '',
-        operatore: currentUser?.name || '',
-        metodoPag: '',
-        note: '',
-      });
+      if (isEditMode && movementToEdit) {
+        form.reset({
+          societa: movementToEdit.societa,
+          data: new Date(movementToEdit.data),
+          descrizione: movementToEdit.descrizione,
+          importo: movementToEdit.entrata > 0 ? movementToEdit.entrata : movementToEdit.uscita,
+          tipo: movementToEdit.entrata > 0 ? 'entrata' : 'uscita',
+          categoria: movementToEdit.categoria,
+          sottocategoria: movementToEdit.sottocategoria,
+          iva: movementToEdit.iva,
+          conto: movementToEdit.conto || '',
+          operatore: movementToEdit.operatore || '',
+          metodoPag: movementToEdit.metodoPag || '',
+          note: movementToEdit.note || '',
+        });
+      } else {
+        form.reset({
+          societa: defaultCompany,
+          data: new Date(),
+          descrizione: '',
+          importo: 0,
+          tipo: 'uscita',
+          categoria: '',
+          sottocategoria: '',
+          iva: 0.22,
+          conto: '',
+          operatore: currentUser?.name || '',
+          metodoPag: '',
+          note: '',
+        });
+      }
     }
-  }, [isOpen, defaultCompany, currentUser, form]);
+  }, [isOpen, isEditMode, movementToEdit, defaultCompany, currentUser, form]);
 
   const onSubmit = (data: FormValues) => {
-    const newMovement: Omit<Movimento, 'id' | 'anno'> = {
+    if (isEditMode && movementToEdit) {
+      const updatedMovement: Movimento = {
+        ...movementToEdit,
+        societa: data.societa,
+        data: format(data.data, 'yyyy-MM-dd'),
+        anno: data.data.getFullYear(),
+        descrizione: data.descrizione,
+        categoria: data.categoria,
+        sottocategoria: data.sottocategoria,
+        entrata: data.tipo === 'entrata' ? data.importo : 0,
+        uscita: data.tipo === 'uscita' ? data.importo : 0,
+        iva: data.iva,
+        conto: data.conto,
+        operatore: data.operatore,
+        metodoPag: data.metodoPag,
+        note: data.note,
+      };
+      onEditMovement(updatedMovement);
+      toast({ title: "Movimento Aggiornato", description: "Il movimento è stato modificato con successo." });
+    } else {
+      const newMovement: Omit<Movimento, 'id' | 'anno'> = {
         societa: data.societa,
         data: format(data.data, 'yyyy-MM-dd'),
         descrizione: data.descrizione,
@@ -135,9 +171,10 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
         operatore: data.operatore,
         metodoPag: data.metodoPag,
         note: data.note,
-    };
-    onAddMovement(newMovement);
-    toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato aggiunto alla lista." });
+      };
+      onAddMovement(newMovement);
+      toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato aggiunto alla lista." });
+    }
     setIsOpen(false);
   };
 
@@ -170,9 +207,9 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Aggiungi Nuovo Movimento</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Modifica Movimento' : 'Aggiungi Nuovo Movimento'}</DialogTitle>
           <DialogDescription>
-            Inserisci i dettagli della transazione. Usa l'assistente AI per una categorizzazione rapida.
+             {isEditMode ? 'Modifica i dettagli della transazione.' : 'Inserisci i dettagli della transazione. Usa l\'assistente AI per una categorizzazione rapida.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -184,7 +221,7 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Società</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona società" />
@@ -281,7 +318,7 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Tipo Movimento</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue />
@@ -369,7 +406,7 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
                         <FormItem>
                         <FormLabel>Operatore</FormLabel>
                          <FormControl>
-                            <Input {...field} disabled />
+                            <Input {...field} disabled={!isEditMode} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -381,7 +418,7 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Metodo Pagamento</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Seleziona..." />
@@ -428,7 +465,7 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Annulla</Button>
-              <Button type="submit">Salva Movimento</Button>
+              <Button type="submit">{isEditMode ? 'Salva Modifiche' : 'Salva Movimento'}</Button>
             </DialogFooter>
           </form>
         </Form>
@@ -436,3 +473,4 @@ export function AddMovementDialog({ isOpen, setIsOpen, onAddMovement, defaultCom
     </Dialog>
   );
 }
+    
