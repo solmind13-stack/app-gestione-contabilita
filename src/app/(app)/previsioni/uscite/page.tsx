@@ -26,10 +26,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 
 import { previsioniUsciteData as initialData } from '@/lib/previsioni-uscite-data';
@@ -117,6 +116,38 @@ export default function PrevisioniUscitePage() {
 
   return (
     <div className="flex flex-col gap-6">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+             <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Totale Previsto</CardTitle>
+                    <Wallet className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{formatCurrency(riepilogo.totalePrevisto)}</div>
+                    <p className="text-xs text-muted-foreground">L'importo totale di tutte le previsioni di uscita</p>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Da Pagare</CardTitle>
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold text-red-500">{formatCurrency(riepilogo.daPagare)}</div>
+                    <p className="text-xs text-muted-foreground">Importo residuo da saldare</p>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">% Pagato</CardTitle>
+                    <div className="text-2xl font-bold">{riepilogo.percentualePagato.toFixed(0)}%</div>
+                </CardHeader>
+                <CardContent>
+                    <Progress value={riepilogo.percentualePagato} className="h-2"/>
+                    <p className="text-xs text-muted-foreground mt-2">Avanzamento dei pagamenti</p>
+                </CardContent>
+            </Card>
+        </div>
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             <TabsList>
@@ -207,9 +238,9 @@ export default function PrevisioniUscitePage() {
                                     <TableCell className="text-right">{formatCurrency(iva)}</TableCell>
                                     <TableCell className="text-center">
                                       <Badge className={cn("text-white", {
-                                        "bg-green-500 hover:bg-green-600": p.certezza === 'Certa',
-                                        "bg-yellow-500 hover:bg-yellow-600": p.certezza === 'Probabile',
-                                        "bg-orange-500 hover:bg-orange-600": p.certezza === 'Incerta',
+                                        "bg-green-600 hover:bg-green-700": p.certezza === 'Certa',
+                                        "bg-orange-500 hover:bg-orange-600": p.certezza === 'Probabile',
+                                        "bg-yellow-500 hover:bg-yellow-600": p.certezza === 'Incerta',
                                       })}>{p.certezza}</Badge>
                                     </TableCell>
                                     <TableCell className="text-center">{ (p.probabilita * 100).toFixed(0) }%</TableCell>
@@ -217,9 +248,9 @@ export default function PrevisioniUscitePage() {
                                     <TableCell>{p.fonteContratto}</TableCell>
                                     <TableCell className="text-center">
                                         <Badge className={cn("text-white", {
-                                            "bg-green-500 hover:bg-green-600": p.stato === 'Pagato',
-                                            "bg-red-500 hover:bg-red-600": p.stato === 'Da pagare',
-                                            "bg-yellow-500 hover:bg-yellow-600": p.stato === 'Parziale',
+                                            "bg-green-600 hover:bg-green-700": p.stato === 'Pagato',
+                                            "bg-red-600 hover:bg-red-700": p.stato === 'Da pagare',
+                                            "bg-orange-500 hover:bg-orange-600": p.stato === 'Parziale',
                                             "bg-gray-500 hover:bg-gray-600": p.stato === 'Annullato',
                                         })}>{p.stato}</Badge>
                                     </TableCell>
@@ -246,40 +277,6 @@ export default function PrevisioniUscitePage() {
             </CardContent>
         </Card>
         </Tabs>
-
-         <Card className="w-full md:w-2/3 lg:w-1/2">
-          <CardHeader>
-              <CardTitle>Riepilogo Previsioni Uscite {selectedCompany !== 'Tutte' ? selectedCompany : 'Totale'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                  <div className="flex justify-between col-span-1">
-                      <span className="text-muted-foreground">Totale Previsto:</span>
-                      <span className="font-medium">{formatCurrency(riepilogo.totalePrevisto)}</span>
-                  </div>
-                  <div className="flex justify-between col-span-1 font-bold text-base">
-                      <span className="flex items-center gap-1"><Percent className="h-4 w-4"/> Totale Ponderato:</span>
-                      <span>{formatCurrency(riepilogo.totalePonderato)}</span>
-                  </div>
-                   <div className="flex justify-between col-span-1">
-                      <span className="text-muted-foreground">Totale Pagato:</span>
-                      <span className="font-medium text-green-600">{formatCurrency(riepilogo.totaleEffettivo)}</span>
-                  </div>
-                   <div className="flex justify-between col-span-1">
-                      <span className="font-bold text-red-600 dark:text-red-400">Da Pagare:</span>
-                      <span className="font-bold text-red-600 dark:text-red-400">{formatCurrency(riepilogo.daPagare)}</span>
-                  </div>
-              </div>
-              <Separator className="my-4" />
-              <div className="space-y-2">
-                <div className="flex justify-between font-medium">
-                    <span>% Pagato</span>
-                    <span>{riepilogo.percentualePagato.toFixed(0)}%</span>
-                </div>
-                <Progress value={riepilogo.percentualePagato} className="h-2"/>
-              </div>
-          </CardContent>
-      </Card>
     </div>
   );
 }

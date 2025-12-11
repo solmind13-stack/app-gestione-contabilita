@@ -26,10 +26,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, CheckCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 
 import { previsioniEntrateData as initialData } from '@/lib/previsioni-entrate-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
@@ -115,6 +114,38 @@ export default function PrevisioniEntratePage() {
 
   return (
     <div className="flex flex-col gap-6">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Totale Previsto (Lordo)</CardTitle>
+                    <Wallet className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{formatCurrency(riepilogo.totaleLordo)}</div>
+                    <p className="text-xs text-muted-foreground">L'importo totale di tutte le previsioni</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Totale Ponderato</CardTitle>
+                    <Percent className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{formatCurrency(riepilogo.totalePonderato)}</div>
+                    <p className="text-xs text-muted-foreground">Importo previsto pesato per probabilità</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Totale Già Incassato</CardTitle>
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold text-green-500">{formatCurrency(riepilogo.totaleIncassato)}</div>
+                    <p className="text-xs text-muted-foreground">Somma delle previsioni già incassate</p>
+                </CardContent>
+            </Card>
+        </div>
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             <TabsList>
@@ -200,19 +231,19 @@ export default function PrevisioniEntratePage() {
                                     <TableCell className="text-right">{formatCurrency(netto)}</TableCell>
                                     <TableCell className="text-center">
                                       <Badge className={cn("text-white", {
-                                        "bg-green-500 hover:bg-green-600": p.certezza === 'Certa',
-                                        "bg-yellow-500 hover:bg-yellow-600": p.certezza === 'Probabile',
-                                        "bg-orange-500 hover:bg-orange-600": p.certezza === 'Incerta',
+                                        "bg-green-600 hover:bg-green-700": p.certezza === 'Certa',
+                                        "bg-orange-500 hover:bg-orange-600": p.certezza === 'Probabile',
+                                        "bg-yellow-500 hover:bg-yellow-600": p.certezza === 'Incerta',
                                       })}>{p.certezza}</Badge>
                                     </TableCell>
                                     <TableCell className="text-center">{ (p.probabilita * 100).toFixed(0) }%</TableCell>
                                     <TableCell className="text-right font-semibold">{formatCurrency(ponderato)}</TableCell>
                                     <TableCell className="text-center">
                                         <Badge className={cn("text-white", {
-                                          "bg-green-500 hover:bg-green-600": p.stato === 'Incassato',
-                                          "bg-yellow-500 hover:bg-yellow-600": p.stato === 'Da incassare',
-                                          "bg-blue-500 hover:bg-blue-600": p.stato === 'Parziale',
-                                          "bg-red-500 hover:bg-red-600": p.stato === 'Annullato',
+                                          "bg-green-600 hover:bg-green-700": p.stato === 'Incassato',
+                                          "bg-orange-500 hover:bg-orange-600": p.stato === 'Da incassare',
+                                          "bg-yellow-500 hover:bg-yellow-600": p.stato === 'Parziale',
+                                          "bg-red-600 hover:bg-red-700": p.stato === 'Annullato',
                                         })}>{p.stato}</Badge>
                                     </TableCell>
                                     <TableCell>{p.note}</TableCell>
@@ -234,29 +265,6 @@ export default function PrevisioniEntratePage() {
             </CardContent>
         </Card>
         </Tabs>
-
-         <Card className="w-full md:w-1/2 lg:w-1/3">
-          <CardHeader>
-              <CardTitle>Riepilogo Previsioni {selectedCompany !== 'Tutte' ? selectedCompany : 'Totale'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-              <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                      <span className="text-muted-foreground">Totale Previsto (Lordo):</span>
-                      <span className="font-medium">{formatCurrency(riepilogo.totaleLordo)}</span>
-                  </div>
-                   <div className="flex justify-between">
-                      <span className="text-muted-foreground">Totale Incassato:</span>
-                      <span className="font-medium text-green-600">{formatCurrency(riepilogo.totaleIncassato)}</span>
-                  </div>
-                  <Separator />
-                   <div className="flex justify-between font-bold text-base">
-                      <span className="flex items-center gap-1"><Percent className="h-4 w-4"/> Totale Ponderato:</span>
-                      <span>{formatCurrency(riepilogo.totalePonderato)}</span>
-                  </div>
-              </div>
-          </CardContent>
-      </Card>
     </div>
   );
 }
