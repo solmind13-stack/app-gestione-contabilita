@@ -24,8 +24,6 @@ type Message = {
   content: string;
 };
 
-const MOCK_AI_RESPONSE = "A causa dei limiti attuali della quota API, questa è una risposta di esempio. In una versione completa, analizzerei i dati forniti per calcolare la liquidità e suggerire un piano di pagamenti ottimale.";
-
 export default function AssistenteAiPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -42,17 +40,6 @@ export default function AssistenteAiPage() {
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI thinking time
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Display a mock response instead of calling the API
-    const assistantMessage: Message = { role: 'assistant', content: MOCK_AI_RESPONSE };
-    setMessages(prev => [...prev, assistantMessage]);
-
-    setIsLoading(false);
-
-    // The code below is temporarily disabled to avoid API rate limit errors.
-    /*
     try {
       const realFinancialData = {
         movimenti: movimentiData,
@@ -88,7 +75,6 @@ export default function AssistenteAiPage() {
     } finally {
       setIsLoading(false);
     }
-    */
   };
 
   useEffect(() => {
