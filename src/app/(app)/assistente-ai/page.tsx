@@ -24,6 +24,8 @@ type Message = {
   content: string;
 };
 
+const MOCK_AI_RESPONSE = "A causa dei limiti attuali della quota API, questa è una risposta di esempio. In una versione completa, analizzerei i dati forniti per calcolare la liquidità e suggerire un piano di pagamenti ottimale.";
+
 export default function AssistenteAiPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -40,8 +42,18 @@ export default function AssistenteAiPage() {
     setInput('');
     setIsLoading(true);
 
+    // Simulate AI thinking time
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Display a mock response instead of calling the API
+    const assistantMessage: Message = { role: 'assistant', content: MOCK_AI_RESPONSE };
+    setMessages(prev => [...prev, assistantMessage]);
+
+    setIsLoading(false);
+
+    // The code below is temporarily disabled to avoid API rate limit errors.
+    /*
     try {
-      // 1. Gather all real data from the app's data sources.
       const realFinancialData = {
         movimenti: movimentiData,
         scadenze: scadenzeData,
@@ -49,16 +61,14 @@ export default function AssistenteAiPage() {
         previsioniUscite: previsioniUsciteData
       };
       
-      // 2. Convert the data to a JSON string for the AI.
       const financialDataSummary = JSON.stringify(realFinancialData, null, 2);
 
-
-      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 500) })); // Keep history concise
+      const chatHistory = messages.map(m => ({ role: m.role, content: m.content.substring(0, 500) }));
 
       const aiInput: ProvideAiChatAssistantInput = {
         query: input,
-        company: 'Tutte', // This could be dynamic based on a selector
-        financialData: financialDataSummary, // 3. Pass the real data to the AI.
+        company: 'Tutte',
+        financialData: financialDataSummary,
         chatHistory: chatHistory,
       };
 
@@ -78,6 +88,7 @@ export default function AssistenteAiPage() {
     } finally {
       setIsLoading(false);
     }
+    */
   };
 
   useEffect(() => {
