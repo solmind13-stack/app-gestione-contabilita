@@ -66,7 +66,16 @@ const provideAiChatAssistantFlow = ai.defineFlow(
     outputSchema: ProvideAiChatAssistantOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    try {
+      const {output} = await prompt(input);
+      return output!;
+    } catch (error) {
+      console.error('Error in provideAiChatAssistantFlow:', error);
+      // Return a controlled error response instead of letting the flow crash.
+      return {
+        response:
+          'Mi dispiace, ma al momento non riesco a elaborare la tua richiesta. Ciò potrebbe essere dovuto a un volume elevato di domande o al superamento dei limiti di utilizzo. Riprova tra qualche istante.',
+      };
+    }
   }
 );
