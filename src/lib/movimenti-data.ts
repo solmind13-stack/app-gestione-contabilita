@@ -282,12 +282,3 @@ export const movimentiData: Movimento[] = [
     iva: 0
   }
 ];
-
-export const riepilogoMovimenti: Riepilogo = {
-    totaleEntrate: 10194.00,
-    totaleUscite: 1877.00,
-    saldo: 8317.00,
-    ivaEntrate: 1811.21,
-    ivaUscite: 0.00,
-    ivaNetta: 1811.21
-};

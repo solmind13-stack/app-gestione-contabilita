@@ -17,17 +17,16 @@ service cloud.firestore {
     }
 
     function isUserRole(role) {
-      // Check role only if the user document actually exists
       return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
     }
     
     function canAccessCompanyData(company) {
-      // Check role only if the user document actually exists
       if (!isSignedIn() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) {
         return false;
       }
       let userRole = getUserData().role;
-      return userRole == 'admin' || userRole == 'editor' || (userRole == 'company' && getUserData().company == company);
+      let userCompany = getUserData().company;
+      return userRole == 'admin' || userRole == 'editor' || (userRole == 'company' && userCompany == company);
     }
     
     // Rules for the 'users' collection
@@ -58,11 +57,11 @@ service cloud.firestore {
       allow create, update: if canAccessCompanyData(request.resource.data.societa);
 
       // LIST (query multiple documents)
-      // This is the most restrictive rule. To prevent data leakage, we force non-admin/editor users
+      // To prevent data leakage, we force non-admin/editor users
       // to ALWAYS filter their queries by their own company.
-      // Admins and Editors can list all documents without a 'where' clause.
+      // Admins and Editors can list all documents without a 'where' clause on company.
       allow list: if (isUserRole('admin') || isUserRole('editor')) || 
-                     (isUserRole('company') && request.query.where[0][1] == 'societa' && request.query.where[0][2] == getUserData().company);
+                     (isUserRole('company') && request.query.where.size() > 0 && request.query.where[0].fieldPath == 'societa' && request.query.where[0].op == '==' && request.query.where[0].value == getUserData().company);
     }
     
     // Sub-collections for users, like chatHistory
