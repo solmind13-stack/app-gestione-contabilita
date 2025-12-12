@@ -16,38 +16,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Se il caricamento è finito e non c'è nessun utente (o nessun ruolo),
-    // l'utente non è autorizzato, quindi reindirizza al login.
-    if (!isUserLoading && (!user || !user.role)) {
+    // Quando il caricamento finisce, se non c'è utente o non ha un ruolo,
+    // significa che non è autorizzato, quindi lo rimandiamo al login.
+    if (!isUserLoading && !user?.role) {
       router.push('/login');
     }
   }, [user, isUserLoading, router]);
 
-  // Mostra una schermata di caricamento mentre il provider Firebase determina lo stato dell'utente.
+  // Durante il caricamento, mostriamo uno scheletro per evitare sfarfallii.
   if (isUserLoading) {
     return <DashboardLoading />;
   }
 
-  // Se dopo il caricamento l'utente non è ancora valido (o non ha un ruolo),
-  // non renderizzare nulla per prevenire flash di contenuto protetto.
-  // L'useEffect si occuperà del reindirizzamento.
-  if (!user || !user.role) {
-    return null; 
+  // Se l'utente ha un ruolo, allora è autorizzato e può vedere il contenuto.
+  if (user?.role) {
+    return (
+      <SidebarProvider>
+          <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
+              <AppSidebar />
+              <div className="flex flex-col flex-1">
+                  <AppHeader />
+                  <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+                      {children}
+                  </main>
+              </div>
+              <FloatingChatButton />
+          </div>
+      </SidebarProvider>
+    );
   }
 
-  // Se l'utente è valido e ha un ruolo, mostra il layout dell'applicazione.
-  return (
-    <SidebarProvider>
-        <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
-            <AppSidebar />
-            <div className="flex flex-col flex-1">
-                <AppHeader />
-                <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-                    {children}
-                </main>
-            </div>
-            <FloatingChatButton />
-        </div>
-    </SidebarProvider>
-  );
+  // Se il caricamento è finito ma l'utente non è valido, non mostriamo nulla
+  // mentre l'useEffect esegue il reindirizzamento.
+  return null;
 }

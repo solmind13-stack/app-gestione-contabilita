@@ -28,8 +28,9 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
+  // Questo useEffect gestisce il reindirizzamento DOPO che il login ha avuto successo
+  // e il FirebaseProvider ha caricato il profilo utente con il ruolo.
   useEffect(() => {
-    // Reindirizza solo quando il caricamento è terminato e l'utente ha un ruolo valido.
     if (!isUserLoading && user?.role) {
       router.push("/dashboard");
     }
@@ -37,69 +38,67 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoggingIn(true);
     if (!auth) {
         toast({
             variant: "destructive",
             title: "Errore di Inizializzazione",
-            description: "Servizio di autenticazione non disponibile. Riprova più tardi.",
+            description: "Servizio di autenticazione non disponibile.",
         });
-        setIsLoggingIn(false);
         return;
     }
     
+    setIsLoggingIn(true);
+    
     try {
+      // Tentiamo prima di fare il login
       await signInWithEmailAndPassword(auth, email, password);
-      // Non reindirizzare qui. L'useEffect gestirà il reindirizzamento
-      // una volta che il provider avrà caricato il profilo utente completo.
+      // Se il login ha successo, l'onAuthStateChanged nel provider si attiverà,
+      // caricherà il profilo, e l'useEffect sopra reindirizzerà.
+      // Non facciamo nient'altro qui.
+      toast({ title: "Accesso Riuscito", description: "Verrai reindirizzato alla dashboard..." });
+
     } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        // Tentativo di creare l'utente se non esiste
-        try {
-          await createUserWithEmailAndPassword(auth, email, password);
-          toast({
-            title: "Utente Creato",
-            description: "Nuovo utente registrato con successo. Verrai reindirizzato.",
-          });
-          // Anche qui, l'useEffect si occuperà del reindirizzamento.
-        } catch (creationError: any) {
-          console.error("Signup failed:", creationError);
-          toast({
-            variant: "destructive",
-            title: "Registrazione Fallita",
-            description: "Impossibile creare un nuovo utente. La password deve essere di almeno 6 caratteri.",
-          });
+        // Se l'utente non esiste, proviamo a crearlo
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                // Se la creazione ha successo, l'onAuthStateChanged si attiverà,
+                // creerà il profilo nel DB, e l'useEffect sopra reindirizzerà.
+                toast({
+                    title: "Benvenuto!",
+                    description: "Nuovo utente creato con successo. Verrai reindirizzato...",
+                });
+            } catch (creationError: any) {
+                console.error("Signup failed:", creationError);
+                toast({
+                    variant: "destructive",
+                    title: "Registrazione Fallita",
+                    description: creationError.message || "Impossibile creare un nuovo utente. La password deve essere di almeno 6 caratteri.",
+                });
+            }
+        } else {
+            // Gestiamo altri errori di login
+            console.error("Login failed:", error);
+            toast({
+                variant: "destructive",
+                title: "Login Fallito",
+                description: "Credenziali non valide o errore di rete. Riprova.",
+            });
         }
-      } else {
-         console.error("Login failed:", error);
-         toast({
-          variant: "destructive",
-          title: "Login Fallito",
-          description: "Credenziali non valide o errore di rete. Riprova.",
-        });
-      }
     } finally {
-      setIsLoggingIn(false);
+        // In ogni caso, smettiamo di mostrare il loader sul pulsante.
+        // La gestione del loading della pagina viene fatta dal provider.
+        setIsLoggingIn(false);
     }
   };
   
-  // Mostra un caricamento globale mentre si verifica lo stato dell'utente.
-  // Questo previene il flash del modulo di login se l'utente è già loggato.
-  if (isUserLoading) {
+  // Mostra un caricamento globale se stiamo verificando lo stato dell'utente
+  // o se l'utente è già loggato e in attesa di reindirizzamento.
+  if (isUserLoading || user?.role) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center">
+      <div className="flex min-h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin" />
       </div>
-    );
-  }
-
-  // Se l'utente è già loggato (verificato dall'useEffect), non mostrare il form
-  // ma continua a mostrare il loader per un'esperienza utente fluida.
-  if (user?.role) {
-      return (
-        <div className="flex min-h-screen w-full items-center justify-center">
-            <Loader2 className="h-12 w-12 animate-spin" />
-        </div>
     );
   }
 
