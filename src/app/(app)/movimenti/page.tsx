@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc } from 'firebase/firestore';
+import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference } from 'firebase/firestore';
 
 import {
   Card,
@@ -29,40 +29,51 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileText, FileCode, Image, ArrowUp, ArrowDown, Search, FileSpreadsheet, Pencil, Sparkles, BellRing, Loader2 } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, Sparkles, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Movimento, Riepilogo, PrevisioneEntrata, PrevisioneUscita, DeadlineSuggestion, Scadenza, AppUser } from '@/lib/types';
+import type { Movimento, Riepilogo, AppUser } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 
-const getMovimentiQuery = (firestore: any, user: AppUser | null) => {
-    if (!user) return null;
-    const movimentiCollection = collection(firestore, 'movements');
+const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+    if (!firestore || !user) return null;
+    
+    const movimentiCollection = collection(firestore, 'movements') as CollectionReference<Movimento>;
 
+    // Admins and editors can see all companies, but we filter client-side
+    // or they can select a specific company.
     if (user.role === 'admin' || user.role === 'editor') {
-        return query(movimentiCollection);
+        if (company !== 'Tutte') {
+            return query(movimentiCollection, where('societa', '==', company));
+        }
+        // IMPORTANT: Firestore rules don't allow 'OR' queries easily.
+        // For admins/editors seeing 'Tutte', we'll fetch both and merge,
+        // or just fetch all if rules allow. Let's assume rules allow fetching all for admin.
+        // The new rule will enforce filtering for non-admins.
+        return query(movimentiCollection); 
     }
     
+    // Company users can only see their own company data
     if (user.role === 'company' && user.company) {
         return query(movimentiCollection, where('societa', '==', user.company));
     }
 
-    // Default to no data if role is not set or invalid
-    return null;
+    return null; // Should not happen for authorized users
 }
+
 
 export default function MovimentiPage() {
     const { toast } = useToast();
-    const [selectedCompany, setSelectedCompany] = useState('Tutte');
+    const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
     
-    const { user } = useUser();
+    const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
     
-    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user), [firestore, user]);
+    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
 
     const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
 
@@ -83,20 +94,6 @@ export default function MovimentiPage() {
                 try {
                     const batch = writeBatch(firestore);
                     
-                    // Seed users - create a default admin user for the current logged-in user
-                    if (user) {
-                        const userDocRef = doc(firestore, "users", user.uid);
-                        batch.set(userDocRef, {
-                            id: user.uid,
-                            email: user.email,
-                            firstName: user.displayName?.split(' ')[0] || 'Admin',
-                            lastName: user.displayName?.split(' ')[1] || 'User',
-                            role: 'admin', // Make first user an admin
-                            lastLogin: new Date().toISOString(),
-                            creationDate: new Date().toISOString(),
-                        });
-                    }
-
                     // Seed movements
                     initialMovimenti.forEach((movimento) => {
                         const docRef = doc(collection(firestore, "movements"));
@@ -125,6 +122,13 @@ export default function MovimentiPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
 
+    // Set the default selected company based on user role
+    useEffect(() => {
+        if (user?.role === 'company' && user.company) {
+            setSelectedCompany(user.company);
+        }
+    }, [user]);
+
     const handleOpenDialog = (movement?: Movimento) => {
         setEditingMovement(movement || null);
         setIsDialogOpen(true);
@@ -137,6 +141,7 @@ export default function MovimentiPage() {
                 ...newMovementData,
                 createdBy: user.uid,
                 createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
             });
             toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato salvato." });
         } catch (error) {
@@ -164,12 +169,7 @@ export default function MovimentiPage() {
 
     const filteredMovimenti = useMemo(() => {
         let data = movimentiData || [];
-        if (user?.role === 'company' && user.company) {
-            data = data.filter(m => m.societa === user.company);
-        } else if (selectedCompany !== 'Tutte') {
-            data = data.filter(m => m.societa === selectedCompany);
-        }
-
+        
         return data
             .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
             .sort((a, b) => {
@@ -181,7 +181,7 @@ export default function MovimentiPage() {
                     return dateB - dateA;
                 }
             });
-    }, [movimentiData, selectedCompany, searchTerm, sortOrder, user]);
+    }, [movimentiData, searchTerm, sortOrder]);
 
     const riepilogo = useMemo((): Riepilogo => {
         const data = filteredMovimenti;
@@ -201,8 +201,8 @@ export default function MovimentiPage() {
     const totalIvaUscite = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita && m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
 
     const getPageTitle = () => {
-        if (selectedCompany === 'Tutte' || user?.role !== 'company') return 'Movimenti';
-        return `Movimenti - ${user.company}`;
+        if (selectedCompany === 'Tutte') return 'Movimenti';
+        return `Movimenti - ${selectedCompany}`;
     }
 
   return (
@@ -216,7 +216,7 @@ export default function MovimentiPage() {
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
             currentUser={user!}
         />
-       <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
+       <Tabs value={selectedCompany} onValueChange={(value) => setSelectedCompany(value as 'LNC' | 'STG' | 'Tutte')} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             {user && (user.role === 'admin' || user.role === 'editor') && (
                  <TabsList>
@@ -299,7 +299,7 @@ export default function MovimentiPage() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {(isLoadingMovimenti || isSeeding) ? (
+                    {(isLoadingMovimenti || isUserLoading || isSeeding) ? (
                         <TableRow>
                             <TableCell colSpan={17} className="h-24 text-center">
                                 <Loader2 className="mx-auto h-8 w-8 animate-spin" />

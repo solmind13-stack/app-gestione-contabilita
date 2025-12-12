@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, where, writeBatch, getDocs, doc } from 'firebase/firestore';
+import { collection, query, where, writeBatch, getDocs, doc, CollectionReference } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -36,10 +36,14 @@ import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { PrevisioneEntrata, RiepilogoPrevisioniEntrate, AppUser } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
-const getPrevisioniQuery = (firestore: any, user: AppUser | null) => {
-    if (!user) return null;
-    const collectionRef = collection(firestore, 'incomeForecasts');
+const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+    if (!firestore || !user) return null;
+    const collectionRef = collection(firestore, 'incomeForecasts') as CollectionReference<PrevisioneEntrata>;
+
     if (user.role === 'admin' || user.role === 'editor') {
+        if (company !== 'Tutte') {
+            return query(collectionRef, where('societa', '==', company));
+        }
         return query(collectionRef);
     }
     if (user.role === 'company' && user.company) {
@@ -51,15 +55,15 @@ const getPrevisioniQuery = (firestore: any, user: AppUser | null) => {
 
 export default function PrevisioniEntratePage() {
     const { toast } = useToast();
-    const [selectedCompany, setSelectedCompany] = useState('Tutte');
+    const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneEntrata, direction: 'asc' | 'desc' } | null>({ key: 'dataPrevista', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isSeeding, setIsSeeding] = useState(false);
 
-    const { user } = useUser();
+    const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user), [firestore, user]);
+    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
 
      useEffect(() => {
@@ -76,7 +80,7 @@ export default function PrevisioniEntratePage() {
                 initialData.forEach((previsione) => {
                     const docRef = doc(collection(firestore, "incomeForecasts"));
                     const { id, ...previsioneData } = previsione;
-                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
+                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
                 });
                 try {
                     await batch.commit();
@@ -94,18 +98,19 @@ export default function PrevisioniEntratePage() {
         }
     }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni, user]);
 
+    useEffect(() => {
+        if (user?.role === 'company' && user.company) {
+            setSelectedCompany(user.company);
+        }
+    }, [user]);
+
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);
     const calculatePonderato = (lordo: number, probabilita: number) => lordo * probabilita;
 
     const filteredPrevisioni = useMemo(() => {
       let data = previsioni || [];
-      if (user?.role === 'company' && user.company) {
-          data = data.filter(p => p.societa === user.company);
-      } else if (selectedCompany !== 'Tutte') {
-          data = data.filter(p => p.societa === selectedCompany);
-      }
-
+      
       let sortableItems = [...data].filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
 
       if (sortConfig !== null) {
@@ -120,7 +125,7 @@ export default function PrevisioniEntratePage() {
         });
       }
       return sortableItems;
-    }, [previsioni, selectedCompany, searchTerm, sortConfig, user]);
+    }, [previsioni, searchTerm, sortConfig]);
 
     const riepilogo = useMemo((): RiepilogoPrevisioniEntrate => {
         const data = filteredPrevisioni;
@@ -146,7 +151,6 @@ export default function PrevisioniEntratePage() {
     };
 
     const getPageTitle = () => {
-        if (user?.role === 'company') return `Previsioni Entrate - ${user.company}`;
         if (selectedCompany === 'Tutte') return 'Previsioni Entrate - Tutte le società';
         return `Previsioni Entrate - ${selectedCompany}`;
     };
@@ -185,7 +189,7 @@ export default function PrevisioniEntratePage() {
                 </CardContent>
             </Card>
         </div>
-       <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
+       <Tabs value={selectedCompany} onValueChange={(v) => setSelectedCompany(v as any)} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             {user && (user.role === 'admin' || user.role === 'editor') && (
                 <TabsList>
@@ -255,7 +259,7 @@ export default function PrevisioniEntratePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {(isLoadingPrevisioni || isSeeding) ? (
+                        {(isLoadingPrevisioni || isUserLoading || isSeeding) ? (
                              <TableRow>
                                 <TableCell colSpan={14} className="h-24 text-center">
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />

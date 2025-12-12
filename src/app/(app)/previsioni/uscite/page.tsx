@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, where, writeBatch, getDocs, doc, addDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, writeBatch, getDocs, doc, addDoc, updateDoc, CollectionReference } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -38,10 +38,14 @@ import type { PrevisioneUscita, RiepilogoPrevisioniUscite, AppUser } from '@/lib
 import { AddExpenseForecastDialog } from '@/components/previsioni/add-expense-forecast-dialog';
 import { useToast } from '@/hooks/use-toast';
 
-const getPrevisioniQuery = (firestore: any, user: AppUser | null) => {
-    if (!user) return null;
-    const collectionRef = collection(firestore, 'expenseForecasts');
+const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+    if (!user || !firestore) return null;
+    const collectionRef = collection(firestore, 'expenseForecasts') as CollectionReference<PrevisioneUscita>;
+
     if (user.role === 'admin' || user.role === 'editor') {
+        if (company !== 'Tutte') {
+            return query(collectionRef, where('societa', '==', company));
+        }
         return query(collectionRef);
     }
     if (user.role === 'company' && user.company) {
@@ -52,17 +56,17 @@ const getPrevisioniQuery = (firestore: any, user: AppUser | null) => {
 
 export default function PrevisioniUscitePage() {
     const { toast } = useToast();
-    const [selectedCompany, setSelectedCompany] = useState('Tutte');
+    const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneUscita, direction: 'asc' | 'desc' } | null>({ key: 'dataScadenza', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingForecast, setEditingForecast] = useState<PrevisioneUscita | null>(null);
     const [isSeeding, setIsSeeding] = useState(false);
     
-    const { user } = useUser();
+    const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const expenseForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user), [firestore, user]);
+    const expenseForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
 
     const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
 
@@ -80,7 +84,7 @@ export default function PrevisioniUscitePage() {
                 initialData.forEach((previsione) => {
                     const docRef = doc(collection(firestore, "expenseForecasts"));
                     const { id, ...previsioneData } = previsione;
-                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
+                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
                 });
                 try {
                     await batch.commit();
@@ -98,6 +102,12 @@ export default function PrevisioniUscitePage() {
         }
     }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni, user]);
 
+    useEffect(() => {
+        if (user?.role === 'company' && user.company) {
+            setSelectedCompany(user.company);
+        }
+    }, [user]);
+
     const handleAddForecast = async (newForecastData: Omit<PrevisioneUscita, 'id'>) => {
         if (!user || !firestore) return;
         try {
@@ -105,6 +115,7 @@ export default function PrevisioniUscitePage() {
                 ...newForecastData,
                 createdBy: user.uid,
                 createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
             });
             toast({ title: "Previsione Aggiunta", description: "La nuova previsione di uscita è stata aggiunta." });
         } catch (error) {
@@ -137,11 +148,6 @@ export default function PrevisioniUscitePage() {
 
     const filteredPrevisioni = useMemo(() => {
         let data = previsioni || [];
-        if (user?.role === 'company' && user.company) {
-            data = data.filter(p => p.societa === user.company);
-        } else if (selectedCompany !== 'Tutte') {
-            data = data.filter(p => p.societa === selectedCompany);
-        }
 
         let sortableItems = [...data].filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -159,7 +165,7 @@ export default function PrevisioniUscitePage() {
             });
         }
         return sortableItems;
-    }, [previsioni, selectedCompany, searchTerm, sortConfig, user]);
+    }, [previsioni, searchTerm, sortConfig]);
 
     const riepilogo = useMemo((): RiepilogoPrevisioniUscite => {
         const data = filteredPrevisioni;
@@ -187,7 +193,6 @@ export default function PrevisioniUscitePage() {
     };
     
     const getPageTitle = () => {
-        if (user?.role === 'company') return `Previsioni Uscite - ${user.company}`;
         if (selectedCompany === 'Tutte') return 'Previsioni Uscite - Tutte le società';
         return `Previsioni Uscite - ${selectedCompany}`;
     };
@@ -235,7 +240,7 @@ export default function PrevisioniUscitePage() {
                 </CardContent>
             </Card>
         </div>
-       <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
+       <Tabs value={selectedCompany} onValueChange={(v) => setSelectedCompany(v as any)} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             {user && (user.role === 'admin' || user.role === 'editor') && (
                 <TabsList>
@@ -310,7 +315,7 @@ export default function PrevisioniUscitePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {(isLoadingPrevisioni || isSeeding) ? (
+                        {(isLoadingPrevisioni || isUserLoading || isSeeding) ? (
                             <TableRow><TableCell colSpan={19} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
                         ) : error ? (
                             <TableRow><TableCell colSpan={19} className="h-24 text-center text-red-500">Errore nel caricamento: {error.message}</TableCell></TableRow>

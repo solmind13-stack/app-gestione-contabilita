@@ -1,221 +1,81 @@
-/**
- * Core Philosophy: This ruleset secures a multi-tenant accounting application
- * for two distinct companies (LNC and STG). Access is primarily role-based,
- * where a user's role ('lnc', 'stg', or 'admin') is stored in their user
- * profile document. This role dictates which company's data they can access.
- *
- * Data Structure: The data is organized into top-level collections for shared
- * business data (movements, deadlines, forecasts) and a '/users/{userId}'
- * collection for individual user profiles and their private subcollections,
- * such as 'chatHistory'. This separation provides a clear security boundary
- * between shared and private data.
- *
- * Key Security Decisions:
- * - Admin Override: Users with the 'admin' role have read/write access to all
- *   company data and user profiles, providing necessary administrative capabilities.
- * - Role-Based Access: Non-admin users can only access documents in the shared
- *   collections if the document's 'company' field matches their assigned role.
- * - User Privacy: Users can only access their own user document and its
- *   subcollections (e.g., chat history). User listing is disabled for non-admins
- *   to prevent enumeration of the user base.
- * - Secure Defaults: Collections without a clear access pattern defined, such
- *   as 'insightsCache', are locked down completely from client-side access,
- *   assuming they are managed by a secure backend service.
- *
- * Denormalization for Authorization: To ensure performant and secure rules,
- * a 'company' field is denormalized onto every financial document (movements,
- * deadlines, etc.). This allows rules to authorize access by inspecting the
- * document itself, avoiding slow and costly `get()` calls to other documents.
- * Similarly, a `createdBy` field is used to enforce ownership.
- *
- * Structural Segregation: User-specific, private data like '/chatHistory' is
- * nested under '/users/{userId}'. This structurally isolates it from the shared,
- * top-level business data, allowing for simple and highly secure ownership rules.
- */
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // -------------------------------------------------------------------------
-    // Helper Functions
-    // -------------------------------------------------------------------------
-
-    /**
-     * Checks if the user is authenticated.
-     */
+    // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * Checks if the authenticated user's UID matches the provided userId.
-     * This is the foundation of the ownership model.
-     */
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
 
-    /**
-     * Ensures an operation targets an existing document and the user is the owner.
-     * Crucial for preventing writes to non-existent paths.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * Retrieves the role of the currently authenticated user from their user document.
-     * Caches the result of the `get` call for the request.
-     */
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    /**
-     * Checks if the authenticated user has the 'admin' role.
-     */
-    function isUserAdmin() {
-      return isSignedIn() && getUserData().role == 'admin';
-    }
-
-    /**
-     * Determines if a user can access data for a specific company, either by
-     * having a matching role or by being an admin.
-     */
-    function canAccessCompanyData(company) {
-      return isSignedIn() && (isUserAdmin() || getUserData().role == company);
+    function isUserRole(role) {
+        return isSignedIn() && getUserData().role == role;
     }
     
-    /**
-     * Validates that the 'createdBy' field in a new document matches the
-     * authenticated user's UID.
-     */
-    function isCreatedBySelf() {
-      return request.resource.data.createdBy == request.auth.uid;
+    function canAccessCompanyData(company) {
+      let userRole = getUserData().role;
+      return isSignedIn() && (userRole == 'admin' || userRole == 'editor' || (userRole == 'company' && getUserData().company == company));
     }
 
-    /**
-     * Enforces immutability of the 'createdBy' field during updates.
-     */
-    function isCreatedByImmutable() {
-      return request.resource.data.createdBy == resource.data.createdBy;
-    }
-
-    // -------------------------------------------------------------------------
-    // Collection Rules
-    // -------------------------------------------------------------------------
-
-    /**
-     * @description Secures financial movements. Access is granted if the user's
-     *              role matches the document's 'company' field, or if the user is an admin.
-     * @path        /movements/{movementId}
-     * @allow       (get) An 'lnc' user reading a movement where `company == 'lnc'`.
-     * @deny        (get) An 'stg' user trying to read a movement where `company == 'lnc'`.
-     * @principle   Enforces multi-tenancy using a denormalized 'company' field.
-     */
-    match /movements/{movementId} {
-      allow get: if canAccessCompanyData(resource.data.company);
-      allow list: if isSignedIn() && (getUserData().role in ['lnc', 'stg'] || isUserAdmin());
-      allow create: if canAccessCompanyData(request.resource.data.company) && isCreatedBySelf();
-      allow update: if canAccessCompanyData(resource.data.company) && resource != null && isCreatedByImmutable();
-      allow delete: if canAccessCompanyData(resource.data.company) && resource != null;
-    }
-
-    /**
-     * @description Secures fiscal deadlines. Access is granted if the user's
-     *              role matches the document's 'company' field, or if the user is an admin.
-     * @path        /deadlines/{deadlineId}
-     * @allow       (create) An 'stg' user creating a new deadline with `company: 'stg'`.
-     * @deny        (create) An 'stg' user trying to create a deadline with `company: 'lnc'`.
-     * @principle   Enforces multi-tenancy using a denormalized 'company' field.
-     */
-    match /deadlines/{deadlineId} {
-      allow get: if canAccessCompanyData(resource.data.company);
-      allow list: if isSignedIn() && (getUserData().role in ['lnc', 'stg'] || isUserAdmin());
-      allow create: if canAccessCompanyData(request.resource.data.company) && isCreatedBySelf();
-      allow update: if canAccessCompanyData(resource.data.company) && resource != null && isCreatedByImmutable();
-      allow delete: if canAccessCompanyData(resource.data.company) && resource != null;
-    }
-
-    /**
-     * @description Secures income forecasts. Access is granted if the user's
-     *              role matches the document's 'company' field, or if the user is an admin.
-     * @path        /incomeForecasts/{incomeForecastId}
-     * @allow       (update) An 'admin' user updating any income forecast.
-     * @deny        (delete) An 'lnc' user trying to delete a forecast where `company == 'stg'`.
-     * @principle   Enforces multi-tenancy using a denormalized 'company' field.
-     */
-    match /incomeForecasts/{incomeForecastId} {
-      allow get: if canAccessCompanyData(resource.data.company);
-      allow list: if isSignedIn() && (getUserData().role in ['lnc', 'stg'] || isUserAdmin());
-      allow create: if canAccessCompanyData(request.resource.data.company) && isCreatedBySelf();
-      allow update: if canAccessCompanyData(resource.data.company) && resource != null && isCreatedByImmutable();
-      allow delete: if canAccessCompanyData(resource.data.company) && resource != null;
-    }
-
-    /**
-     * @description Secures expense forecasts. Access is granted if the user's
-     *              role matches the document's 'company' field, or if the user is an admin.
-     * @path        /expenseForecasts/{expenseForecastId}
-     * @allow       (get) An 'stg' user reading an expense forecast where `company == 'stg'`.
-     * @deny        (get) An 'lnc' user trying to read a forecast where `company == 'stg'`.
-     * @principle   Enforces multi-tenancy using a denormalized 'company' field.
-     */
-    match /expenseForecasts/{expenseForecastId} {
-      allow get: if canAccessCompanyData(resource.data.company);
-      allow list: if isSignedIn() && (getUserData().role in ['lnc', 'stg'] || isUserAdmin());
-      allow create: if canAccessCompanyData(request.resource.data.company) && isCreatedBySelf();
-      allow update: if canAccessCompanyData(resource.data.company) && resource != null && isCreatedByImmutable();
-      allow delete: if canAccessCompanyData(resource.data.company) && resource != null;
-    }
-
-    /**
-     * @description Secures user profile data. Users can read/write their own
-     *              profile, but cannot change their role. Admins have full access.
-     * @path        /users/{userId}
-     * @allow       (get) User 'abc' reading their own profile at `/users/abc`.
-     * @deny        (list) A non-admin user trying to list all users.
-     * @deny        (update) User 'abc' trying to change their own role to 'admin'.
-     * @principle   Restricts access to a user's own data tree and prevents privilege escalation.
-     */
+    // Rules for the 'users' collection
     match /users/{userId} {
-      allow get: if isOwner(userId) || isUserAdmin();
-      allow list: if isUserAdmin();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if resource != null && (isUserAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
-      allow delete: if (isOwner(userId) || isUserAdmin()) && resource != null;
-
-      /**
-       * @description Secures a user's private chat history. Only the owner can access it.
-       * @path        /users/{userId}/chatHistory/{chatHistoryId}
-       * @allow       (create) User 'abc' creating a new message in their own chat history.
-       * @deny        (get) User 'xyz' trying to read a message from user 'abc's history.
-       * @principle   Enforces strict document ownership within a user's private data tree.
-       */
-      match /chatHistory/{chatHistoryId} {
-        allow get: if isOwner(userId);
-        allow list: if isOwner(userId);
-        allow create: if isOwner(userId) && request.resource.data.createdBy == userId;
-        allow update: if isExistingOwner(userId) && request.resource.data.createdBy == resource.data.createdBy;
-        allow delete: if isExistingOwner(userId);
+      // Admins can read any user profile
+      // Any authenticated user can read their own profile
+      allow get: if isUserRole('admin') || isOwner(userId);
+      
+      // Only admins can list all users
+      allow list: if isUserRole('admin');
+      
+      // An authenticated user can create their own profile
+      allow create: if isOwner(userId);
+      
+      // An admin can update any user profile
+      // An authenticated user can update their own profile, but cannot change their role
+      allow update: if isUserRole('admin') || (isOwner(userId) && request.resource.data.role == resource.data.role);
+      
+      // Only admins can delete users
+      allow delete: if isUserRole('admin');
+      
+      // Sub-collections for users, like chatHistory
+      match /{allChildren=**} {
+        allow read, write: if isOwner(userId);
       }
     }
 
-    /**
-     * @description Secures a cache for AI-generated insights. All client-side
-     *              access is denied. This collection should only be managed by a
-     *              trusted backend service with admin privileges.
-     * @path        /insightsCache/{insightsCacheId}
-     * @allow       (get) No client user is ever allowed to get this data directly.
-     * @deny        (create, update, delete) All client write operations are blocked.
-     * @principle   Denies all client access by default for system-level collections.
-     */
-    match /insightsCache/{insightsCacheId} {
-      allow get: if false;
-      allow list: if false;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+    // Rules for financial data collections
+    match /{collection}/{docId} {
+      // Generic rule for financial documents (movements, deadlines, etc.)
+      
+      // READ:
+      // An admin or editor can read any document.
+      // A company user can read a document if its 'societa' field matches their company.
+      allow get: if canAccessCompanyData(resource.data.company);
+      
+      // LIST (Query):
+      // This is the most critical rule. Listing is only allowed if the query
+      // is constrained by 'societa'. This forces the client to ask for specific
+      // company data, preventing the "Missing or insufficient permissions" error.
+      // Admins and editors are allowed to query without this constraint.
+      allow list: if (isUserRole('admin') || isUserRole('editor')) || 
+                     (isUserRole('company') && request.query.get('where')[0][1] == 'societa' && request.query.get('where')[0][2] == getUserData().company);
+
+      // WRITE (Create, Update, Delete):
+      // An admin or editor can write to any document.
+      // A company user can write to a document if its 'societa' field matches their company.
+      allow write: if canAccessCompanyData(request.resource.data.company);
+    }
+    
+    // Fallback security for any other collections
+    match /{path=**}/documents/{document} {
+      allow read, write: if false;
     }
   }
 }

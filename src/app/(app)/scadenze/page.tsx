@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where } from 'firebase/firestore';
+import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -39,11 +39,14 @@ import type { Scadenza, AppUser } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 
-const getScadenzeQuery = (firestore: any, user: AppUser | null) => {
-    if (!user) return null;
-    const scadenzeCollection = collection(firestore, 'deadlines');
+const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+    if (!firestore || !user) return null;
+    const scadenzeCollection = collection(firestore, 'deadlines') as CollectionReference<Scadenza>;
 
     if (user.role === 'admin' || user.role === 'editor') {
+        if (company !== 'Tutte') {
+            return query(scadenzeCollection, where('societa', '==', company));
+        }
         return query(scadenzeCollection);
     }
     
@@ -55,17 +58,17 @@ const getScadenzeQuery = (firestore: any, user: AppUser | null) => {
 
 export default function ScadenzePage() {
     const { toast } = useToast();
-    const [selectedCompany, setSelectedCompany] = useState('Tutte');
+    const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
     const [isSeeding, setIsSeeding] = useState(false);
 
-    const { user } = useUser();
+    const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user), [firestore, user]);
+    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
 
@@ -83,7 +86,7 @@ export default function ScadenzePage() {
                 initialScadenzeData.forEach((scadenza) => {
                     const docRef = doc(collection(firestore, "deadlines"));
                     const { id, ...scadenzaData } = scadenza; // Exclude our static ID
-                    batch.set(docRef, { ...scadenzaData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
+                    batch.set(docRef, { ...scadenzaData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
                 });
                 try {
                     await batch.commit();
@@ -101,6 +104,11 @@ export default function ScadenzePage() {
         }
     }, [firestore, toast, isSeeding, scadenze, isLoadingScadenze, user]);
 
+    useEffect(() => {
+        if (user?.role === 'company' && user.company) {
+            setSelectedCompany(user.company);
+        }
+    }, [user]);
 
     const handleAddDeadline = async (newDeadlineData: Omit<Scadenza, 'id'>) => {
         if (!user || !firestore) {
@@ -112,6 +120,7 @@ export default function ScadenzePage() {
                 ...newDeadlineData,
                 createdBy: user.uid,
                 createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
             });
             toast({ title: "Scadenza Aggiunta", description: "La nuova scadenza è stata salvata." });
         } catch (error) {
@@ -146,20 +155,15 @@ export default function ScadenzePage() {
 
     const filteredScadenze = useMemo(() => {
         let data = scadenze || [];
-        if (user?.role === 'company' && user.company) {
-            data = data.filter(s => s.societa === user.company);
-        } else if (selectedCompany !== 'Tutte') {
-            data = data.filter(s => s.societa === selectedCompany);
-        }
-
+        
         return data
             .filter(s => s.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
             .sort((a, b) => {
                 const dateA = new Date(a.dataScadenza).getTime();
                 const dateB = new Date(b.dataScadenza).getTime();
-                return sortOrder === 'asc' ? dateA - dateB : dateB - a.id.localeCompare(b.id);
+                return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
             });
-    }, [scadenze, selectedCompany, searchTerm, sortOrder, user]);
+    }, [scadenze, searchTerm, sortOrder]);
     
     const { riepilogo, scadenzeMese, scadenzeUrgenti, scadenzeScadute } = useMemo(() => {
         const data = filteredScadenze;
@@ -203,7 +207,6 @@ export default function ScadenzePage() {
     }, [filteredScadenze]);
 
     const getPageTitle = () => {
-        if (user?.role === 'company') return `Scadenze - ${user.company}`;
         if (selectedCompany === 'Tutte') return 'Scadenze - Tutte le società';
         return `Scadenze - ${selectedCompany}`;
     };
@@ -267,7 +270,7 @@ export default function ScadenzePage() {
         </Card>
     </div>
 
-       <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
+       <Tabs value={selectedCompany} onValueChange={(v) => setSelectedCompany(v as any)} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             {user && (user.role === 'admin' || user.role === 'editor') && (
                 <TabsList>
@@ -339,7 +342,7 @@ export default function ScadenzePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {(isLoadingScadenze || isSeeding) ? (
+                        {(isLoadingScadenze || isUserLoading || isSeeding) ? (
                             <TableRow>
                                 <TableCell colSpan={11} className="h-24 text-center">
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />
