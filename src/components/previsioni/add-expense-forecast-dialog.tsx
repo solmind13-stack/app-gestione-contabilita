@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -62,8 +62,8 @@ type FormValues = z.infer<typeof FormSchema>;
 interface AddExpenseForecastDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onAddForecast: (forecast: Omit<PrevisioneUscita, 'id' | 'anno'>) => void;
-  onEditForecast: (forecast: PrevisioneUscita) => void;
+  onAddForecast: (forecast: Omit<PrevisioneUscita, 'id'>) => Promise<void>;
+  onEditForecast: (forecast: PrevisioneUscita) => Promise<void>;
   forecastToEdit?: PrevisioneUscita | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: User;
@@ -90,6 +90,7 @@ export function AddExpenseForecastDialog({
   defaultCompany,
 }: AddExpenseForecastDialogProps) {
   const isEditMode = !!forecastToEdit;
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -137,26 +138,23 @@ export function AddExpenseForecastDialog({
     }
   }, [isOpen, isEditMode, forecastToEdit, defaultCompany, form]);
 
-  const onSubmit = (data: FormValues) => {
-    if (isEditMode && forecastToEdit) {
-      const updatedForecast: PrevisioneUscita = {
-        ...forecastToEdit,
+  const onSubmit = async (data: FormValues) => {
+    setIsSubmitting(true);
+    const commonData = {
         ...data,
         dataScadenza: format(data.dataScadenza, 'yyyy-MM-dd'),
         anno: data.dataScadenza.getFullYear(),
         sottocategoria: data.sottocategoria || '',
-      };
-      onEditForecast(updatedForecast);
+        importoEffettivo: data.importoEffettivo || 0,
+    };
+
+    if (isEditMode && forecastToEdit) {
+      await onEditForecast({ ...commonData, id: forecastToEdit.id });
     } else {
-        const { importoEffettivo, stato, ...newForecastData } = data;
-        const newForecast: Omit<PrevisioneUscita, 'id' | 'anno'> = {
-            ...newForecastData,
-            dataScadenza: format(data.dataScadenza, 'yyyy-MM-dd'),
-            sottocategoria: data.sottocategoria || '',
-            stato: 'Da pagare', // Default state for new forecasts
-        };
-        onAddForecast(newForecast);
+        const { ...newForecastData } = commonData;
+        await onAddForecast(newForecastData);
     }
+    setIsSubmitting(false);
     setIsOpen(false);
   };
   
@@ -240,8 +238,10 @@ export function AddExpenseForecastDialog({
             )} />
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Annulla</Button>
-              <Button type="submit">{isEditMode ? 'Salva Modifiche' : 'Salva Previsione'}</Button>
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? 'Salva Modifiche' : 'Salva Previsione')}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

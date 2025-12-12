@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, writeBatch, getDocs, doc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -26,47 +28,63 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, CheckCircle } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, CheckCircle, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-
 import { previsioniEntrateData as initialData } from '@/lib/previsioni-entrate-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { PrevisioneEntrata, RiepilogoPrevisioniEntrate } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 export default function PrevisioniEntratePage() {
+    const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
-    const [previsioni, setPrevisioni] = useState<PrevisioneEntrata[]>([]);
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneEntrata, direction: 'asc' | 'desc' } | null>({ key: 'dataPrevista', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
+    const [isSeeding, setIsSeeding] = useState(false);
 
-    // Load data from localStorage on initial render
-    useEffect(() => {
-        try {
-            const storedData = localStorage.getItem('previsioniEntrate');
-            setPrevisioni(storedData ? JSON.parse(storedData) : initialData);
-        } catch (error) {
-            console.error("Failed to parse previsioniEntrate from localStorage", error);
-            setPrevisioni(initialData);
+    const firestore = useFirestore();
+    const incomeForecastsCollectionRef = useMemoFirebase(() => collection(firestore, 'incomeForecasts'), [firestore]);
+    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneEntrata>(incomeForecastsCollectionRef);
+
+     useEffect(() => {
+        const seedDatabase = async () => {
+            if (!firestore || isSeeding || (previsioni && previsioni.length > 0)) return;
+            
+            const q = query(collection(firestore, "incomeForecasts"));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                setIsSeeding(true);
+                toast({ title: "Popolamento database...", description: "Caricamento dati iniziali per le previsioni di entrata." });
+                const batch = writeBatch(firestore);
+                initialData.forEach((previsione) => {
+                    const docRef = doc(collection(firestore, "incomeForecasts"));
+                    const { id, ...previsioneData } = previsione;
+                    batch.set(docRef, previsioneData);
+                });
+                try {
+                    await batch.commit();
+                    toast({ title: "Database popolato!", description: "I dati delle previsioni di entrata sono stati caricati." });
+                } catch (error) {
+                    console.error("Error seeding income forecasts:", error);
+                    toast({ variant: "destructive", title: "Errore nel popolamento", description: "Impossibile caricare i dati iniziali." });
+                } finally {
+                    setIsSeeding(false);
+                }
+            }
+        };
+        if (firestore && !isLoadingPrevisioni) {
+          seedDatabase();
         }
-    }, []);
-
-    // Persist data to localStorage whenever it changes
-    useEffect(() => {
-        try {
-            localStorage.setItem('previsioniEntrate', JSON.stringify(previsioni));
-        } catch (error) {
-            console.error("Failed to save previsioniEntrate to localStorage", error);
-        }
-    }, [previsioni]);
-
+    }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni]);
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);
     const calculatePonderato = (lordo: number, probabilita: number) => lordo * probabilita;
 
     const filteredPrevisioni = useMemo(() => {
-      let sortableItems = [...previsioni]
+      let sortableItems = [...(previsioni || [])]
         .filter(p => selectedCompany === 'Tutte' || p.societa === selectedCompany)
         .filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -164,13 +182,13 @@ export default function PrevisioniEntratePage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button onClick={() => {}} className="flex-shrink-0">
+                <Button onClick={() => {}} className="flex-shrink-0" disabled>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="flex-shrink-0">
+                        <Button variant="outline" className="flex-shrink-0" disabled>
                             <Upload className="mr-2 h-4 w-4" />
                             Importa
                         </Button>
@@ -214,7 +232,18 @@ export default function PrevisioniEntratePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredPrevisioni.map((p) => {
+                        {(isLoadingPrevisioni || isSeeding) ? (
+                             <TableRow>
+                                <TableCell colSpan={14} className="h-24 text-center">
+                                    <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredPrevisioni.length === 0 ? (
+                             <TableRow>
+                                <TableCell colSpan={14} className="h-24 text-center">Nessuna previsione trovata.</TableCell>
+                            </TableRow>
+                        ) : (
+                        filteredPrevisioni.map((p) => {
                             const netto = calculateNetto(p.importoLordo, p.iva);
                             const iva = calculateIva(p.importoLordo, p.iva);
                             const ponderato = calculatePonderato(p.importoLordo, p.probabilita);
@@ -249,7 +278,7 @@ export default function PrevisioniEntratePage() {
                                     <TableCell>{p.note}</TableCell>
                                 </TableRow>
                             )
-                        })}
+                        }))}
                     </TableBody>
                      <TableFooter>
                         <TableRow>

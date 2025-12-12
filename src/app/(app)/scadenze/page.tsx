@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -26,63 +28,100 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-
 import { scadenzeData as initialScadenzeData } from '@/lib/scadenze-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
-import type { Scadenza, RiepilogoScadenze } from '@/lib/types';
-import { user } from '@/lib/data';
+import type { Scadenza } from '@/lib/types';
+import { useUser } from '@/firebase';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ScadenzePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
-    const [scadenze, setScadenze] = useState<Scadenza[]>([]);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
+    const [isSeeding, setIsSeeding] = useState(false);
 
-    // Load data from localStorage on initial render
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const deadlinesCollectionRef = useMemoFirebase(() => collection(firestore, 'deadlines'), [firestore]);
+    const { data: scadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(deadlinesCollectionRef);
+
     useEffect(() => {
-        try {
-            const storedData = localStorage.getItem('scadenze');
-            setScadenze(storedData ? JSON.parse(storedData) : initialScadenzeData);
-        } catch (error) {
-            console.error("Failed to parse scadenze from localStorage", error);
-            setScadenze(initialScadenzeData);
-        }
-    }, []);
+        const seedDatabase = async () => {
+            if (!firestore || isSeeding || (scadenze && scadenze.length > 0)) return;
+            
+            const q = query(collection(firestore, "deadlines"));
+            const querySnapshot = await getDocs(q);
 
-    // Persist data to localStorage whenever it changes
-    useEffect(() => {
-        try {
-            localStorage.setItem('scadenze', JSON.stringify(scadenze));
-        } catch (error) {
-            console.error("Failed to save scadenze to localStorage", error);
-        }
-    }, [scadenze]);
-
-    const handleAddDeadline = (newDeadline: Omit<Scadenza, 'id' | 'anno' | 'importoPagato' | 'stato'>) => {
-        const newEntry: Scadenza = {
-            id: `new-${Date.now()}`,
-            anno: new Date(newDeadline.dataScadenza).getFullYear(),
-            importoPagato: 0,
-            stato: 'Da pagare',
-            ...newDeadline,
+            if (querySnapshot.empty) {
+                setIsSeeding(true);
+                toast({ title: "Popolamento database...", description: "Caricamento dati iniziali per le scadenze." });
+                const batch = writeBatch(firestore);
+                initialScadenzeData.forEach((scadenza) => {
+                    const docRef = doc(collection(firestore, "deadlines"));
+                    const { id, ...scadenzaData } = scadenza; // Exclude our static ID
+                    batch.set(docRef, scadenzaData);
+                });
+                try {
+                    await batch.commit();
+                    toast({ title: "Database popolato!", description: "I dati delle scadenze sono stati caricati." });
+                } catch (error) {
+                    console.error("Error seeding deadlines:", error);
+                    toast({ variant: "destructive", title: "Errore nel popolamento", description: "Impossibile caricare i dati iniziali delle scadenze." });
+                } finally {
+                    setIsSeeding(false);
+                }
+            }
         };
-        setScadenze(prevData => [newEntry, ...prevData]);
-        toast({ title: "Scadenza Aggiunta", description: "La nuova scadenza è stata aggiunta." });
+        // We run seeding logic only when firestore is available and scadenze are not loaded yet.
+        if (firestore && !isLoadingScadenze) {
+          seedDatabase();
+        }
+    }, [firestore, toast, isSeeding, scadenze, isLoadingScadenze]);
+
+
+    const handleAddDeadline = async (newDeadlineData: Omit<Scadenza, 'id'>) => {
+        if (!user || !firestore) {
+            toast({ variant: 'destructive', title: 'Errore', description: 'Utente non autenticato o database non disponibile.' });
+            return;
+        }
+        try {
+            await addDoc(collection(firestore, 'deadlines'), {
+                ...newDeadlineData,
+                createdBy: user.email,
+                createdAt: new Date().toISOString(),
+            });
+            toast({ title: "Scadenza Aggiunta", description: "La nuova scadenza è stata salvata." });
+        } catch (error) {
+            console.error("Error adding deadline: ", error);
+            toast({ variant: 'destructive', title: 'Errore Salvataggio', description: 'Impossibile salvare la scadenza. Riprova.' });
+        }
     };
 
-    const handleEditDeadline = (updatedDeadline: Scadenza) => {
-        setScadenze(prevData => prevData.map(d => d.id === updatedDeadline.id ? updatedDeadline : d));
-        setEditingDeadline(null);
-        toast({ title: "Scadenza Aggiornata", description: "La scadenza è stata modificata." });
+    const handleEditDeadline = async (updatedDeadline: Scadenza) => {
+         if (!user || !firestore || !updatedDeadline.id) {
+            toast({ variant: 'destructive', title: 'Errore', description: 'Dati non validi per l\'aggiornamento.' });
+            return;
+        }
+        try {
+            const docRef = doc(firestore, 'deadlines', updatedDeadline.id);
+            const { id, ...dataToUpdate } = updatedDeadline;
+            await updateDoc(docRef, {
+                ...dataToUpdate,
+                updatedAt: new Date().toISOString(),
+            });
+            toast({ title: "Scadenza Aggiornata", description: "La scadenza è stata modificata." });
+        } catch (error) {
+             console.error("Error updating deadline: ", error);
+            toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare la scadenza. Riprova.' });
+        }
     };
 
     const handleOpenDialog = (deadline?: Scadenza) => {
@@ -90,7 +129,7 @@ export default function ScadenzePage() {
         setIsDialogOpen(true);
     };
 
-    const filteredScadenze = useMemo(() => scadenze
+    const filteredScadenze = useMemo(() => (scadenze || [])
         .filter(s => selectedCompany === 'Tutte' || s.societa === selectedCompany)
         .filter(s => s.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
         .sort((a, b) => {
@@ -153,7 +192,7 @@ export default function ScadenzePage() {
         onEditDeadline={handleEditDeadline}
         deadlineToEdit={editingDeadline}
         defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
-        currentUser={user}
+        currentUser={user!}
       />
 
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -273,7 +312,18 @@ export default function ScadenzePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredScadenze.map((scadenza) => (
+                        {(isLoadingScadenze || isSeeding) ? (
+                            <TableRow>
+                                <TableCell colSpan={11} className="h-24 text-center">
+                                    <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredScadenze.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={11} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
+                            </TableRow>
+                        ) : (
+                            filteredScadenze.map((scadenza) => (
                             <TableRow key={scadenza.id}>
                                 <TableCell>
                                     <Badge variant={scadenza.societa === 'LNC' ? 'default' : 'secondary'}>{scadenza.societa}</Badge>
@@ -303,7 +353,7 @@ export default function ScadenzePage() {
                                     </Button>
                                 </TableCell>
                             </TableRow>
-                        ))}
+                        )))}
                     </TableBody>
                     <TableFooter>
                         <TableRow>

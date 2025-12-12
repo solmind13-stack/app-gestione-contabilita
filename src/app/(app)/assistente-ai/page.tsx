@@ -8,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Send, Sparkles, Loader2 } from 'lucide-react';
-import { useUser } from '@/firebase';
+import { useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { provideAiChatAssistant } from '@/ai/flows/provide-ai-chat-assistant';
@@ -23,40 +24,30 @@ export default function AssistenteAiPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [financialData, setFinancialData] = useState<string>('');
   const { user } = useUser();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const loadDataFromStorage = useCallback(() => {
-    try {
-      const movimenti = localStorage.getItem('movimenti');
-      const scadenze = localStorage.getItem('scadenze');
-      const previsioniEntrate = localStorage.getItem('previsioniEntrate');
-      const previsioniUscite = localStorage.getItem('previsioniUscite');
-      
-      const allData = {
-        movimenti: movimenti ? JSON.parse(movimenti) : [],
-        scadenze: scadenze ? JSON.parse(scadenze) : [],
-        previsioniEntrate: previsioniEntrate ? JSON.parse(previsioniEntrate) : [],
-        previsioniUscite: previsioniUscite ? JSON.parse(previsioniUscite) : [],
-      };
+  const firestore = useFirestore();
 
-      setFinancialData(JSON.stringify(allData, null, 2));
+  const movimentiRef = useMemoFirebase(() => collection(firestore, 'movements'), [firestore]);
+  const scadenzeRef = useMemoFirebase(() => collection(firestore, 'deadlines'), [firestore]);
+  const previsioniEntrateRef = useMemoFirebase(() => collection(firestore, 'incomeForecasts'), [firestore]);
+  const previsioniUsciteRef = useMemoFirebase(() => collection(firestore, 'expenseForecasts'), [firestore]);
 
-    } catch (error) {
-      console.error("Failed to load data from localStorage for AI Assistant:", error);
-      toast({
-        variant: "destructive",
-        title: "Errore nel Caricamento Dati",
-        description: "Impossibile caricare i dati finanziari per l'assistente. Le risposte potrebbero non essere accurate.",
-      });
-    }
-  }, [toast]);
+  const { data: movimenti } = useCollection<Movimento>(movimentiRef);
+  const { data: scadenze } = useCollection<Scadenza>(scadenzeRef);
+  const { data: previsioniEntrate } = useCollection<PrevisioneEntrata>(previsioniEntrateRef);
+  const { data: previsioniUscite } = useCollection<PrevisioneUscita>(previsioniUsciteRef);
 
-  useEffect(() => {
-    loadDataFromStorage();
-  }, [loadDataFromStorage]);
+  const getFinancialData = useCallback(() => {
+    return JSON.stringify({
+      movimenti: movimenti || [],
+      scadenze: scadenze || [],
+      previsioniEntrate: previsioniEntrate || [],
+      previsioniUscite: previsioniUscite || [],
+    }, null, 2);
+  }, [movimenti, scadenze, previsioniEntrate, previsioniUscite]);
 
 
   const handleSendMessage = async () => {
@@ -68,8 +59,7 @@ export default function AssistenteAiPage() {
     setInput('');
     setIsLoading(true);
     
-    // Reload data just before making the call to ensure it's fresh
-    loadDataFromStorage();
+    const financialData = getFinancialData();
 
     try {
       const result = await provideAiChatAssistant({
@@ -119,7 +109,7 @@ export default function AssistenteAiPage() {
             Assistente Finanziario AI
           </CardTitle>
           <CardDescription>
-            Poni domande sui tuoi dati finanziari. L'assistente è collegato ai dati in tempo reale.
+            Poni domande sui tuoi dati finanziari. L'assistente è collegato ai dati in tempo reale del database.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">

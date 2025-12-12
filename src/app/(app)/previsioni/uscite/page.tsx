@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { collection, query, writeBatch, getDocs, doc, addDoc, updateDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -26,62 +28,88 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, AlertCircle, Pencil } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, AlertCircle, Pencil, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-
 import { previsioniUsciteData as initialData } from '@/lib/previsioni-uscite-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { PrevisioneUscita, RiepilogoPrevisioniUscite } from '@/lib/types';
 import { AddExpenseForecastDialog } from '@/components/previsioni/add-expense-forecast-dialog';
-import { user } from '@/lib/data';
 import { useToast } from '@/hooks/use-toast';
 
 export default function PrevisioniUscitePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
-    const [previsioni, setPrevisioni] = useState<PrevisioneUscita[]>([]);
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneUscita, direction: 'asc' | 'desc' } | null>({ key: 'dataScadenza', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingForecast, setEditingForecast] = useState<PrevisioneUscita | null>(null);
+    const [isSeeding, setIsSeeding] = useState(false);
+    
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const expenseForecastsCollectionRef = useMemoFirebase(() => collection(firestore, 'expenseForecasts'), [firestore]);
+    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneUscita>(expenseForecastsCollectionRef);
 
-    // Load data from localStorage on initial render
-    useEffect(() => {
-        try {
-            const storedData = localStorage.getItem('previsioniUscite');
-            setPrevisioni(storedData ? JSON.parse(storedData) : initialData);
-        } catch (error) {
-            console.error("Failed to parse previsioniUscite from localStorage", error);
-            setPrevisioni(initialData);
-        }
-    }, []);
+     useEffect(() => {
+        const seedDatabase = async () => {
+            if (!firestore || isSeeding || (previsioni && previsioni.length > 0)) return;
+            
+            const q = query(collection(firestore, "expenseForecasts"));
+            const querySnapshot = await getDocs(q);
 
-    // Persist data to localStorage whenever it changes
-    useEffect(() => {
-        try {
-            localStorage.setItem('previsioniUscite', JSON.stringify(previsioni));
-        } catch (error) {
-            console.error("Failed to save previsioniUscite to localStorage", error);
-        }
-    }, [previsioni]);
-
-
-    const handleAddForecast = (newForecast: Omit<PrevisioneUscita, 'id' | 'anno'>) => {
-        const newEntry: PrevisioneUscita = {
-            id: `new-${Date.now()}`,
-            anno: new Date(newForecast.dataScadenza).getFullYear(),
-            ...newForecast,
+            if (querySnapshot.empty) {
+                setIsSeeding(true);
+                toast({ title: "Popolamento database...", description: "Caricamento dati iniziali per le previsioni di uscita." });
+                const batch = writeBatch(firestore);
+                initialData.forEach((previsione) => {
+                    const docRef = doc(collection(firestore, "expenseForecasts"));
+                    const { id, ...previsioneData } = previsione;
+                    batch.set(docRef, previsioneData);
+                });
+                try {
+                    await batch.commit();
+                    toast({ title: "Database popolato!", description: "I dati delle previsioni di uscita sono stati caricati." });
+                } catch (error) {
+                    console.error("Error seeding expense forecasts:", error);
+                    toast({ variant: "destructive", title: "Errore nel popolamento", description: "Impossibile caricare i dati iniziali." });
+                } finally {
+                    setIsSeeding(false);
+                }
+            }
         };
-        setPrevisioni(prevData => [newEntry, ...prevData]);
-        toast({ title: "Previsione Aggiunta", description: "La nuova previsione di uscita è stata aggiunta." });
+        if (firestore && !isLoadingPrevisioni) {
+          seedDatabase();
+        }
+    }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni]);
+
+    const handleAddForecast = async (newForecastData: Omit<PrevisioneUscita, 'id'>) => {
+        if (!user || !firestore) return;
+        try {
+            await addDoc(expenseForecastsCollectionRef, {
+                ...newForecastData,
+                createdBy: user.email,
+                createdAt: new Date().toISOString(),
+            });
+            toast({ title: "Previsione Aggiunta", description: "La nuova previsione di uscita è stata aggiunta." });
+        } catch (error) {
+            console.error("Error adding expense forecast: ", error);
+            toast({ variant: 'destructive', title: 'Errore Salvataggio', description: 'Impossibile salvare la previsione. Riprova.' });
+        }
     };
 
-    const handleEditForecast = (updatedForecast: PrevisioneUscita) => {
-        setPrevisioni(prevData => prevData.map(p => p.id === updatedForecast.id ? updatedForecast : p));
-        setEditingForecast(null);
-        toast({ title: "Previsione Aggiornata", description: "La previsione è stata modificata." });
+    const handleEditForecast = async (updatedForecast: PrevisioneUscita) => {
+        if (!user || !firestore || !updatedForecast.id) return;
+        try {
+            const docRef = doc(firestore, 'expenseForecasts', updatedForecast.id);
+            const { id, ...dataToUpdate } = updatedForecast;
+            await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString() });
+            toast({ title: "Previsione Aggiornata", description: "La previsione è stata modificata." });
+        } catch (error) {
+            console.error("Error updating expense forecast: ", error);
+            toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare la previsione. Riprova.' });
+        }
     };
 
     const handleOpenDialog = (forecast?: PrevisioneUscita) => {
@@ -94,7 +122,7 @@ export default function PrevisioniUscitePage() {
     const calculatePonderato = (importo: number, probabilita: number) => importo * probabilita;
 
     const filteredPrevisioni = useMemo(() => {
-      let sortableItems = [...previsioni]
+      let sortableItems = [...(previsioni || [])]
         .filter(p => selectedCompany === 'Tutte' || p.societa === selectedCompany)
         .filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -153,7 +181,7 @@ export default function PrevisioniUscitePage() {
             onEditForecast={handleEditForecast}
             forecastToEdit={editingForecast}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
-            currentUser={user}
+            currentUser={user!}
         />
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
              <Card>
@@ -211,7 +239,7 @@ export default function PrevisioniUscitePage() {
                 </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="flex-shrink-0">
+                        <Button variant="outline" className="flex-shrink-0" disabled>
                             <Upload className="mr-2 h-4 w-4" />
                             Importa
                         </Button>
@@ -260,7 +288,12 @@ export default function PrevisioniUscitePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredPrevisioni.map((p) => {
+                        {(isLoadingPrevisioni || isSeeding) ? (
+                            <TableRow><TableCell colSpan={19} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                        ) : filteredPrevisioni.length === 0 ? (
+                            <TableRow><TableCell colSpan={19} className="h-24 text-center">Nessuna previsione trovata.</TableCell></TableRow>
+                        ) : (
+                        filteredPrevisioni.map((p) => {
                             const netto = calculateNetto(p.importoLordo, p.iva);
                             const iva = calculateIva(p.importoLordo, p.iva);
                             const ponderato = calculatePonderato(p.importoLordo, p.probabilita);
@@ -304,7 +337,7 @@ export default function PrevisioniUscitePage() {
                                     </TableCell>
                                 </TableRow>
                             )
-                        })}
+                        }))}
                     </TableBody>
                      <TableFooter>
                         <TableRow>

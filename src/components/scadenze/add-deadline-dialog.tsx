@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -56,8 +56,8 @@ type FormValues = z.infer<typeof FormSchema>;
 interface AddDeadlineDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onAddDeadline: (deadline: Omit<Scadenza, 'id' | 'anno' | 'importoPagato' | 'stato'>) => void;
-  onEditDeadline: (deadline: Scadenza) => void;
+  onAddDeadline: (deadline: Omit<Scadenza, 'id'>) => Promise<void>;
+  onEditDeadline: (deadline: Scadenza) => Promise<void>;
   deadlineToEdit?: Scadenza | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: User;
@@ -77,6 +77,7 @@ export function AddDeadlineDialog({
   defaultCompany,
   currentUser,
 }: AddDeadlineDialogProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = !!deadlineToEdit;
 
   const form = useForm<FormValues>({
@@ -113,26 +114,22 @@ export function AddDeadlineDialog({
     }
   }, [isOpen, isEditMode, deadlineToEdit, defaultCompany, currentUser, form]);
 
-  const onSubmit = (data: FormValues) => {
-    if (isEditMode && deadlineToEdit) {
-      const updatedDeadline: Scadenza = {
-        ...deadlineToEdit,
-        societa: data.societa,
+  const onSubmit = async (data: FormValues) => {
+    setIsSubmitting(true);
+    const commonData = {
+        ...data,
         dataScadenza: format(data.dataScadenza, 'yyyy-MM-dd'),
         anno: data.dataScadenza.getFullYear(),
-        descrizione: data.descrizione,
-        importoPrevisto: data.importoPrevisto,
         importoPagato: data.importoPagato || 0,
-        categoria: data.categoria,
-        ricorrenza: data.ricorrenza,
-        stato: data.stato,
-        note: data.note,
-      };
-      onEditDeadline(updatedDeadline);
+    };
+
+    if (isEditMode && deadlineToEdit) {
+      await onEditDeadline({ ...commonData, id: deadlineToEdit.id });
     } else {
-      const { importoPagato, stato, ...newDeadlineData } = data;
-      onAddDeadline(newDeadlineData);
+      const { ...newDeadlineData } = commonData;
+      await onAddDeadline(newDeadlineData);
     }
+    setIsSubmitting(false);
     setIsOpen(false);
   };
 
@@ -335,8 +332,10 @@ export function AddDeadlineDialog({
             />
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Annulla</Button>
-              <Button type="submit">{isEditMode ? 'Salva Modifiche' : 'Salva Scadenza'}</Button>
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? 'Salva Modifiche' : 'Salva Scadenza')}
+                </Button>
             </DialogFooter>
           </form>
         </Form>
