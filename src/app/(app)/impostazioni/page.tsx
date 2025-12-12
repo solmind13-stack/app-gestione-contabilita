@@ -85,6 +85,7 @@ const UserManagementCard = () => {
     const firestore = useFirestore();
     const usersQuery = useMemoFirebase(() => {
         if (!firestore) return null;
+        // This query will be protected by security rules, only admins can execute it.
         return query(collection(firestore, 'users'));
     }, [firestore]);
 
@@ -95,7 +96,7 @@ const UserManagementCard = () => {
             <CardHeader>
                 <CardTitle>Gestione Utenti</CardTitle>
                 <CardDescription>
-                    Visualizza gli utenti registrati nel database e i loro ruoli.
+                    Visualizza gli utenti registrati nel database e i loro ruoli. Solo gli admin possono vedere questa sezione.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -118,7 +119,7 @@ const UserManagementCard = () => {
                         ) : error ? (
                              <TableRow>
                                 <TableCell colSpan={4} className="h-24 text-center text-red-500">
-                                    Errore di autorizzazione: solo gli admin possono vedere gli utenti.
+                                    Errore di autorizzazione: non hai i permessi per visualizzare gli utenti.
                                 </TableCell>
                             </TableRow>
                         ) : users && users.length > 0 ? (
