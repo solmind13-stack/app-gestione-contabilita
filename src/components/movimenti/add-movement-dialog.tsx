@@ -5,9 +5,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
-import { useFirestore } from '@/firebase';
-
 import {
   Dialog,
   DialogContent,
@@ -64,6 +61,8 @@ type FormValues = z.infer<typeof FormSchema>;
 interface AddMovementDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  onAddMovement: (movement: Omit<Movimento, 'id'>) => Promise<void>;
+  onEditMovement: (movement: Movimento) => Promise<void>;
   movementToEdit?: Movimento | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: User;
@@ -87,6 +86,8 @@ const METODI_PAGAMENTO = ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito',
 export function AddMovementDialog({
   isOpen,
   setIsOpen,
+  onAddMovement,
+  onEditMovement,
   movementToEdit,
   defaultCompany,
   currentUser,
@@ -94,7 +95,6 @@ export function AddMovementDialog({
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
-  const firestore = useFirestore();
 
   const isEditMode = !!movementToEdit;
 
@@ -130,7 +130,7 @@ export function AddMovementDialog({
           sottocategoria: '',
           iva: 0.22,
           conto: '',
-          operatore: currentUser?.name || '',
+          operatore: currentUser?.displayName || '',
           metodoPag: '',
           note: '',
         });
@@ -140,44 +140,29 @@ export function AddMovementDialog({
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
-    try {
-        const dataToSave = {
-            societa: data.societa,
-            data: format(data.data, 'yyyy-MM-dd'),
-            anno: data.data.getFullYear(),
-            descrizione: data.descrizione,
-            categoria: data.categoria,
-            sottocategoria: data.sottocategoria,
-            entrata: data.tipo === 'entrata' ? data.importo : 0,
-            uscita: data.tipo === 'uscita' ? data.importo : 0,
-            iva: data.iva,
-            conto: data.conto || '',
-            operatore: data.operatore || '',
-            metodoPag: data.metodoPag || '',
-            note: data.note || '',
-            createdBy: currentUser.email,
-            createdAt: new Date().toISOString(),
-        };
+    const dataToSave = {
+        societa: data.societa,
+        data: format(data.data, 'yyyy-MM-dd'),
+        anno: data.data.getFullYear(),
+        descrizione: data.descrizione,
+        categoria: data.categoria,
+        sottocategoria: data.sottocategoria,
+        entrata: data.tipo === 'entrata' ? data.importo : 0,
+        uscita: data.tipo === 'uscita' ? data.importo : 0,
+        iva: data.iva,
+        conto: data.conto || '',
+        operatore: data.operatore || '',
+        metodoPag: data.metodoPag || '',
+        note: data.note || '',
+    };
 
-        if (isEditMode && movementToEdit) {
-            const docRef = doc(firestore, 'movements', movementToEdit.id);
-            await updateDoc(docRef, {
-                ...dataToSave,
-                updatedAt: new Date().toISOString(),
-            });
-            toast({ title: "Movimento Aggiornato", description: "Il movimento è stato modificato con successo." });
-        } else {
-            const collectionRef = collection(firestore, 'movements');
-            await addDoc(collectionRef, dataToSave);
-            toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato salvato nel database." });
-        }
-        setIsOpen(false);
-    } catch (error) {
-        console.error("Error saving movement:", error);
-        toast({ variant: 'destructive', title: 'Errore Salvataggio', description: 'Impossibile salvare il movimento. Riprova.' });
-    } finally {
-        setIsSubmitting(false);
+    if (isEditMode && movementToEdit) {
+        await onEditMovement({ ...dataToSave, id: movementToEdit.id });
+    } else {
+        await onAddMovement(dataToSave);
     }
+    setIsSubmitting(false);
+    setIsOpen(false);
   };
 
   const handleAiCategorize = useCallback(async () => {
@@ -408,7 +393,7 @@ export function AddMovementDialog({
                         <FormItem>
                         <FormLabel>Operatore</FormLabel>
                          <FormControl>
-                            <Input {...field} defaultValue={currentUser.name || ''} />
+                            <Input {...field} defaultValue={currentUser.displayName || ''} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>

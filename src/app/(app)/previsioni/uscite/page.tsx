@@ -49,8 +49,13 @@ export default function PrevisioniUscitePage() {
     
     const { user } = useUser();
     const firestore = useFirestore();
-    const expenseForecastsCollectionRef = useMemoFirebase(() => collection(firestore, 'expenseForecasts'), [firestore]);
-    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneUscita>(expenseForecastsCollectionRef);
+
+    const expenseForecastsQuery = useMemoFirebase(() => {
+        if (!user) return null;
+        return query(collection(firestore, 'expenseForecasts'));
+    }, [firestore, user]);
+
+    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
 
      useEffect(() => {
         const seedDatabase = async () => {
@@ -66,7 +71,7 @@ export default function PrevisioniUscitePage() {
                 initialData.forEach((previsione) => {
                     const docRef = doc(collection(firestore, "expenseForecasts"));
                     const { id, ...previsioneData } = previsione;
-                    batch.set(docRef, previsioneData);
+                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system' });
                 });
                 try {
                     await batch.commit();
@@ -79,17 +84,17 @@ export default function PrevisioniUscitePage() {
                 }
             }
         };
-        if (firestore && !isLoadingPrevisioni) {
+        if (firestore && !isLoadingPrevisioni && user) {
           seedDatabase();
         }
-    }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni]);
+    }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni, user]);
 
     const handleAddForecast = async (newForecastData: Omit<PrevisioneUscita, 'id'>) => {
         if (!user || !firestore) return;
         try {
-            await addDoc(expenseForecastsCollectionRef, {
+            await addDoc(collection(firestore, 'expenseForecasts'), {
                 ...newForecastData,
-                createdBy: user.email,
+                createdBy: user.uid,
                 createdAt: new Date().toISOString(),
             });
             toast({ title: "Previsione Aggiunta", description: "La nuova previsione di uscita è stata aggiunta." });

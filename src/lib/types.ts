@@ -48,6 +48,9 @@ export type Movimento = {
     operatore?: string;
     metodoPag?: string;
     note?: string;
+    createdBy?: string;
+    createdAt?: string;
+    updatedAt?: string;
 };
 
 export type Riepilogo = {
@@ -62,10 +65,11 @@ export type Riepilogo = {
 export type UserRole = 'admin' | 'editor' | 'viewer';
 
 export type User = {
-    name: string;
-    email: string;
-    role: UserRole;
-    avatar?: string;
+    uid: string;
+    displayName: string | null;
+    email: string | null;
+    photoURL?: string | null;
+    role?: UserRole;
 };
 
 export type Scadenza = {
@@ -80,6 +84,9 @@ export type Scadenza = {
   stato: 'Pagato' | 'Da pagare' | 'Parziale';
   ricorrenza: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
   note?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type RiepilogoScadenze = {
@@ -104,6 +111,9 @@ export type PrevisioneEntrata = {
   probabilita: number; // 0 to 1
   stato: 'Da incassare' | 'Incassato' | 'Parziale' | 'Annullato';
   note?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type RiepilogoPrevisioniEntrate = {
@@ -127,9 +137,12 @@ export type PrevisioneUscita = {
   probabilita: number; // 0 to 1
   stato: 'Da pagare' | 'Pagato' | 'Parziale' | 'Annullato';
   fonteContratto?: string;
-  ricorrenza?: 'Nessuna' | 'Mensile' | 'Annuale' | 'Trimestrale';
+  ricorrenza: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale' | 'Altro';
   note?: string;
   importoEffettivo?: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type RiepilogoPrevisioniUscite = {

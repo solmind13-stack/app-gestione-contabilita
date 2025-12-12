@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query } from 'firebase/firestore';
 import {
   Card,
@@ -35,7 +35,6 @@ import { Progress } from '@/components/ui/progress';
 import { scadenzeData as initialScadenzeData } from '@/lib/scadenze-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { Scadenza } from '@/lib/types';
-import { useUser } from '@/firebase';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 
@@ -50,8 +49,13 @@ export default function ScadenzePage() {
 
     const { user } = useUser();
     const firestore = useFirestore();
-    const deadlinesCollectionRef = useMemoFirebase(() => collection(firestore, 'deadlines'), [firestore]);
-    const { data: scadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(deadlinesCollectionRef);
+
+    const deadlinesQuery = useMemoFirebase(() => {
+        if (!user) return null;
+        return query(collection(firestore, 'deadlines'));
+    }, [firestore, user]);
+    
+    const { data: scadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(deadlinesQuery);
 
     useEffect(() => {
         const seedDatabase = async () => {
@@ -67,7 +71,7 @@ export default function ScadenzePage() {
                 initialScadenzeData.forEach((scadenza) => {
                     const docRef = doc(collection(firestore, "deadlines"));
                     const { id, ...scadenzaData } = scadenza; // Exclude our static ID
-                    batch.set(docRef, scadenzaData);
+                    batch.set(docRef, { ...scadenzaData, createdBy: user?.uid || 'system' });
                 });
                 try {
                     await batch.commit();
@@ -80,11 +84,10 @@ export default function ScadenzePage() {
                 }
             }
         };
-        // We run seeding logic only when firestore is available and scadenze are not loaded yet.
-        if (firestore && !isLoadingScadenze) {
+        if (firestore && !isLoadingScadenze && user) {
           seedDatabase();
         }
-    }, [firestore, toast, isSeeding, scadenze, isLoadingScadenze]);
+    }, [firestore, toast, isSeeding, scadenze, isLoadingScadenze, user]);
 
 
     const handleAddDeadline = async (newDeadlineData: Omit<Scadenza, 'id'>) => {
@@ -95,7 +98,7 @@ export default function ScadenzePage() {
         try {
             await addDoc(collection(firestore, 'deadlines'), {
                 ...newDeadlineData,
-                createdBy: user.email,
+                createdBy: user.uid,
                 createdAt: new Date().toISOString(),
             });
             toast({ title: "Scadenza Aggiunta", description: "La nuova scadenza è stata salvata." });

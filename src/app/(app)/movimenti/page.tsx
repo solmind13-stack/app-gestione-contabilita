@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, writeBatch, query, where, getDocs, doc } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc } from 'firebase/firestore';
 
 import {
   Card,
@@ -36,7 +36,6 @@ import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Movimento, Riepilogo, PrevisioneEntrata, PrevisioneUscita, DeadlineSuggestion, Scadenza } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
-import { useUser } from '@/firebase';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 
@@ -44,15 +43,24 @@ export default function MovimentiPage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
     
+    const { user } = useUser();
     const firestore = useFirestore();
-    const movimentiCollectionRef = useMemoFirebase(() => collection(firestore, 'movements'), [firestore]);
-    const { data: movimentiData, isLoading: isLoadingMovimenti } = useCollection<Movimento>(movimentiCollectionRef);
+    
+    const movimentiQuery = useMemoFirebase(() => {
+        if (!user) return null;
+        // The user's custom claims are not available on the client, so we can't query by role directly
+        // Instead, we fetch all and filter on the client, which works for small datasets
+        // For larger datasets, a more sophisticated role-based data structure would be needed
+        return query(collection(firestore, 'movements'));
+    }, [firestore, user]);
+
+    const { data: movimentiData, isLoading: isLoadingMovimenti } = useCollection<Movimento>(movimentiQuery);
 
     const [isSeeding, setIsSeeding] = useState(false);
 
      useEffect(() => {
         const seedDatabase = async () => {
-            if (!firestore || isSeeding) return;
+            if (!firestore || isSeeding || (movimentiData && movimentiData.length > 0)) return;
             
             const q = query(collection(firestore, "movements"));
             const querySnapshot = await getDocs(q);
@@ -62,10 +70,9 @@ export default function MovimentiPage() {
                 toast({ title: "Popolamento database...", description: "Caricamento dati iniziali per i movimenti." });
                 const batch = writeBatch(firestore);
                 initialMovimenti.forEach((movimento) => {
-                    // Firestore will auto-generate an ID, so we can pass the doc ref without one
                     const docRef = doc(collection(firestore, "movements"));
-                    const { id, ...movimentoData } = movimento; // Exclude our static ID
-                    batch.set(docRef, movimentoData);
+                    const { id, ...movimentoData } = movimento;
+                    batch.set(docRef, { ...movimentoData, createdBy: user?.uid || 'system' });
                 });
                 try {
                     await batch.commit();
@@ -78,20 +85,50 @@ export default function MovimentiPage() {
                 }
             }
         };
-        seedDatabase();
-    }, [firestore, toast, isSeeding]);
+        if (firestore && !isLoadingMovimenti && user) {
+            seedDatabase();
+        }
+    }, [firestore, toast, isSeeding, movimentiData, isLoadingMovimenti, user]);
 
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
-    const { user } = useUser();
 
     const handleOpenDialog = (movement?: Movimento) => {
         setEditingMovement(movement || null);
         setIsDialogOpen(true);
     }
+    
+    const handleAddMovement = async (newMovementData: Omit<Movimento, 'id'>) => {
+        if (!user || !firestore) return;
+        try {
+            await addDoc(collection(firestore, 'movements'), {
+                ...newMovementData,
+                createdBy: user.uid,
+                createdAt: new Date().toISOString(),
+            });
+            toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato salvato." });
+        } catch (error) {
+            console.error("Error adding movement: ", error);
+            toast({ variant: 'destructive', title: 'Errore Salvataggio', description: 'Impossibile salvare il movimento. Controlla i permessi.' });
+        }
+    };
+
+    const handleEditMovement = async (updatedMovement: Movimento) => {
+         if (!user || !firestore || !updatedMovement.id) return;
+        try {
+            const docRef = doc(firestore, 'movements', updatedMovement.id);
+            const { id, ...dataToUpdate } = updatedMovement;
+            await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString() });
+            toast({ title: "Movimento Aggiornato", description: "Il movimento è stato modificato." });
+        } catch (error) {
+             console.error("Error updating movement: ", error);
+            toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare il movimento. Controlla i permessi.' });
+        }
+    };
+
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
@@ -136,6 +173,8 @@ export default function MovimentiPage() {
        <AddMovementDialog
             isOpen={isDialogOpen}
             setIsOpen={setIsDialogOpen}
+            onAddMovement={handleAddMovement}
+            onEditMovement={handleEditMovement}
             movementToEdit={editingMovement}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
             currentUser={user!}

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, writeBatch, getDocs, doc } from 'firebase/firestore';
 import {
   Card,
@@ -43,9 +43,14 @@ export default function PrevisioniEntratePage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isSeeding, setIsSeeding] = useState(false);
 
+    const { user } = useUser();
     const firestore = useFirestore();
-    const incomeForecastsCollectionRef = useMemoFirebase(() => collection(firestore, 'incomeForecasts'), [firestore]);
-    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneEntrata>(incomeForecastsCollectionRef);
+
+    const incomeForecastsQuery = useMemoFirebase(() => {
+        if (!user) return null;
+        return query(collection(firestore, 'incomeForecasts'));
+    }, [firestore, user]);
+    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
 
      useEffect(() => {
         const seedDatabase = async () => {
@@ -61,7 +66,7 @@ export default function PrevisioniEntratePage() {
                 initialData.forEach((previsione) => {
                     const docRef = doc(collection(firestore, "incomeForecasts"));
                     const { id, ...previsioneData } = previsione;
-                    batch.set(docRef, previsioneData);
+                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system' });
                 });
                 try {
                     await batch.commit();
@@ -74,10 +79,10 @@ export default function PrevisioniEntratePage() {
                 }
             }
         };
-        if (firestore && !isLoadingPrevisioni) {
+        if (firestore && !isLoadingPrevisioni && user) {
           seedDatabase();
         }
-    }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni]);
+    }, [firestore, toast, isSeeding, previsioni, isLoadingPrevisioni, user]);
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);

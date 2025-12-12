@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Send, Sparkles, Loader2 } from 'lucide-react';
 import { useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { collection, query } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { provideAiChatAssistant } from '@/ai/flows/provide-ai-chat-assistant';
@@ -30,15 +30,15 @@ export default function AssistenteAiPage() {
 
   const firestore = useFirestore();
 
-  const movimentiRef = useMemoFirebase(() => collection(firestore, 'movements'), [firestore]);
-  const scadenzeRef = useMemoFirebase(() => collection(firestore, 'deadlines'), [firestore]);
-  const previsioniEntrateRef = useMemoFirebase(() => collection(firestore, 'incomeForecasts'), [firestore]);
-  const previsioniUsciteRef = useMemoFirebase(() => collection(firestore, 'expenseForecasts'), [firestore]);
+  const movimentiQuery = useMemoFirebase(() => collection(firestore, 'movements'), [firestore]);
+  const scadenzeQuery = useMemoFirebase(() => collection(firestore, 'deadlines'), [firestore]);
+  const previsioniEntrateQuery = useMemoFirebase(() => collection(firestore, 'incomeForecasts'), [firestore]);
+  const previsioniUsciteQuery = useMemoFirebase(() => collection(firestore, 'expenseForecasts'), [firestore]);
 
-  const { data: movimenti } = useCollection<Movimento>(movimentiRef);
-  const { data: scadenze } = useCollection<Scadenza>(scadenzeRef);
-  const { data: previsioniEntrate } = useCollection<PrevisioneEntrata>(previsioniEntrateRef);
-  const { data: previsioniUscite } = useCollection<PrevisioneUscita>(previsioniUsciteRef);
+  const { data: movimenti } = useCollection<Movimento>(movimentiQuery);
+  const { data: scadenze } = useCollection<Scadenza>(scadenzeQuery);
+  const { data: previsioniEntrate } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
+  const { data: previsioniUscite } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
 
   const getFinancialData = useCallback(() => {
     return JSON.stringify({
