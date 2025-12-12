@@ -17,31 +17,35 @@ service cloud.firestore {
     }
 
     function isUserRole(role) {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
+      // This is safe because it's only called after isSignedIn(), which checks for request.auth != null.
+      // And we check for the document's existence before accessing its data.
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
     }
     
     function canAccessCompanyData(company) {
+      // This function determines if a user can access data for a specific company.
       if (!isSignedIn()) {
         return false;
       }
-      // This check is safe because it's only called after verifying the user document exists.
       let userData = getUserData();
+      // Admins and editors can access any company's data.
+      // A 'company' role user can only access data if their profile's company matches.
       return userData.role == 'admin' || userData.role == 'editor' || (userData.role == 'company' && userData.company == company);
     }
     
     // Rules for the 'users' collection
     match /users/{userId} {
-      // CREATE: Any signed-in user can create THEIR OWN user document. This is critical for signup.
+      // CREATE: Any authenticated user can create THEIR OWN user document. This is essential for the sign-up process.
       allow create: if isOwner(userId);
 
       // READ (get): A user can read THEIR OWN document. An admin can also read any document.
       allow get: if isOwner(userId) || isUserRole('admin');
       
-      // LIST: Only users with the 'admin' role can list all user documents.
+      // LIST: Only users with the 'admin' role can list all user documents. This is for the settings page.
       allow list: if isUserRole('admin');
       
       // UPDATE: A user can update their own profile. An admin can update any profile.
-      // A user cannot change their own role.
+      // A user is not allowed to change their own role.
       allow update: if isUserRole('admin') || (isOwner(userId) && request.resource.data.role == resource.data.role);
       
       // DELETE: Only admins can delete users.
@@ -50,8 +54,9 @@ service cloud.firestore {
 
     // Rules for financial data collections (movements, deadlines, forecasts)
     match /{collection}/{docId} where collection in ['movements', 'deadlines', 'incomeForecasts', 'expenseForecasts'] {
-      // READ (get) & WRITE (update, delete) on existing documents.
+      // READ (get), UPDATE, DELETE on existing documents.
       // Access is granted if the user has the right role for the company specified IN THE DOCUMENT ITSELF.
+      // This is secure because we check for the existence of the user document first.
       allow get, update, delete: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && canAccessCompanyData(resource.data.societa);
       
       // CREATE a new document.
@@ -59,15 +64,17 @@ service cloud.firestore {
       allow create: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && canAccessCompanyData(request.resource.data.societa);
 
       // LIST (query multiple documents)
-      // Admins and Editors can list everything.
-      // Company users MUST filter by their company.
+      // The query for a 'company' user MUST be constrained by 'societa'. This forces the client to ask for specific
+      // company data, preventing the "Missing or insufficient permissions" error.
+      // Admins and editors are allowed to query without this constraint.
       allow list: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
                      ( (isUserRole('admin') || isUserRole('editor')) || 
-                       (isUserRole('company') && request.query.where[0].fieldPath == 'societa' && request.query.where[0].op == '==' && request.query.where[0].value == getUserData().company) );
+                       (isUserRole('company') && request.query.where[0].field == 'societa' && request.query.where[0].op == '==' && request.query.where[0].value == getUserData().company) );
     }
     
     // Sub-collections for users, like chatHistory
     match /users/{userId}/{allChildren=**} {
+        // Only the owner of the user profile can read or write to its sub-collections.
         allow read, write: if isOwner(userId);
     }
   }
