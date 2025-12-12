@@ -3,10 +3,11 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, getCountFromServer } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import type { AppUser, UserRole } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 // Internal state for user authentication, now including the app user profile
 interface UserAuthState {
@@ -59,6 +60,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
   firestore,
   auth,
 }) => {
+  const { toast } = useToast();
   const [userAuthState, setUserAuthState] = useState<UserAuthState>({
     user: null,
     isUserLoading: true,
@@ -80,9 +82,12 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
           try {
             const userDocSnap = await getDoc(userDocRef);
+            let appUser: AppUser;
+
             if (userDocSnap.exists()) {
+              // User profile exists, load it
               const userData = userDocSnap.data();
-              const appUser: AppUser = {
+              appUser = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
                 displayName: firebaseUser.displayName,
@@ -90,16 +95,46 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                 role: userData.role as UserRole,
                 company: userData.company as 'LNC' | 'STG' | undefined,
               };
-              setUserAuthState({ user: appUser, isUserLoading: false, userError: null });
             } else {
-              // This is a critical state - a logged-in user without a profile doc.
-              // For a robust app, you might create a default profile here.
-              // For now, we deny access by setting user to null and providing an error.
-               console.warn(`User document not found for UID: ${firebaseUser.uid}. This user will have no permissions.`);
-               setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Profilo utente non trovato.") });
+              // User profile doesn't exist, create it
+              console.log(`User document not found for UID: ${firebaseUser.uid}. Creating new profile.`);
+              
+              // Check if this is the very first user to determine role
+              const usersCollection = (await getCountFromServer(doc(firestore, 'users', '..'))).data().count;
+              const isFirstUser = usersCollection === 0;
+              const role: UserRole = isFirstUser ? 'admin' : 'company'; // Make first user admin
+
+              const newUserProfile = {
+                  id: firebaseUser.uid,
+                  email: firebaseUser.email,
+                  firstName: firebaseUser.displayName?.split(' ')[0] || 'Nuovo',
+                  lastName: firebaseUser.displayName?.split(' ')[1] || 'Utente',
+                  role: role,
+                  company: 'LNC', // Default company
+                  lastLogin: new Date().toISOString(),
+                  creationDate: new Date().toISOString(),
+              };
+              
+              await setDoc(userDocRef, newUserProfile);
+              
+              appUser = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: `${newUserProfile.firstName} ${newUserProfile.lastName}`,
+                photoURL: firebaseUser.photoURL,
+                role: newUserProfile.role,
+                company: newUserProfile.company as 'LNC' | 'STG',
+              };
+
+              toast({
+                  title: "Profilo Utente Creato",
+                  description: `Benvenuto! Il tuo profilo è stato configurato come ${role}.`,
+              });
             }
+            setUserAuthState({ user: appUser, isUserLoading: false, userError: null });
+
           } catch (error) {
-            console.error("Error fetching user profile:", error);
+            console.error("Error fetching or creating user profile:", error);
             setUserAuthState({ user: null, isUserLoading: false, userError: error as Error });
           }
         } else {
@@ -113,7 +148,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       }
     );
     return () => unsubscribe();
-  }, [auth, firestore]);
+  }, [auth, firestore, toast]);
 
   const contextValue = useMemo((): FirebaseContextState => {
     const servicesAvailable = !!(firebaseApp && firestore && auth);
