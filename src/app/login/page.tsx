@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,8 +17,10 @@ import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useAuth, useUser } from "@/firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("m.rossi@example.com");
@@ -28,8 +31,6 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  // This useEffect handles the redirection AFTER the login has been successful
-  // and the FirebaseProvider has loaded the user profile with the role.
   useEffect(() => {
     if (!isUserLoading && user?.role) {
       router.push("/dashboard");
@@ -50,50 +51,25 @@ export default function LoginPage() {
     setIsLoggingIn(true);
     
     try {
-      // We first try to log in
       await signInWithEmailAndPassword(auth, email, password);
-      // If the login is successful, the onAuthStateChanged in the provider will trigger,
-      // load the profile, and the useEffect above will redirect.
-      // We do nothing else here.
       toast({ title: "Accesso Riuscito", description: "Verrai reindirizzato alla dashboard..." });
 
     } catch (error: any) {
-        // If the user doesn't exist, we try to create them
+        console.error("Login failed:", error);
+        let description = "Credenziali non valide o errore di rete. Riprova.";
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-            try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                // If creation is successful, onAuthStateChanged will trigger,
-                // create the profile in the DB, and the useEffect above will redirect.
-                toast({
-                    title: "Benvenuto!",
-                    description: "Nuovo utente creato con successo. Verrai reindirizzato...",
-                });
-            } catch (creationError: any) {
-                console.error("Signup failed:", creationError);
-                toast({
-                    variant: "destructive",
-                    title: "Registrazione Fallita",
-                    description: creationError.message || "Impossibile creare un nuovo utente. La password deve essere di almeno 6 caratteri.",
-                });
-            }
-        } else {
-            // We handle other login errors
-            console.error("Login failed:", error);
-            toast({
-                variant: "destructive",
-                title: "Login Fallito",
-                description: "Credenziali non valide o errore di rete. Riprova.",
-            });
+          description = "Email o password non corrette. L'utente amministratore deve essere creato dalla pagina di bootstrap.";
         }
+        toast({
+            variant: "destructive",
+            title: "Login Fallito",
+            description: description,
+        });
     } finally {
-        // In any case, we stop showing the loader on the button.
-        // The page loading is handled by the provider.
         setIsLoggingIn(false);
     }
   };
   
-  // Show a global loading indicator if we are checking the user's status
-  // or if the user is already logged in and waiting for redirection.
   if (isUserLoading || user?.role) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background">
@@ -102,12 +78,21 @@ export default function LoginPage() {
     );
   }
 
-  // If loading is finished and there is no user, show the login form.
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-background to-secondary/40 p-4">
-      <div className="flex flex-col items-center gap-8">
+      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
         <Logo className="h-10" />
-        <Card className="w-full max-w-sm shadow-xl">
+         <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Attenzione</AlertTitle>
+          <AlertDescription>
+            Se è il primo accesso, devi prima creare l'utente amministratore.{" "}
+            <Link href="/bootstrap-admin" className="font-bold underline">
+              Vai alla pagina di creazione.
+            </Link>
+          </AlertDescription>
+        </Alert>
+        <Card className="w-full shadow-xl">
           <CardHeader className="text-center">
             <CardTitle>Gestione Contabile LNC-STG</CardTitle>
             <CardDescription>Accedi per continuare</CardDescription>

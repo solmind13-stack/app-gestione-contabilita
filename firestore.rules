@@ -15,8 +15,8 @@ service cloud.firestore {
     // Rules for the 'users' collection
     match /users/{userId} {
       // CREATE: Any authenticated user can create THEIR OWN user document.
-      // An anonymous user can create a document for another user (for bootstrapping).
-      allow create: if isSignedIn() && (isOwner(userId) || request.auth.token.firebase.sign_in_provider == 'anonymous');
+      // This is crucial for the bootstrap page to work.
+      allow create: if isSignedIn() && isOwner(userId);
 
       // READ (get): A user can read THEIR OWN document.
       allow get: if isSignedIn() && isOwner(userId);
@@ -60,7 +60,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && canAccessCompanyData(request.resource.data.societa);
 
       // LIST (query multiple documents)
-      // Admins and editors can query freely.
+      // Admins and editors can query freely (but will be filtered client-side).
       // Company users MUST filter by their own company.
       allow list: if isSignedIn() && (
                     getUserRole() == 'admin' || 
@@ -72,7 +72,7 @@ service cloud.firestore {
     // Sub-collections for users, like chatHistory
     match /users/{userId}/{allChildren=**} {
         // Only the owner of the user profile can read or write to its sub-collections.
-        allow read, write: if isOwner(userId);
+        allow read, write: if isSignedIn() && isOwner(userId);
     }
   }
 }
