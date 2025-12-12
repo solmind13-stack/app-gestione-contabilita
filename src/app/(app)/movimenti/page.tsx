@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore } from '@/firebase';
-import { collection, writeBatch, query, where, getDocs } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, writeBatch, query, where, getDocs, doc } from 'firebase/firestore';
 
 import {
   Card,
@@ -45,7 +45,7 @@ export default function MovimentiPage() {
     const [selectedCompany, setSelectedCompany] = useState('Tutte');
     
     const firestore = useFirestore();
-    const movimentiCollectionRef = useMemo(() => collection(firestore, 'movements'), [firestore]);
+    const movimentiCollectionRef = useMemoFirebase(() => collection(firestore, 'movements'), [firestore]);
     const { data: movimentiData, isLoading: isLoadingMovimenti } = useCollection<Movimento>(movimentiCollectionRef);
 
     const [isSeeding, setIsSeeding] = useState(false);
@@ -54,7 +54,7 @@ export default function MovimentiPage() {
         const seedDatabase = async () => {
             if (!firestore || isSeeding) return;
             
-            const q = query(collection(firestore, "movements"), where("societa", "in", ["LNC", "STG"]));
+            const q = query(collection(firestore, "movements"));
             const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
@@ -62,10 +62,10 @@ export default function MovimentiPage() {
                 toast({ title: "Popolamento database...", description: "Caricamento dati iniziali per i movimenti." });
                 const batch = writeBatch(firestore);
                 initialMovimenti.forEach((movimento) => {
-                    const docRef = collection(firestore, "movements");
-                    // Omettiamo l'id per farlo generare automaticamente da Firestore
-                    const { id, ...movimentoData } = movimento;
-                    batch.set(docRef.doc(), movimentoData);
+                    // Firestore will auto-generate an ID, so we can pass the doc ref without one
+                    const docRef = doc(collection(firestore, "movements"));
+                    const { id, ...movimentoData } = movimento; // Exclude our static ID
+                    batch.set(docRef, movimentoData);
                 });
                 try {
                     await batch.commit();
@@ -102,25 +102,29 @@ export default function MovimentiPage() {
         .sort((a, b) => {
             const dateA = new Date(a.data).getTime();
             const dateB = new Date(b.data).getTime();
-            return sortOrder === 'asc' ? dateA - dateB : dateB - a.id.localeCompare(b.id);
+             if (sortOrder === 'asc') {
+                return dateA - dateB;
+            } else {
+                return dateB - dateA;
+            }
         }), [movimentiData, selectedCompany, searchTerm, sortOrder]);
 
     const riepilogo = useMemo((): Riepilogo => {
         const data = filteredMovimenti;
-        const totaleEntrate = data.reduce((acc, m) => acc + m.entrata, 0);
-        const totaleUscite = data.reduce((acc, m) => acc + m.uscita, 0);
-        const ivaEntrate = data.reduce((acc, m) => acc + (m.entrata > 0 ? calculateIva(m.entrata, m.iva) : 0), 0);
-        const ivaUscite = data.reduce((acc, m) => acc + (m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0);
+        const totaleEntrate = data.reduce((acc, m) => acc + (m.entrata || 0), 0);
+        const totaleUscite = data.reduce((acc, m) => acc + (m.uscita || 0), 0);
+        const ivaEntrate = data.reduce((acc, m) => acc + (m.entrata && m.entrata > 0 ? calculateIva(m.entrata, m.iva) : 0), 0);
+        const ivaUscite = data.reduce((acc, m) => acc + (m.uscita && m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0);
         const saldo = totaleEntrate - totaleUscite;
         const ivaNetta = ivaEntrate - ivaUscite;
 
         return { totaleEntrate, totaleUscite, saldo, ivaEntrate, ivaUscite, ivaNetta };
     }, [filteredMovimenti]);
     
-    const totalEntrateNette = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.entrata > 0 ? calculateNetto(m.entrata, m.iva) : 0), 0), [filteredMovimenti]);
-    const totalIvaEntrate = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.entrata > 0 ? calculateIva(m.entrata, m.iva) : 0), 0), [filteredMovimenti]);
-    const totalUsciteNette = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita > 0 ? calculateNetto(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
-    const totalIvaUscite = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
+    const totalEntrateNette = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.entrata && m.entrata > 0 ? calculateNetto(m.entrata, m.iva) : 0), 0), [filteredMovimenti]);
+    const totalIvaEntrate = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.entrata && m.entrata > 0 ? calculateIva(m.entrata, m.iva) : 0), 0), [filteredMovimenti]);
+    const totalUsciteNette = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita && m.uscita > 0 ? calculateNetto(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
+    const totalIvaUscite = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita && m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
 
     const getPageTitle = () => {
         if (selectedCompany === 'Tutte') return 'Movimenti - Tutte le società';
@@ -241,10 +245,12 @@ export default function MovimentiPage() {
                         </TableRow>
                     ) : (
                         filteredMovimenti.map((movimento) => {
-                            const entrataNetta = movimento.entrata > 0 ? calculateNetto(movimento.entrata, movimento.iva) : 0;
-                            const ivaEntrata = movimento.entrata > 0 ? calculateIva(movimento.entrata, movimento.iva) : 0;
-                            const uscitaNetta = movimento.uscita > 0 ? calculateNetto(movimento.uscita, movimento.iva) : 0;
-                            const ivaUscita = movimento.uscita > 0 ? calculateIva(movimento.uscita, movimento.iva) : 0;
+                            const entrataLorda = movimento.entrata || 0;
+                            const uscitaLorda = movimento.uscita || 0;
+                            const entrataNetta = entrataLorda > 0 ? calculateNetto(entrataLorda, movimento.iva) : 0;
+                            const ivaEntrata = entrataLorda > 0 ? calculateIva(entrataLorda, movimento.iva) : 0;
+                            const uscitaNetta = uscitaLorda > 0 ? calculateNetto(uscitaLorda, movimento.iva) : 0;
+                            const ivaUscita = uscitaLorda > 0 ? calculateIva(uscitaLorda, movimento.iva) : 0;
 
                         return (
                         <TableRow key={movimento.id}>
@@ -258,11 +264,11 @@ export default function MovimentiPage() {
                             <Badge variant="secondary">{movimento.categoria}</Badge>
                             </TableCell>
                             <TableCell>{movimento.sottocategoria}</TableCell>
-                            <TableCell className={cn("text-right font-medium", movimento.entrata > 0 && "text-green-600")}>
-                            {movimento.entrata > 0 ? formatCurrency(movimento.entrata) : '-'}
+                            <TableCell className={cn("text-right font-medium", entrataLorda > 0 && "text-green-600")}>
+                            {entrataLorda > 0 ? formatCurrency(entrataLorda) : '-'}
                             </TableCell>
-                            <TableCell className={cn("text-right font-medium", movimento.uscita > 0 && "text-red-600")}>
-                            {movimento.uscita > 0 ? formatCurrency(movimento.uscita) : '-'}
+                            <TableCell className={cn("text-right font-medium", uscitaLorda > 0 && "text-red-600")}>
+                            {uscitaLorda > 0 ? formatCurrency(uscitaLorda) : '-'}
                             </TableCell>
                             <TableCell className="text-center">{movimento.iva > 0 ? `${movimento.iva * 100}%` : '0%'}</TableCell>
                             <TableCell className="text-right">{entrataNetta > 0 ? formatCurrency(entrataNetta) : '-'}</TableCell>
