@@ -3,7 +3,7 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc, getCountFromServer } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, getCountFromServer, collection } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import type { AppUser, UserRole } from '@/lib/types';
@@ -100,8 +100,9 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               console.log(`User document not found for UID: ${firebaseUser.uid}. Creating new profile.`);
               
               // Check if this is the very first user to determine role
-              const usersCollection = (await getCountFromServer(doc(firestore, 'users', '..'))).data().count;
-              const isFirstUser = usersCollection === 0;
+              const usersCollectionRef = collection(firestore, 'users');
+              const usersCountSnapshot = await getCountFromServer(usersCollectionRef);
+              const isFirstUser = usersCountSnapshot.data().count === 0;
               const role: UserRole = isFirstUser ? 'admin' : 'company'; // Make first user admin
 
               const newUserProfile = {
