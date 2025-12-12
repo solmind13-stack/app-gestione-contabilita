@@ -6,8 +6,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { collection, query } from 'firebase/firestore';
+import type { AppUser } from '@/lib/types';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 
 // Mock data based on the user's image
 const initialData = {
@@ -76,8 +81,76 @@ const SettingsListManager = ({ title, items, setItems }: { title: string, items:
   );
 };
 
+const UserManagementCard = () => {
+    const firestore = useFirestore();
+    const usersQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'users'));
+    }, [firestore]);
+
+    const { data: users, isLoading, error } = useCollection<AppUser>(usersQuery);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Gestione Utenti</CardTitle>
+                <CardDescription>
+                    Visualizza gli utenti registrati nel database e i loro ruoli.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead>Ruolo</TableHead>
+                            <TableHead>Società</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {isLoading ? (
+                            <TableRow>
+                                <TableCell colSpan={4} className="h-24 text-center">
+                                    <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+                                </TableCell>
+                            </TableRow>
+                        ) : error ? (
+                             <TableRow>
+                                <TableCell colSpan={4} className="h-24 text-center text-red-500">
+                                    Errore di autorizzazione: solo gli admin possono vedere gli utenti.
+                                </TableCell>
+                            </TableRow>
+                        ) : users && users.length > 0 ? (
+                            users.map((user) => (
+                                <TableRow key={user.uid}>
+                                    <TableCell className="font-medium">{user.email}</TableCell>
+                                    <TableCell>{user.displayName}</TableCell>
+                                    <TableCell>
+                                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                                            {user.role}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>{user.company || 'N/A'}</TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={4} className="h-24 text-center">
+                                    Nessun utente trovato nel database.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+    )
+}
+
 
 export default function ImpostazioniPage() {
+  const { user } = useUser();
   const [operators, setOperators] = useState(initialData.operators);
   const [accounts, setAccounts] = useState(initialData.accounts);
   const [paymentMethods, setPaymentMethods] = useState(initialData.paymentMethods);
@@ -122,6 +195,8 @@ export default function ImpostazioniPage() {
           Gestisci le opzioni e le personalizzazioni della tua applicazione.
         </p>
       </div>
+
+       {user?.role === 'admin' && <UserManagementCard />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-8">

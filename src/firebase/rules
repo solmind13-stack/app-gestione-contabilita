@@ -1,0 +1,72 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isUserRole(role) {
+        return isSignedIn() && getUserData().role == role;
+    }
+    
+    function canAccessCompanyData(company) {
+      let userRole = getUserData().role;
+      // Admins and editors can access any company's data.
+      // A company user can access data if their profile's company matches the document's company.
+      return isSignedIn() && 
+        (userRole == 'admin' || userRole == 'editor' || (userRole == 'company' && getUserData().company == company));
+    }
+
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // READ: Admins can read any user profile for management purposes.
+      // Any authenticated user can read their own profile.
+      allow get: if isUserRole('admin') || isOwner(userId);
+      
+      // LIST: Only admins can list all users (for the user management panel).
+      allow list: if isUserRole('admin');
+      
+      // CREATE: An authenticated user can create their own profile document.
+      allow create: if isOwner(userId);
+      
+      // UPDATE: An admin can update any user profile.
+      // A user can update their own profile, but cannot change their own role.
+      allow update: if isUserRole('admin') || (isOwner(userId) && request.resource.data.role == resource.data.role);
+      
+      // DELETE: Only admins can delete user profiles.
+      allow delete: if isUserRole('admin');
+    }
+
+    // Rules for financial data collections (movements, deadlines, etc.)
+    match /{collection}/{docId} where collection in ['movements', 'deadlines', 'incomeForecasts', 'expenseForecasts'] {
+      // READ (Get single document):
+      // An admin or editor can read any document.
+      // A company user can read a document if its 'societa' field matches their assigned company.
+      allow get: if canAccessCompanyData(resource.data.company);
+      
+      // READ (List multiple documents):
+      // This is a critical rule for security and performance.
+      // It forces non-admin/editor clients to include a 'where' clause in their queries.
+      // e.g., collection('movements').where('societa', '==', 'LNC')
+      allow list: if 
+        (isUserRole('admin') || isUserRole('editor')) ||
+        (isUserRole('company') && request.query.where.size() > 0 && request.query.where[0][1] == 'societa' && request.query.where[0][2] == getUserData().company);
+
+      // WRITE (Create, Update, Delete):
+      // An admin or editor can write to any document.
+      // A company user can write to a document if its 'societa' field matches their assigned company.
+      allow write: if canAccessCompanyData(request.resource.data.company);
+    }
+  }
+}
