@@ -17,63 +17,60 @@ service cloud.firestore {
     }
 
     function isUserRole(role) {
-        return isSignedIn() && getUserData().role == role;
+      // Check role only if the user document actually exists
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
     }
     
     function canAccessCompanyData(company) {
-      let userRole = getUserData().role;
-      return isSignedIn() && (userRole == 'admin' || userRole == 'editor' || (userRole == 'company' && getUserData().company == company));
-    }
-
-    // Rules for the 'users' collection
-    match /users/{userId} {
-      // Admins can read any user profile
-      // Any authenticated user can read their own profile
-      allow get: if isUserRole('admin') || isOwner(userId);
-      
-      // Only admins can list all users
-      allow list: if isUserRole('admin');
-      
-      // An authenticated user can create their own profile
-      allow create: if isOwner(userId);
-      
-      // An admin can update any user profile
-      // An authenticated user can update their own profile, but cannot change their role
-      allow update: if isUserRole('admin') || (isOwner(userId) && request.resource.data.role == resource.data.role);
-      
-      // Only admins can delete users
-      allow delete: if isUserRole('admin');
-      
-      // Sub-collections for users, like chatHistory
-      match /{allChildren=**} {
-        allow read, write: if isOwner(userId);
+      // Check role only if the user document actually exists
+      if (!isSignedIn() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) {
+        return false;
       }
-    }
-
-    // Rules for financial data collections
-    match /{collection}/{docId} {
-      // Generic rule for financial documents (movements, deadlines, etc.)
-      
-      // READ:
-      // An admin or editor can read any document.
-      // A company user can read a document if its 'societa' field matches their company.
-      allow get: if canAccessCompanyData(resource.data.company);
-      
-      // LIST (Query):
-      // This is the most critical rule. Listing is only allowed if the query
-      // is constrained by 'societa'. This forces the client to ask for specific
-      // company data, preventing the "Missing or insufficient permissions" error.
-      // Admins and editors are allowed to query without this constraint.
-      allow list: if (isUserRole('admin') || isUserRole('editor')) || 
-                     (isUserRole('company') && request.query.get('where')[0][1] == 'societa' && request.query.get('where')[0][2] == getUserData().company);
-
-      // WRITE (Create, Update, Delete):
-      // An admin or editor can write to any document.
-      // A company user can write to a document if its 'societa' field matches their company.
-      allow write: if canAccessCompanyData(request.resource.data.company);
+      let userRole = getUserData().role;
+      return userRole == 'admin' || userRole == 'editor' || (userRole == 'company' && getUserData().company == company);
     }
     
-    // Fallback security for any other collections
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // CREATE: Any signed-in user can create THEIR OWN profile. This is crucial for signup.
+      allow create: if isOwner(userId);
+
+      // READ: An admin or editor can view any profile. A user can view their own.
+      allow get: if isOwner(userId) || isUserRole('admin') || isUserRole('editor');
+      
+      // LIST: Only admins can list all users. This is for the settings page.
+      allow list: if isUserRole('admin');
+      
+      // UPDATE: A user can update their own profile, but cannot change their role unless they are an admin.
+      allow update: if isUserRole('admin') || (isOwner(userId) && request.resource.data.role == resource.data.role);
+      
+      // DELETE: Only admins can delete users.
+      allow delete: if isUserRole('admin');
+    }
+
+    // Rules for financial data collections (movements, deadlines, forecasts)
+    match /{collection}/{docId} where collection in ['movements', 'deadlines', 'incomeForecasts', 'expenseForecasts'] {
+      // READ (get a single document) & WRITE (create, update, delete)
+      // Access is granted if the user has the right role for the company specified IN THE DOCUMENT ITSELF.
+      // For create/update, we check the incoming document data (request.resource.data).
+      // For get/delete, we check the existing document data (resource.data).
+      allow get, delete: if canAccessCompanyData(resource.data.societa);
+      allow create, update: if canAccessCompanyData(request.resource.data.societa);
+
+      // LIST (query multiple documents)
+      // This is the most restrictive rule. To prevent data leakage, we force non-admin/editor users
+      // to ALWAYS filter their queries by their own company.
+      // Admins and Editors can list all documents without a 'where' clause.
+      allow list: if (isUserRole('admin') || isUserRole('editor')) || 
+                     (isUserRole('company') && request.query.where[0][1] == 'societa' && request.query.where[0][2] == getUserData().company);
+    }
+    
+    // Sub-collections for users, like chatHistory
+    match /users/{userId}/{allChildren=**} {
+        allow read, write: if isOwner(userId);
+    }
+
+    // Fallback rule: deny all access to any other path by default.
     match /{path=**}/documents/{document} {
       allow read, write: if false;
     }
