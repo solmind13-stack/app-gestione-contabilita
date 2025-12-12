@@ -28,8 +28,8 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  // Questo useEffect gestisce il reindirizzamento DOPO che il login ha avuto successo
-  // e il FirebaseProvider ha caricato il profilo utente con il ruolo.
+  // This useEffect handles the redirection AFTER the login has been successful
+  // and the FirebaseProvider has loaded the user profile with the role.
   useEffect(() => {
     if (!isUserLoading && user?.role) {
       router.push("/dashboard");
@@ -50,20 +50,20 @@ export default function LoginPage() {
     setIsLoggingIn(true);
     
     try {
-      // Tentiamo prima di fare il login
+      // We first try to log in
       await signInWithEmailAndPassword(auth, email, password);
-      // Se il login ha successo, l'onAuthStateChanged nel provider si attiverà,
-      // caricherà il profilo, e l'useEffect sopra reindirizzerà.
-      // Non facciamo nient'altro qui.
+      // If the login is successful, the onAuthStateChanged in the provider will trigger,
+      // load the profile, and the useEffect above will redirect.
+      // We do nothing else here.
       toast({ title: "Accesso Riuscito", description: "Verrai reindirizzato alla dashboard..." });
 
     } catch (error: any) {
-        // Se l'utente non esiste, proviamo a crearlo
+        // If the user doesn't exist, we try to create them
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
             try {
                 await createUserWithEmailAndPassword(auth, email, password);
-                // Se la creazione ha successo, l'onAuthStateChanged si attiverà,
-                // creerà il profilo nel DB, e l'useEffect sopra reindirizzerà.
+                // If creation is successful, onAuthStateChanged will trigger,
+                // create the profile in the DB, and the useEffect above will redirect.
                 toast({
                     title: "Benvenuto!",
                     description: "Nuovo utente creato con successo. Verrai reindirizzato...",
@@ -77,7 +77,7 @@ export default function LoginPage() {
                 });
             }
         } else {
-            // Gestiamo altri errori di login
+            // We handle other login errors
             console.error("Login failed:", error);
             toast({
                 variant: "destructive",
@@ -86,14 +86,14 @@ export default function LoginPage() {
             });
         }
     } finally {
-        // In ogni caso, smettiamo di mostrare il loader sul pulsante.
-        // La gestione del loading della pagina viene fatta dal provider.
+        // In any case, we stop showing the loader on the button.
+        // The page loading is handled by the provider.
         setIsLoggingIn(false);
     }
   };
   
-  // Mostra un caricamento globale se stiamo verificando lo stato dell'utente
-  // o se l'utente è già loggato e in attesa di reindirizzamento.
+  // Show a global loading indicator if we are checking the user's status
+  // or if the user is already logged in and waiting for redirection.
   if (isUserLoading || user?.role) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background">
@@ -102,7 +102,7 @@ export default function LoginPage() {
     );
   }
 
-  // Se il caricamento è finito e non c'è utente, mostra il form di login.
+  // If loading is finished and there is no user, show the login form.
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-background to-secondary/40 p-4">
       <div className="flex flex-col items-center gap-8">

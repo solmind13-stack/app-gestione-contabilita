@@ -16,19 +16,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Quando il caricamento finisce, se non c'è utente o non ha un ruolo,
-    // significa che non è autorizzato, quindi lo rimandiamo al login.
+    // When loading is finished, if there is no user or the user has no role,
+    // it means they are not authorized, so we redirect them to the login page.
     if (!isUserLoading && !user?.role) {
       router.push('/login');
     }
   }, [user, isUserLoading, router]);
 
-  // Durante il caricamento, mostriamo uno scheletro per evitare sfarfallii.
+  // During loading, we show a skeleton to avoid flickering.
   if (isUserLoading) {
     return <DashboardLoading />;
   }
 
-  // Se l'utente ha un ruolo, allora è autorizzato e può vedere il contenuto.
+  // If the user has a role, they are authorized and can see the content.
   if (user?.role) {
     return (
       <SidebarProvider>
@@ -46,7 +46,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Se il caricamento è finito ma l'utente non è valido, non mostriamo nulla
-  // mentre l'useEffect esegue il reindirizzamento.
+  // If loading is finished but the user is not valid, we show nothing
+  // while useEffect handles the redirection.
   return null;
 }

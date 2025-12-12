@@ -3,7 +3,7 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc, getCountFromServer, collection } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, getCountFromServer, collection, query } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import type { AppUser, UserRole } from '@/lib/types';
