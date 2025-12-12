@@ -393,7 +393,7 @@ export function AddMovementDialog({
                         <FormItem>
                         <FormLabel>Operatore</FormLabel>
                          <FormControl>
-                            <Input {...field} defaultValue={currentUser.displayName || ''} />
+                            <Input {...field} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
