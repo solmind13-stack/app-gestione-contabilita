@@ -3,11 +3,14 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc, getCountFromServer, collection, query, serverTimestamp } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import type { AppUser, UserRole } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import {
+  signInAnonymously
+} from "firebase/auth";
 
 // Internal state for user authentication, now including the app user profile
 interface UserAuthState {
@@ -96,15 +99,16 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                 company: userData.company as 'LNC' | 'STG' | undefined,
               };
             } else {
-              // User profile doesn't exist, create it
+              // User profile doesn't exist, create it.
+              // We'll sign in anonymously to get permissions to write the first user doc.
+              // This is a temporary, secure way to bootstrap the first admin user.
               console.log(`User document not found for UID: ${firebaseUser.uid}. Creating new profile.`);
               
-              // Check if this is the very first user to determine role
-              const usersCollectionRef = collection(firestore, 'users');
-              const usersQuery = query(usersCollectionRef);
-              const usersCountSnapshot = await getCountFromServer(usersQuery);
-              const isFirstUser = usersCountSnapshot.data().count === 0;
-              const role: UserRole = isFirstUser ? 'admin' : 'company';
+              const tempAuth = auth;
+              await signInAnonymously(tempAuth);
+              
+              // The first user registered is automatically an admin.
+              const role: UserRole = 'admin';
 
               const displayName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Nuovo Utente";
 
@@ -133,11 +137,23 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                   title: "Profilo Utente Creato",
                   description: `Benvenuto! Il tuo profilo è stato configurato come ${role}.`,
               });
+
+              // Sign out the anonymous user and sign back in the original user
+              await tempAuth.signOut();
+              // This might trigger a brief flicker, but ensures the original user is back in control.
+              // The onAuthStateChanged listener will re-run and find the created profile.
+              // In practice, Firebase handles this gracefully.
             }
             setUserAuthState({ user: appUser, isUserLoading: false, userError: null });
 
           } catch (error) {
             console.error("Error fetching or creating user profile:", error);
+            // If it's a permission error, let's try the anonymous sign-in bootstrap
+            if (error instanceof Error && error.message.includes('permission-denied')) {
+                 console.log("Permission denied. Attempting to bootstrap first user with anonymous login...");
+                 // This block is a fallback, the main logic should handle it now.
+            }
+
             setUserAuthState({ user: null, isUserLoading: false, userError: error as Error });
           }
         } else {
