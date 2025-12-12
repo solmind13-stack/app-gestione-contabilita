@@ -7,3 +7,4 @@ import '@/ai/flows/generate-automated-narrative-reports.ts';
 import '@/ai/flows/generate-financial-insights.ts';
 import '@/ai/flows/suggest-deadlines-from-movements.ts';
 import '@/ai/flows/generate-report-flow.ts';
+import '@/ai/flows/import-transactions-flow.ts';

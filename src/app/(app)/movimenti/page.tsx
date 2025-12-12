@@ -38,6 +38,7 @@ import type { Movimento, Riepilogo, AppUser } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
+import { ImportMovementsDialog } from '@/components/movimenti/import-movements-dialog';
 
 const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!firestore || !user) return null;
@@ -117,7 +118,8 @@ export default function MovimentiPage() {
     }, [firestore, toast, isSeeding, isLoadingMovimenti, user]);
 
 
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
@@ -129,9 +131,9 @@ export default function MovimentiPage() {
         }
     }, [user]);
 
-    const handleOpenDialog = (movement?: Movimento) => {
+    const handleOpenAddDialog = (movement?: Movimento) => {
         setEditingMovement(movement || null);
-        setIsDialogOpen(true);
+        setIsAddDialogOpen(true);
     }
     
     const handleAddMovement = async (newMovementData: Omit<Movimento, 'id'>) => {
@@ -160,6 +162,30 @@ export default function MovimentiPage() {
         } catch (error) {
              console.error("Error updating movement: ", error);
             toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare il movimento. Controlla i permessi.' });
+        }
+    };
+    
+    const handleImportMovements = async (importedMovements: Omit<Movimento, 'id'>[]) => {
+        if (!user || !firestore) return;
+        try {
+            const batch = writeBatch(firestore);
+            importedMovements.forEach(movement => {
+                const docRef = doc(collection(firestore, 'movements'));
+                batch.set(docRef, {
+                    ...movement,
+                    createdBy: user.uid,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                });
+            });
+            await batch.commit();
+            toast({
+                title: "Importazione completata",
+                description: `${importedMovements.length} movimenti sono stati importati con successo.`
+            });
+        } catch (error) {
+             console.error("Error importing movements: ", error);
+             toast({ variant: 'destructive', title: 'Errore Importazione', description: 'Impossibile salvare i movimenti importati.' });
         }
     };
 
@@ -208,13 +234,19 @@ export default function MovimentiPage() {
   return (
     <div className="flex flex-col gap-6">
        <AddMovementDialog
-            isOpen={isDialogOpen}
-            setIsOpen={setIsDialogOpen}
+            isOpen={isAddDialogOpen}
+            setIsOpen={setIsAddDialogOpen}
             onAddMovement={handleAddMovement}
             onEditMovement={handleEditMovement}
             movementToEdit={editingMovement}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
             currentUser={user!}
+        />
+        <ImportMovementsDialog
+            isOpen={isImportDialogOpen}
+            setIsOpen={setIsImportDialogOpen}
+            onImport={handleImportMovements}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
         />
        <Tabs value={selectedCompany} onValueChange={(value) => setSelectedCompany(value as 'LNC' | 'STG' | 'Tutte')} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
@@ -240,24 +272,14 @@ export default function MovimentiPage() {
                     <Sparkles className="mr-2 h-4 w-4" />
                     Suggerisci Scadenze
                 </Button>
-                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0" disabled={!user}>
+                <Button onClick={() => handleOpenAddDialog()} className="flex-shrink-0" disabled={!user}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="flex-shrink-0" disabled>
-                            <Upload className="mr-2 h-4 w-4" />
-                            Importa
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                        <DropdownMenuItem>
-                        <FileSpreadsheet className="mr-2 h-4 w-4" />
-                        <span>Importa da Excel</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <Button variant="outline" className="flex-shrink-0" onClick={() => setIsImportDialogOpen(true)}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Importa
+                </Button>
             </div>
         </div>
 
@@ -352,7 +374,7 @@ export default function MovimentiPage() {
                             <TableCell>{movimento.metodoPag}</TableCell>
                             <TableCell>{movimento.note}</TableCell>
                             <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(movimento)}>
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenAddDialog(movimento)}>
                                 <Pencil className="h-4 w-4" />
                             </Button>
                             </TableCell>
