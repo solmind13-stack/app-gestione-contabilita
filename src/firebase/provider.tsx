@@ -3,7 +3,7 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc, getCountFromServer, collection, query } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, getCountFromServer, collection, query, serverTimestamp } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import type { AppUser, UserRole } from '@/lib/types';
@@ -90,7 +90,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               appUser = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
-                displayName: firebaseUser.displayName,
+                displayName: userData.displayName,
                 photoURL: firebaseUser.photoURL,
                 role: userData.role as UserRole,
                 company: userData.company as 'LNC' | 'STG' | undefined,
@@ -101,19 +101,21 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               
               // Check if this is the very first user to determine role
               const usersCollectionRef = collection(firestore, 'users');
-              const usersCountSnapshot = await getCountFromServer(usersCollectionRef);
+              const usersQuery = query(usersCollectionRef);
+              const usersCountSnapshot = await getCountFromServer(usersQuery);
               const isFirstUser = usersCountSnapshot.data().count === 0;
-              const role: UserRole = isFirstUser ? 'admin' : 'company'; // Make first user admin
+              const role: UserRole = isFirstUser ? 'admin' : 'company';
+
+              const displayName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Nuovo Utente";
 
               const newUserProfile = {
-                  id: firebaseUser.uid,
+                  uid: firebaseUser.uid,
                   email: firebaseUser.email,
-                  firstName: firebaseUser.displayName?.split(' ')[0] || 'Nuovo',
-                  lastName: firebaseUser.displayName?.split(' ')[1] || 'Utente',
+                  displayName: displayName,
                   role: role,
                   company: 'LNC', // Default company
-                  lastLogin: new Date().toISOString(),
-                  creationDate: new Date().toISOString(),
+                  lastLogin: serverTimestamp(),
+                  creationDate: serverTimestamp(),
               };
               
               await setDoc(userDocRef, newUserProfile);
@@ -121,7 +123,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               appUser = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
-                displayName: `${newUserProfile.firstName} ${newUserProfile.lastName}`,
+                displayName: newUserProfile.displayName,
                 photoURL: firebaseUser.photoURL,
                 role: newUserProfile.role,
                 company: newUserProfile.company as 'LNC' | 'STG',

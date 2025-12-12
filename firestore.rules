@@ -12,64 +12,53 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    function isUserRole(role) {
-      // This is safe because it's only called after isSignedIn(), which checks for request.auth != null.
-      // And we check for the document's existence before accessing its data.
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
+    function isRole(role) {
+      if (!isSignedIn()) { return false; }
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
     
     function canAccessCompanyData(company) {
-      // This function determines if a user can access data for a specific company.
-      if (!isSignedIn()) {
-        return false;
-      }
-      let userData = getUserData();
-      // Admins and editors can access any company's data.
-      // A 'company' role user can only access data if their profile's company matches.
-      return userData.role == 'admin' || userData.role == 'editor' || (userData.role == 'company' && userData.company == company);
+      if (!isSignedIn()) { return false; }
+      let userRole = getUserRole();
+      return userRole == 'admin' || userRole == 'editor' || 
+             (userRole == 'company' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.company == company);
     }
     
     // Rules for the 'users' collection
     match /users/{userId} {
-      // CREATE: Any authenticated user can create THEIR OWN user document. This is essential for the sign-up process.
-      allow create: if isOwner(userId);
+      // CREATE: Any authenticated user can create THEIR OWN user document.
+      allow create: if isSignedIn() && isOwner(userId);
 
-      // READ (get): A user can read THEIR OWN document. An admin can also read any document.
-      allow get: if isOwner(userId) || isUserRole('admin');
+      // READ (get): A user can read THEIR OWN document. An admin can read any document for the user list view.
+      allow get: if isSignedIn() && (isOwner(userId) || isRole('admin'));
       
-      // LIST: Only users with the 'admin' role can list all user documents. This is for the settings page.
-      allow list: if isUserRole('admin');
+      // LIST: Only users with the 'admin' role can list all user documents.
+      allow list: if isRole('admin');
       
       // UPDATE: A user can update their own profile. An admin can update any profile.
       // A user is not allowed to change their own role.
-      allow update: if isUserRole('admin') || (isOwner(userId) && request.resource.data.role == resource.data.role);
+      allow update: if isRole('admin') || (isOwner(userId) && request.resource.data.role == resource.data.role);
       
       // DELETE: Only admins can delete users.
-      allow delete: if isUserRole('admin');
+      allow delete: if isRole('admin');
     }
 
     // Rules for financial data collections (movements, deadlines, forecasts)
     match /{collection}/{docId} where collection in ['movements', 'deadlines', 'incomeForecasts', 'expenseForecasts'] {
       // READ (get), UPDATE, DELETE on existing documents.
-      // Access is granted if the user has the right role for the company specified IN THE DOCUMENT ITSELF.
-      // This is secure because we check for the existence of the user document first.
-      allow get, update, delete: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && canAccessCompanyData(resource.data.societa);
+      allow get, update, delete: if isSignedIn() && canAccessCompanyData(resource.data.societa);
       
       // CREATE a new document.
-      // Access is granted if the user has the right role for the company specified IN THE INCOMING DOCUMENT.
-      allow create: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && canAccessCompanyData(request.resource.data.societa);
+      allow create: if isSignedIn() && canAccessCompanyData(request.resource.data.societa);
 
       // LIST (query multiple documents)
-      // The query for a 'company' user MUST be constrained by 'societa'. This forces the client to ask for specific
-      // company data, preventing the "Missing or insufficient permissions" error.
-      // Admins and editors are allowed to query without this constraint.
-      allow list: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-                     ( (isUserRole('admin') || isUserRole('editor')) || 
-                       (isUserRole('company') && request.query.where[0].field == 'societa' && request.query.where[0].op == '==' && request.query.where[0].value == getUserData().company) );
+      allow list: if isSignedIn() && 
+                     ( isRole('admin') || isRole('editor') || 
+                       (isRole('company') && request.query.where[0].field == 'societa' && request.query.where[0].op == '==' && request.query.where[0].value == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.company) );
     }
     
     // Sub-collections for users, like chatHistory
