@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { useToast } from '@/hooks/use-toast';
-import type { Movimento, User } from '@/lib/types';
+import type { Movimento, AppUser } from '@/lib/types';
 import { it } from 'date-fns/locale';
 
 const FormSchema = z.object({
@@ -65,7 +65,7 @@ interface AddMovementDialogProps {
   onEditMovement: (movement: Movimento) => Promise<void>;
   movementToEdit?: Movimento | null;
   defaultCompany?: 'LNC' | 'STG';
-  currentUser: User;
+  currentUser: AppUser;
 }
 
 const CATEGORIE = {
@@ -208,7 +208,7 @@ export function AddMovementDialog({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Società</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={currentUser?.role === 'company'}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona società" />

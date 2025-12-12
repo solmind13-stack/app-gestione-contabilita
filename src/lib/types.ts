@@ -62,14 +62,15 @@ export type Riepilogo = {
     ivaNetta: number;
 }
 
-export type UserRole = 'admin' | 'editor' | 'viewer';
+export type UserRole = 'admin' | 'editor' | 'company';
 
-export type User = {
+export type AppUser = {
     uid: string;
     displayName: string | null;
     email: string | null;
     photoURL?: string | null;
-    role?: UserRole;
+    role: UserRole;
+    company?: 'LNC' | 'STG';
 };
 
 export type Scadenza = {

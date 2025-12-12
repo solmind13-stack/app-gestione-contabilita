@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, writeBatch, getDocs, doc } from 'firebase/firestore';
+import { collection, query, where, writeBatch, getDocs, doc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -33,8 +33,21 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { previsioniEntrateData as initialData } from '@/lib/previsioni-entrate-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
-import type { PrevisioneEntrata, RiepilogoPrevisioniEntrate } from '@/lib/types';
+import type { PrevisioneEntrata, RiepilogoPrevisioniEntrate, AppUser } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+
+const getPrevisioniQuery = (firestore: any, user: AppUser | null) => {
+    if (!user) return null;
+    const collectionRef = collection(firestore, 'incomeForecasts');
+    if (user.role === 'admin' || user.role === 'editor') {
+        return query(collectionRef);
+    }
+    if (user.role === 'company' && user.company) {
+        return query(collectionRef, where('societa', '==', user.company));
+    }
+    return null;
+}
+
 
 export default function PrevisioniEntratePage() {
     const { toast } = useToast();
@@ -46,11 +59,8 @@ export default function PrevisioniEntratePage() {
     const { user } = useUser();
     const firestore = useFirestore();
 
-    const incomeForecastsQuery = useMemoFirebase(() => {
-        if (!user) return null;
-        return query(collection(firestore, 'incomeForecasts'));
-    }, [firestore, user]);
-    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
+    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user), [firestore, user]);
+    const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
 
      useEffect(() => {
         const seedDatabase = async () => {
@@ -66,7 +76,7 @@ export default function PrevisioniEntratePage() {
                 initialData.forEach((previsione) => {
                     const docRef = doc(collection(firestore, "incomeForecasts"));
                     const { id, ...previsioneData } = previsione;
-                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system' });
+                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
                 });
                 try {
                     await batch.commit();
@@ -89,9 +99,14 @@ export default function PrevisioniEntratePage() {
     const calculatePonderato = (lordo: number, probabilita: number) => lordo * probabilita;
 
     const filteredPrevisioni = useMemo(() => {
-      let sortableItems = [...(previsioni || [])]
-        .filter(p => selectedCompany === 'Tutte' || p.societa === selectedCompany)
-        .filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+      let data = previsioni || [];
+      if (user?.role === 'company' && user.company) {
+          data = data.filter(p => p.societa === user.company);
+      } else if (selectedCompany !== 'Tutte') {
+          data = data.filter(p => p.societa === selectedCompany);
+      }
+
+      let sortableItems = [...data].filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
 
       if (sortConfig !== null) {
         sortableItems.sort((a, b) => {
@@ -105,7 +120,7 @@ export default function PrevisioniEntratePage() {
         });
       }
       return sortableItems;
-    }, [previsioni, selectedCompany, searchTerm, sortConfig]);
+    }, [previsioni, selectedCompany, searchTerm, sortConfig, user]);
 
     const riepilogo = useMemo((): RiepilogoPrevisioniEntrate => {
         const data = filteredPrevisioni;
@@ -131,6 +146,7 @@ export default function PrevisioniEntratePage() {
     };
 
     const getPageTitle = () => {
+        if (user?.role === 'company') return `Previsioni Entrate - ${user.company}`;
         if (selectedCompany === 'Tutte') return 'Previsioni Entrate - Tutte le società';
         return `Previsioni Entrate - ${selectedCompany}`;
     };
@@ -171,12 +187,14 @@ export default function PrevisioniEntratePage() {
         </div>
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-            <TabsList>
-                <TabsTrigger value="Tutte">Tutte</TabsTrigger>
-                <TabsTrigger value="LNC">LNC</TabsTrigger>
-                <TabsTrigger value="STG">STG</TabsTrigger>
-            </TabsList>
-            <div className="flex w-full md:w-auto items-center gap-2">
+            {user && (user.role === 'admin' || user.role === 'editor') && (
+                <TabsList>
+                    <TabsTrigger value="Tutte">Tutte</TabsTrigger>
+                    <TabsTrigger value="LNC">LNC</TabsTrigger>
+                    <TabsTrigger value="STG">STG</TabsTrigger>
+                </TabsList>
+            )}
+            <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
                 <div className="relative flex-grow">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -241,6 +259,12 @@ export default function PrevisioniEntratePage() {
                              <TableRow>
                                 <TableCell colSpan={14} className="h-24 text-center">
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+                                </TableCell>
+                            </TableRow>
+                        ) : error ? (
+                            <TableRow>
+                                <TableCell colSpan={14} className="h-24 text-center text-red-500">
+                                    Errore nel caricamento: {error.message}
                                 </TableCell>
                             </TableRow>
                         ) : filteredPrevisioni.length === 0 ? (

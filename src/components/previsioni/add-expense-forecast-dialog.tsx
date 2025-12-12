@@ -37,7 +37,7 @@ import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import type { PrevisioneUscita, User } from '@/lib/types';
+import type { PrevisioneUscita, AppUser } from '@/lib/types';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -66,7 +66,7 @@ interface AddExpenseForecastDialogProps {
   onEditForecast: (forecast: PrevisioneUscita) => Promise<void>;
   forecastToEdit?: PrevisioneUscita | null;
   defaultCompany?: 'LNC' | 'STG';
-  currentUser: User;
+  currentUser: AppUser;
 }
 
 const CATEGORIE = {
@@ -88,6 +88,7 @@ export function AddExpenseForecastDialog({
   onEditForecast,
   forecastToEdit,
   defaultCompany,
+  currentUser,
 }: AddExpenseForecastDialogProps) {
   const isEditMode = !!forecastToEdit;
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -136,7 +137,7 @@ export function AddExpenseForecastDialog({
         });
       }
     }
-  }, [isOpen, isEditMode, forecastToEdit, defaultCompany, form]);
+  }, [isOpen, isEditMode, forecastToEdit, defaultCompany, form, currentUser]);
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
@@ -176,7 +177,7 @@ export function AddExpenseForecastDialog({
                 <FormField control={form.control} name="societa" render={({ field }) => (
                     <FormItem>
                         <FormLabel>Società</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona società" /></SelectTrigger></FormControl><SelectContent><SelectItem value="LNC">LNC</SelectItem><SelectItem value="STG">STG</SelectItem></SelectContent></Select>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={currentUser?.role === 'company'}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona società" /></SelectTrigger></FormControl><SelectContent><SelectItem value="LNC">LNC</SelectItem><SelectItem value="STG">STG</SelectItem></SelectContent></Select>
                         <FormMessage />
                     </FormItem>
                 )} />

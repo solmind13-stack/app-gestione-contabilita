@@ -37,7 +37,7 @@ import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import type { Scadenza, User } from '@/lib/types';
+import type { Scadenza, AppUser } from '@/lib/types';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -60,7 +60,7 @@ interface AddDeadlineDialogProps {
   onEditDeadline: (deadline: Scadenza) => Promise<void>;
   deadlineToEdit?: Scadenza | null;
   defaultCompany?: 'LNC' | 'STG';
-  currentUser: User;
+  currentUser: AppUser;
 }
 
 const CATEGORIE_SCADENZE = ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali', 'Rate Mutuo', 'Rate Prestito', 'Affitti Passivi', 'Utenze', 'Stipendi', 'Fornitori'];
@@ -151,7 +151,7 @@ export function AddDeadlineDialog({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Società</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={currentUser?.role === 'company'}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona società" />

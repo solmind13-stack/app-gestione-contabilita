@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query } from 'firebase/firestore';
+import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -33,10 +33,25 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { scadenzeData as initialScadenzeData } from '@/lib/scadenze-data';
-import { cn, formatCurrency, formatDate } from '@/lib/utils';
-import type { Scadenza } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import type { Scadenza, AppUser } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
+
+const getScadenzeQuery = (firestore: any, user: AppUser | null) => {
+    if (!user) return null;
+    const scadenzeCollection = collection(firestore, 'deadlines');
+
+    if (user.role === 'admin' || user.role === 'editor') {
+        return query(scadenzeCollection);
+    }
+    
+    if (user.role === 'company' && user.company) {
+        return query(scadenzeCollection, where('societa', '==', user.company));
+    }
+    return null;
+}
 
 export default function ScadenzePage() {
     const { toast } = useToast();
@@ -50,12 +65,9 @@ export default function ScadenzePage() {
     const { user } = useUser();
     const firestore = useFirestore();
 
-    const deadlinesQuery = useMemoFirebase(() => {
-        if (!user) return null;
-        return query(collection(firestore, 'deadlines'));
-    }, [firestore, user]);
+    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user), [firestore, user]);
     
-    const { data: scadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(deadlinesQuery);
+    const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
 
     useEffect(() => {
         const seedDatabase = async () => {
@@ -71,7 +83,7 @@ export default function ScadenzePage() {
                 initialScadenzeData.forEach((scadenza) => {
                     const docRef = doc(collection(firestore, "deadlines"));
                     const { id, ...scadenzaData } = scadenza; // Exclude our static ID
-                    batch.set(docRef, { ...scadenzaData, createdBy: user?.uid || 'system' });
+                    batch.set(docRef, { ...scadenzaData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
                 });
                 try {
                     await batch.commit();
@@ -132,20 +144,29 @@ export default function ScadenzePage() {
         setIsDialogOpen(true);
     };
 
-    const filteredScadenze = useMemo(() => (scadenze || [])
-        .filter(s => selectedCompany === 'Tutte' || s.societa === selectedCompany)
-        .filter(s => s.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
-        .sort((a, b) => {
-            const dateA = new Date(a.dataScadenza).getTime();
-            const dateB = new Date(b.dataScadenza).getTime();
-            return sortOrder === 'asc' ? dateA - dateB : dateB - a.id.localeCompare(b.id);
-        }), [scadenze, selectedCompany, searchTerm, sortOrder]);
+    const filteredScadenze = useMemo(() => {
+        let data = scadenze || [];
+        if (user?.role === 'company' && user.company) {
+            data = data.filter(s => s.societa === user.company);
+        } else if (selectedCompany !== 'Tutte') {
+            data = data.filter(s => s.societa === selectedCompany);
+        }
+
+        return data
+            .filter(s => s.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
+            .sort((a, b) => {
+                const dateA = new Date(a.dataScadenza).getTime();
+                const dateB = new Date(b.dataScadenza).getTime();
+                return sortOrder === 'asc' ? dateA - dateB : dateB - a.id.localeCompare(b.id);
+            });
+    }, [scadenze, selectedCompany, searchTerm, sortOrder, user]);
     
     const { riepilogo, scadenzeMese, scadenzeUrgenti, scadenzeScadute } = useMemo(() => {
         const data = filteredScadenze;
         const oggi = new Date();
-        const setteGiorniFa = new Date(oggi);
-        setteGiorniFa.setDate(oggi.getDate() + 7);
+        oggi.setHours(0, 0, 0, 0); // Set to start of day
+        const setteGiorni = new Date(oggi);
+        setteGiorni.setDate(oggi.getDate() + 7);
 
         const scadenzeNelMese = data.filter(s => {
             const dataScadenza = new Date(s.dataScadenza);
@@ -154,7 +175,7 @@ export default function ScadenzePage() {
 
         const scadenzeUrg = data.filter(s => {
             const dataScadenza = new Date(s.dataScadenza);
-            return dataScadenza >= oggi && dataScadenza <= setteGiorniFa && s.stato !== 'Pagato';
+            return dataScadenza >= oggi && dataScadenza <= setteGiorni && s.stato !== 'Pagato';
         });
 
         const scadenzeOverdue = data.filter(s => new Date(s.dataScadenza) < oggi && s.stato !== 'Pagato');
@@ -167,11 +188,11 @@ export default function ScadenzePage() {
         return {
             riepilogo: { totalePrevisto, totalePagato, daPagare, percentualeCompletamento },
             scadenzeMese: {
-                importo: scadenzeNelMese.reduce((acc, s) => acc + s.importoPrevisto, 0),
+                importo: scadenzeNelMese.reduce((acc, s) => acc + (s.importoPrevisto - s.importoPagato), 0),
                 conteggio: scadenzeNelMese.length
             },
             scadenzeUrgenti: {
-                importo: scadenzeUrg.reduce((acc, s) => acc + s.importoPrevisto, 0),
+                importo: scadenzeUrg.reduce((acc, s) => acc + (s.importoPrevisto - s.importoPagato), 0),
                 conteggio: scadenzeUrg.length
             },
             scadenzeScadute: {
@@ -182,6 +203,7 @@ export default function ScadenzePage() {
     }, [filteredScadenze]);
 
     const getPageTitle = () => {
+        if (user?.role === 'company') return `Scadenze - ${user.company}`;
         if (selectedCompany === 'Tutte') return 'Scadenze - Tutte le società';
         return `Scadenze - ${selectedCompany}`;
     };
@@ -194,7 +216,7 @@ export default function ScadenzePage() {
         onAddDeadline={handleAddDeadline}
         onEditDeadline={handleEditDeadline}
         deadlineToEdit={editingDeadline}
-        defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+        defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
         currentUser={user!}
       />
 
@@ -247,12 +269,14 @@ export default function ScadenzePage() {
 
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-            <TabsList>
-                <TabsTrigger value="Tutte">Tutte</TabsTrigger>
-                <TabsTrigger value="LNC">LNC</TabsTrigger>
-                <TabsTrigger value="STG">STG</TabsTrigger>
-            </TabsList>
-            <div className="flex w-full md:w-auto items-center gap-2">
+            {user && (user.role === 'admin' || user.role === 'editor') && (
+                <TabsList>
+                    <TabsTrigger value="Tutte">Tutte</TabsTrigger>
+                    <TabsTrigger value="LNC">LNC</TabsTrigger>
+                    <TabsTrigger value="STG">STG</TabsTrigger>
+                </TabsList>
+            )}
+            <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
                 <div className="relative flex-grow">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -263,13 +287,13 @@ export default function ScadenzePage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0">
+                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0" disabled={!user}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="flex-shrink-0">
+                        <Button variant="outline" className="flex-shrink-0" disabled>
                             <Upload className="mr-2 h-4 w-4" />
                             Importa
                         </Button>
@@ -321,13 +345,19 @@ export default function ScadenzePage() {
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                                 </TableCell>
                             </TableRow>
+                        ) : error ? (
+                            <TableRow>
+                                <TableCell colSpan={11} className="h-24 text-center text-red-500">
+                                    Errore nel caricamento: {error.message}
+                                </TableCell>
+                            </TableRow>
                         ) : filteredScadenze.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={11} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
                             </TableRow>
                         ) : (
                             filteredScadenze.map((scadenza) => (
-                            <TableRow key={scadenza.id}>
+                            <TableRow key={scadenza.id} className={cn(new Date(scadenza.dataScadenza) < new Date() && scadenza.stato !== 'Pagato' && 'bg-red-50 dark:bg-red-900/20')}>
                                 <TableCell>
                                     <Badge variant={scadenza.societa === 'LNC' ? 'default' : 'secondary'}>{scadenza.societa}</Badge>
                                 </TableCell>
@@ -341,10 +371,10 @@ export default function ScadenzePage() {
                                 <TableCell className="text-right font-medium">{scadenza.importoPagato > 0 ? formatCurrency(scadenza.importoPagato) : '-'}</TableCell>
                                 <TableCell className="text-center">
                                     <Badge
-                                      className={cn("text-white", {
-                                        "bg-green-500 hover:bg-green-600": scadenza.stato === 'Pagato',
-                                        "bg-red-500 hover:bg-red-600": scadenza.stato === 'Da pagare',
-                                        "bg-yellow-500 hover:bg-yellow-600": scadenza.stato === 'Parziale',
+                                      className={cn({
+                                        "bg-green-600 hover:bg-green-700 text-white": scadenza.stato === 'Pagato',
+                                        "bg-red-600 hover:bg-red-700 text-white": scadenza.stato === 'Da pagare',
+                                        "bg-yellow-500 hover:bg-yellow-600 text-white": scadenza.stato === 'Parziale',
                                       })}
                                     >{scadenza.stato}</Badge>
                                 </TableCell>

@@ -31,7 +31,7 @@ import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, ADMIN_NAV_ITEMS } from "@/lib/constants";
 import type { NavItem } from "@/lib/types";
-import { user } from "@/lib/data";
+import { useUser } from "@/firebase";
 
 const ICONS: { [key: string]: React.ElementType } = {
   LayoutGrid,
@@ -45,6 +45,7 @@ const ICONS: { [key: string]: React.ElementType } = {
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { user } = useUser();
 
   const renderNavItem = (item: NavItem) => {
     const Icon = ICONS[item.icon];
@@ -107,7 +108,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="border-t">
         <SidebarMenu>
-            {user.role === 'admin' && ADMIN_NAV_ITEMS.map(renderNavItem)}
+            {user?.role === 'admin' && ADMIN_NAV_ITEMS.map(renderNavItem)}
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>

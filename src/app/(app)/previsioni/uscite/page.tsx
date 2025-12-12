@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, writeBatch, getDocs, doc, addDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, writeBatch, getDocs, doc, addDoc, updateDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -34,9 +34,21 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { previsioniUsciteData as initialData } from '@/lib/previsioni-uscite-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
-import type { PrevisioneUscita, RiepilogoPrevisioniUscite } from '@/lib/types';
+import type { PrevisioneUscita, RiepilogoPrevisioniUscite, AppUser } from '@/lib/types';
 import { AddExpenseForecastDialog } from '@/components/previsioni/add-expense-forecast-dialog';
 import { useToast } from '@/hooks/use-toast';
+
+const getPrevisioniQuery = (firestore: any, user: AppUser | null) => {
+    if (!user) return null;
+    const collectionRef = collection(firestore, 'expenseForecasts');
+    if (user.role === 'admin' || user.role === 'editor') {
+        return query(collectionRef);
+    }
+    if (user.role === 'company' && user.company) {
+        return query(collectionRef, where('societa', '==', user.company));
+    }
+    return null;
+}
 
 export default function PrevisioniUscitePage() {
     const { toast } = useToast();
@@ -50,12 +62,9 @@ export default function PrevisioniUscitePage() {
     const { user } = useUser();
     const firestore = useFirestore();
 
-    const expenseForecastsQuery = useMemoFirebase(() => {
-        if (!user) return null;
-        return query(collection(firestore, 'expenseForecasts'));
-    }, [firestore, user]);
+    const expenseForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user), [firestore, user]);
 
-    const { data: previsioni, isLoading: isLoadingPrevisioni } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
+    const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
 
      useEffect(() => {
         const seedDatabase = async () => {
@@ -71,7 +80,7 @@ export default function PrevisioniUscitePage() {
                 initialData.forEach((previsione) => {
                     const docRef = doc(collection(firestore, "expenseForecasts"));
                     const { id, ...previsioneData } = previsione;
-                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system' });
+                    batch.set(docRef, { ...previsioneData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
                 });
                 try {
                     await batch.commit();
@@ -127,25 +136,30 @@ export default function PrevisioniUscitePage() {
     const calculatePonderato = (importo: number, probabilita: number) => importo * probabilita;
 
     const filteredPrevisioni = useMemo(() => {
-      let sortableItems = [...(previsioni || [])]
-        .filter(p => selectedCompany === 'Tutte' || p.societa === selectedCompany)
-        .filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+        let data = previsioni || [];
+        if (user?.role === 'company' && user.company) {
+            data = data.filter(p => p.societa === user.company);
+        } else if (selectedCompany !== 'Tutte') {
+            data = data.filter(p => p.societa === selectedCompany);
+        }
 
-      if (sortConfig !== null) {
-        sortableItems.sort((a, b) => {
-          const valA = a[sortConfig.key];
-          const valB = b[sortConfig.key];
-          if (valA < valB) {
-            return sortConfig.direction === 'asc' ? -1 : 1;
-          }
-          if (valA > valB) {
-            return sortConfig.direction === 'asc' ? 1 : -1;
-          }
-          return 0;
-        });
-      }
-      return sortableItems;
-    }, [previsioni, selectedCompany, searchTerm, sortConfig]);
+        let sortableItems = [...data].filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+            const valA = a[sortConfig.key];
+            const valB = b[sortConfig.key];
+            if (valA < valB) {
+                return sortConfig.direction === 'asc' ? -1 : 1;
+            }
+            if (valA > valB) {
+                return sortConfig.direction === 'asc' ? 1 : -1;
+            }
+            return 0;
+            });
+        }
+        return sortableItems;
+    }, [previsioni, selectedCompany, searchTerm, sortConfig, user]);
 
     const riepilogo = useMemo((): RiepilogoPrevisioniUscite => {
         const data = filteredPrevisioni;
@@ -173,6 +187,7 @@ export default function PrevisioniUscitePage() {
     };
     
     const getPageTitle = () => {
+        if (user?.role === 'company') return `Previsioni Uscite - ${user.company}`;
         if (selectedCompany === 'Tutte') return 'Previsioni Uscite - Tutte le società';
         return `Previsioni Uscite - ${selectedCompany}`;
     };
@@ -185,7 +200,7 @@ export default function PrevisioniUscitePage() {
             onAddForecast={handleAddForecast}
             onEditForecast={handleEditForecast}
             forecastToEdit={editingForecast}
-            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
             currentUser={user!}
         />
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -222,12 +237,14 @@ export default function PrevisioniUscitePage() {
         </div>
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-            <TabsList>
-                <TabsTrigger value="Tutte">Tutte</TabsTrigger>
-                <TabsTrigger value="LNC">LNC</TabsTrigger>
-                <TabsTrigger value="STG">STG</TabsTrigger>
-            </TabsList>
-            <div className="flex w-full md:w-auto items-center gap-2">
+            {user && (user.role === 'admin' || user.role === 'editor') && (
+                <TabsList>
+                    <TabsTrigger value="Tutte">Tutte</TabsTrigger>
+                    <TabsTrigger value="LNC">LNC</TabsTrigger>
+                    <TabsTrigger value="STG">STG</TabsTrigger>
+                </TabsList>
+            )}
+            <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
                 <div className="relative flex-grow">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -238,7 +255,7 @@ export default function PrevisioniUscitePage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0">
+                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0" disabled={!user}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
@@ -295,6 +312,8 @@ export default function PrevisioniUscitePage() {
                     <TableBody>
                         {(isLoadingPrevisioni || isSeeding) ? (
                             <TableRow><TableCell colSpan={19} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                        ) : error ? (
+                            <TableRow><TableCell colSpan={19} className="h-24 text-center text-red-500">Errore nel caricamento: {error.message}</TableCell></TableRow>
                         ) : filteredPrevisioni.length === 0 ? (
                             <TableRow><TableCell colSpan={19} className="h-24 text-center">Nessuna previsione trovata.</TableCell></TableRow>
                         ) : (

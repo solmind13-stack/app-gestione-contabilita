@@ -34,10 +34,26 @@ import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Movimento, Riepilogo, PrevisioneEntrata, PrevisioneUscita, DeadlineSuggestion, Scadenza } from '@/lib/types';
+import type { Movimento, Riepilogo, PrevisioneEntrata, PrevisioneUscita, DeadlineSuggestion, Scadenza, AppUser } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
+
+const getMovimentiQuery = (firestore: any, user: AppUser | null) => {
+    if (!user) return null;
+    const movimentiCollection = collection(firestore, 'movements');
+
+    if (user.role === 'admin' || user.role === 'editor') {
+        return query(movimentiCollection);
+    }
+    
+    if (user.role === 'company' && user.company) {
+        return query(movimentiCollection, where('societa', '==', user.company));
+    }
+
+    // Default to no data if role is not set or invalid
+    return null;
+}
 
 export default function MovimentiPage() {
     const { toast } = useToast();
@@ -46,49 +62,62 @@ export default function MovimentiPage() {
     const { user } = useUser();
     const firestore = useFirestore();
     
-    const movimentiQuery = useMemoFirebase(() => {
-        if (!user) return null;
-        // The user's custom claims are not available on the client, so we can't query by role directly
-        // Instead, we fetch all and filter on the client, which works for small datasets
-        // For larger datasets, a more sophisticated role-based data structure would be needed
-        return query(collection(firestore, 'movements'));
-    }, [firestore, user]);
+    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user), [firestore, user]);
 
-    const { data: movimentiData, isLoading: isLoadingMovimenti } = useCollection<Movimento>(movimentiQuery);
+    const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
 
     const [isSeeding, setIsSeeding] = useState(false);
 
      useEffect(() => {
         const seedDatabase = async () => {
-            if (!firestore || isSeeding || (movimentiData && movimentiData.length > 0)) return;
-            
+            if (!firestore || isSeeding) return;
+
+            // Check if seeding is necessary by checking one collection
             const q = query(collection(firestore, "movements"));
             const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
                 setIsSeeding(true);
-                toast({ title: "Popolamento database...", description: "Caricamento dati iniziali per i movimenti." });
-                const batch = writeBatch(firestore);
-                initialMovimenti.forEach((movimento) => {
-                    const docRef = doc(collection(firestore, "movements"));
-                    const { id, ...movimentoData } = movimento;
-                    batch.set(docRef, { ...movimentoData, createdBy: user?.uid || 'system' });
-                });
+                toast({ title: "Popolamento database...", description: "Caricamento dati iniziali in corso. Potrebbe richiedere un istante." });
+                
                 try {
+                    const batch = writeBatch(firestore);
+                    
+                    // Seed users - create a default admin user for the current logged-in user
+                    if (user) {
+                        const userDocRef = doc(firestore, "users", user.uid);
+                        batch.set(userDocRef, {
+                            id: user.uid,
+                            email: user.email,
+                            firstName: user.displayName?.split(' ')[0] || 'Admin',
+                            lastName: user.displayName?.split(' ')[1] || 'User',
+                            role: 'admin', // Make first user an admin
+                            lastLogin: new Date().toISOString(),
+                            creationDate: new Date().toISOString(),
+                        });
+                    }
+
+                    // Seed movements
+                    initialMovimenti.forEach((movimento) => {
+                        const docRef = doc(collection(firestore, "movements"));
+                        const { id, ...movimentoData } = movimento;
+                        batch.set(docRef, { ...movimentoData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
+                    });
+                    
                     await batch.commit();
-                    toast({ title: "Database popolato!", description: "I dati dei movimenti sono stati caricati." });
+                    toast({ title: "Database popolato!", description: "I dati iniziali sono stati caricati con successo." });
                 } catch (error) {
-                    console.error("Error seeding movements:", error);
+                    console.error("Error seeding database:", error);
                     toast({ variant: "destructive", title: "Errore nel popolamento", description: "Impossibile caricare i dati iniziali." });
                 } finally {
                     setIsSeeding(false);
                 }
             }
         };
-        if (firestore && !isLoadingMovimenti && user) {
+        if (firestore && user && !isLoadingMovimenti) {
             seedDatabase();
         }
-    }, [firestore, toast, isSeeding, movimentiData, isLoadingMovimenti, user]);
+    }, [firestore, toast, isSeeding, isLoadingMovimenti, user]);
 
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -133,18 +162,26 @@ export default function MovimentiPage() {
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
 
-    const filteredMovimenti = useMemo(() => (movimentiData || [])
-        .filter(m => selectedCompany === 'Tutte' || m.societa === selectedCompany)
-        .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
-        .sort((a, b) => {
-            const dateA = new Date(a.data).getTime();
-            const dateB = new Date(b.data).getTime();
-             if (sortOrder === 'asc') {
-                return dateA - dateB;
-            } else {
-                return dateB - dateA;
-            }
-        }), [movimentiData, selectedCompany, searchTerm, sortOrder]);
+    const filteredMovimenti = useMemo(() => {
+        let data = movimentiData || [];
+        if (user?.role === 'company' && user.company) {
+            data = data.filter(m => m.societa === user.company);
+        } else if (selectedCompany !== 'Tutte') {
+            data = data.filter(m => m.societa === selectedCompany);
+        }
+
+        return data
+            .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
+            .sort((a, b) => {
+                const dateA = new Date(a.data).getTime();
+                const dateB = new Date(b.data).getTime();
+                 if (sortOrder === 'asc') {
+                    return dateA - dateB;
+                } else {
+                    return dateB - dateA;
+                }
+            });
+    }, [movimentiData, selectedCompany, searchTerm, sortOrder, user]);
 
     const riepilogo = useMemo((): Riepilogo => {
         const data = filteredMovimenti;
@@ -164,8 +201,8 @@ export default function MovimentiPage() {
     const totalIvaUscite = useMemo(() => filteredMovimenti.reduce((acc, m) => acc + (m.uscita && m.uscita > 0 ? calculateIva(m.uscita, m.iva) : 0), 0), [filteredMovimenti]);
 
     const getPageTitle = () => {
-        if (selectedCompany === 'Tutte') return 'Movimenti - Tutte le società';
-        return `Movimenti - ${selectedCompany}`;
+        if (selectedCompany === 'Tutte' || user?.role !== 'company') return 'Movimenti';
+        return `Movimenti - ${user.company}`;
     }
 
   return (
@@ -176,17 +213,19 @@ export default function MovimentiPage() {
             onAddMovement={handleAddMovement}
             onEditMovement={handleEditMovement}
             movementToEdit={editingMovement}
-            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
             currentUser={user!}
         />
        <Tabs value={selectedCompany} onValueChange={setSelectedCompany} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-            <TabsList>
-                <TabsTrigger value="Tutte">Tutte</TabsTrigger>
-                <TabsTrigger value="LNC">LNC</TabsTrigger>
-                <TabsTrigger value="STG">STG</TabsTrigger>
-            </TabsList>
-            <div className="flex w-full md:w-auto items-center gap-2">
+            {user && (user.role === 'admin' || user.role === 'editor') && (
+                 <TabsList>
+                    <TabsTrigger value="Tutte">Tutte</TabsTrigger>
+                    <TabsTrigger value="LNC">LNC</TabsTrigger>
+                    <TabsTrigger value="STG">STG</TabsTrigger>
+                </TabsList>
+            )}
+            <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
                 <div className="relative flex-grow">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -201,13 +240,13 @@ export default function MovimentiPage() {
                     <Sparkles className="mr-2 h-4 w-4" />
                     Suggerisci Scadenze
                 </Button>
-                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0">
+                <Button onClick={() => handleOpenDialog()} className="flex-shrink-0" disabled={!user}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
                 </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="flex-shrink-0">
+                        <Button variant="outline" className="flex-shrink-0" disabled>
                             <Upload className="mr-2 h-4 w-4" />
                             Importa
                         </Button>
@@ -216,18 +255,6 @@ export default function MovimentiPage() {
                         <DropdownMenuItem>
                         <FileSpreadsheet className="mr-2 h-4 w-4" />
                         <span>Importa da Excel</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                        <FileText className="mr-2 h-4 w-4" />
-                        <span>Importa da PDF</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                        <FileCode className="mr-2 h-4 w-4" />
-                        <span>Importa da Word</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                        <Image className="mr-2 h-4 w-4" />
-                        <span>Importa da Immagine</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -276,6 +303,12 @@ export default function MovimentiPage() {
                         <TableRow>
                             <TableCell colSpan={17} className="h-24 text-center">
                                 <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+                            </TableCell>
+                        </TableRow>
+                    ) : error ? (
+                         <TableRow>
+                            <TableCell colSpan={17} className="h-24 text-center text-red-500">
+                                Errore nel caricamento dei dati: {error.message}
                             </TableCell>
                         </TableRow>
                     ) : filteredMovimenti.length === 0 ? (
@@ -349,7 +382,7 @@ export default function MovimentiPage() {
 
       <Card className="w-full md:w-1/2 lg:w-1/3">
           <CardHeader>
-              <CardTitle>Riepilogo Movimenti {selectedCompany !== 'Tutte' ? selectedCompany : 'Totale'}</CardTitle>
+              <CardTitle>Riepilogo Movimenti {selectedCompany !== 'Tutte' && (user?.role === 'admin' || user?.role === 'editor') ? selectedCompany : ''}</CardTitle>
           </CardHeader>
           <CardContent>
               <div className="space-y-2 text-sm">

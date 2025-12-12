@@ -1,19 +1,12 @@
+// src/firebase/provider.tsx
 'use client';
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore } from 'firebase/firestore';
+import { Firestore, doc, getDoc } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
-import { doc, getDoc } from 'firebase/firestore';
-import type { User as AppUser, UserRole } from '@/lib/types'; // Import your app's user type
-
-interface FirebaseProviderProps {
-  children: ReactNode;
-  firebaseApp: FirebaseApp;
-  firestore: Firestore;
-  auth: Auth;
-}
+import type { AppUser, UserRole } from '@/lib/types';
 
 // Internal state for user authentication, now including the app user profile
 interface UserAuthState {
@@ -53,6 +46,13 @@ export interface UserHookResult {
 // React Context
 export const FirebaseContext = createContext<FirebaseContextState | undefined>(undefined);
 
+interface FirebaseProviderProps {
+  children: ReactNode;
+  firebaseApp: FirebaseApp;
+  firestore: Firestore;
+  auth: Auth;
+}
+
 export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
   children,
   firebaseApp,
@@ -71,13 +71,12 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       return;
     }
 
-    setUserAuthState({ user: null, isUserLoading: true, userError: null });
+    setUserAuthState(prev => ({ ...prev, isUserLoading: true }));
 
     const unsubscribe = onAuthStateChanged(
       auth,
       async (firebaseUser: FirebaseUser | null) => {
         if (firebaseUser) {
-          // User is signed in, fetch their profile from Firestore
           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
           try {
             const userDocSnap = await getDoc(userDocRef);
@@ -88,21 +87,16 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                 email: firebaseUser.email,
                 displayName: firebaseUser.displayName,
                 photoURL: firebaseUser.photoURL,
-                role: userData.role as UserRole, // Cast the role from the document
+                role: userData.role as UserRole,
+                company: userData.company as 'LNC' | 'STG' | undefined,
               };
               setUserAuthState({ user: appUser, isUserLoading: false, userError: null });
             } else {
-              // User doc doesn't exist, maybe this is a new user
-              // For now, treat as an incomplete profile
-              const newUser: AppUser = {
-                 uid: firebaseUser.uid,
-                 email: firebaseUser.email,
-                 displayName: firebaseUser.displayName,
-                 photoURL: firebaseUser.photoURL,
-                 role: 'viewer' // default role
-              }
-               setUserAuthState({ user: newUser, isUserLoading: false, userError: null });
-               console.warn(`User document not found for UID: ${firebaseUser.uid}`);
+              // This is a critical state - a logged-in user without a profile doc.
+              // For a robust app, you might create a default profile here.
+              // For now, we deny access by setting user to null and providing an error.
+               console.warn(`User document not found for UID: ${firebaseUser.uid}. This user will have no permissions.`);
+               setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Profilo utente non trovato.") });
             }
           } catch (error) {
             console.error("Error fetching user profile:", error);
@@ -141,6 +135,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     </FirebaseContext.Provider>
   );
 };
+
 
 export const useFirebase = (): FirebaseServicesAndUser => {
   const context = useContext(FirebaseContext);
