@@ -217,14 +217,14 @@ export default function ImpostazioniPage() {
             <Accordion type="single" collapsible className="w-full">
               {Object.entries(categories).map(([category, subcategories]) => (
                 <AccordionItem value={category} key={category}>
-                  <AccordionTrigger className="hover:no-underline">
-                    <div className="flex items-center justify-between w-full pr-4">
-                      <span className="font-semibold">{category}</span>
-                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleRemoveCategory(category); }}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                       </Button>
-                    </div>
-                  </AccordionTrigger>
+                   <div className="flex items-center justify-between w-full">
+                    <AccordionTrigger className="flex-1 hover:no-underline pr-4">
+                        <span className="font-semibold">{category}</span>
+                    </AccordionTrigger>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); handleRemoveCategory(category); }}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                   <AccordionContent>
                     <div className="space-y-2 pl-4">
                       {subcategories.map(sub => (
