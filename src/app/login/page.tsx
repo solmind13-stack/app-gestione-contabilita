@@ -29,7 +29,8 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!isUserLoading && user) {
+    // Redirect if user is already logged in and has a role
+    if (!isUserLoading && user?.role) {
       router.push("/dashboard");
     }
   }, [user, isUserLoading, router]);
@@ -37,26 +38,67 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    if (!auth) {
+        toast({
+            variant: "destructive",
+            title: "Errore di Inizializzazione",
+            description: "Servizio di autenticazione non disponibile. Riprova più tardi.",
+        });
+        setIsLoading(false);
+        return;
+    }
+    
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
+      // Let the AppLayout handle the redirect after profile check
+      // router.push("/dashboard"); 
     } catch (error: any) {
       console.error("Login failed:", error);
-      toast({
-        variant: "destructive",
-        title: "Login Fallito",
-        description: "Credenziali non valide. Riprova.",
-      });
+      // If user does not exist, try to create it
+      if (error.code === 'auth/user-not-found') {
+        try {
+          await createUserWithEmailAndPassword(auth, email, password);
+          toast({
+            title: "Utente Creato",
+            description: "Nuovo utente registrato. Verrai reindirizzato.",
+          });
+          // Let the AppLayout handle the redirect and profile creation
+        } catch (creationError: any) {
+          console.error("Signup failed:", creationError);
+          toast({
+            variant: "destructive",
+            title: "Registrazione Fallita",
+            description: "Impossibile creare un nuovo utente.",
+          });
+        }
+      } else {
+         toast({
+          variant: "destructive",
+          title: "Login Fallito",
+          description: "Credenziali non valide o errore di rete. Riprova.",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
   
-  if (isUserLoading || (!isUserLoading && user)) {
+  // Show a loading spinner while checking auth state or if the user is logged in but has no role yet
+  if (isUserLoading || (user && !user.role)) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin" />
       </div>
+    );
+  }
+
+  // If user is logged in and has a role, they will be redirected by the useEffect.
+  // This prevents rendering the login form for an already logged-in user.
+  if (user?.role) {
+      return (
+        <div className="flex min-h-screen w-full items-center justify-center">
+            <Loader2 className="h-12 w-12 animate-spin" />
+        </div>
     );
   }
 
@@ -80,6 +122,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
               <div className="grid gap-2">
@@ -90,6 +133,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
             </CardContent>
