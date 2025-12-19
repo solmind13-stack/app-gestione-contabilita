@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import type { Scadenza, AppUser } from '@/lib/types';
+import { CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -62,11 +63,6 @@ interface AddDeadlineDialogProps {
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
 }
-
-const CATEGORIE_SCADENZE = ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali', 'Rate Mutuo', 'Rate Prestito', 'Affitti Passivi', 'Utenze', 'Stipendi', 'Fornitori'];
-const RICORRENZE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale'];
-const STATI = ['Da pagare', 'Pagato', 'Parziale'];
-
 
 export function AddDeadlineDialog({
   isOpen,
@@ -308,7 +304,7 @@ export function AddDeadlineDialog({
                           </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                          {STATI.map(stato => <SelectItem key={stato} value={stato}>{stato}</SelectItem>)}
+                          {STATI_SCADENZE.map(stato => <SelectItem key={stato} value={stato}>{stato}</SelectItem>)}
                           </SelectContent>
                       </Select>
                       <FormMessage />

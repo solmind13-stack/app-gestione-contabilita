@@ -40,6 +40,7 @@ import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-a
 import { useToast } from '@/hooks/use-toast';
 import type { Movimento, AppUser } from '@/lib/types';
 import { it } from 'date-fns/locale';
+import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -67,21 +68,6 @@ interface AddMovementDialogProps {
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
 }
-
-const CATEGORIE = {
-  Immobiliare: ['Affitti', 'Depositi Cauzionali', 'Recupero Spese', 'Immobili'],
-  Energia: ['Quote CEF', 'Pratiche Contributo', 'Incentivi GSE', 'Vendita Energia'],
-  Fornitori: ['Materiali', 'Lavori/Manutenzione', 'Impianti', 'Servizi'],
-  'Gestione Immobili': ['Spese Condominiali', 'Manutenzione', 'Ristrutturazione', 'Utenze'],
-  'Gestione Generale': ['Spese Bancarie', 'Commercialista', 'Telefonia', 'Altre Spese', 'Gestione'],
-  Tasse: ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali'],
-  Finanziamenti: ['Rate Mutuo', 'Rate Prestito', 'Rimborso'],
-  'Movimenti Interni': ['Giroconto', 'Trasferimento'],
-};
-
-const IVA_PERCENTAGES = [0.22, 0.10, 0.04, 0.00];
-
-const METODI_PAGAMENTO = ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'];
 
 export function AddMovementDialog({
   isOpen,

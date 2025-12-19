@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { CATEGORIE } from '@/lib/constants';
 
 
 // Mock data based on the user's image
@@ -25,19 +26,9 @@ const initialData = {
   operators: ['Gibilisco Salvato', 'Gibilisco Nuccio'],
   accounts: ['LNC-BAPR', 'STG-BAPR'],
   paymentMethods: ['Bonifico', 'Contanti', 'Carta', 'Addebito'],
-  categories: {
-    'Immobiliare': ['Affitti', 'Depositi Cauzionali', 'Recupero Spese', 'Immobili'],
-    'Energia': ['Quote CEF', 'Pratiche Contributo', 'Incentivi GSE', 'Vendita Energia'],
-    'Fornitori': ['Materiali', 'Lavori/Manutenzione', 'Impianti', 'Servizi'],
-    'Gestione Immobili': ['Spese Condominiali', 'Manutenzione', 'Ristrutturazione', 'Utenze'],
-    'Gestione Generale': ['Spese Bancarie', 'Commercialista', 'Telefonia', 'Altre Spese', 'Gestione'],
-    'Tasse': ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali'],
-    'Finanziamenti': ['Rate Mutuo', 'Rate Prestito', 'Rimborso'],
-    'Movimenti Interni': ['Giroconto', 'Trasferimento'],
-  },
 };
 
-type CategoryData = typeof initialData.categories;
+type CategoryData = typeof CATEGORIE;
 
 // Generic component for managing a simple list (operators, accounts, etc.)
 const SettingsListManager = ({ title, items, setItems }: { title: string, items: string[], setItems: (items: string[]) => void }) => {
@@ -323,7 +314,13 @@ export default function ImpostazioniPage() {
   const [operators, setOperators] = useState(initialData.operators);
   const [accounts, setAccounts] = useState(initialData.accounts);
   const [paymentMethods, setPaymentMethods] = useState(initialData.paymentMethods);
-  const [categories, setCategories] = useState<CategoryData>(initialData.categories);
+  const [categories, setCategories] = useState<CategoryData>(CATEGORIE);
+  const { toast } = useToast();
+
+  const handleAddCategory = () => {
+    // This would open a dialog to add a new category
+    toast({ title: 'Funzionalità in sviluppo', description: 'La creazione di nuove categorie sarà presto disponibile.' });
+  }
 
   return (
     <div className="space-y-8">
@@ -344,11 +341,16 @@ export default function ImpostazioniPage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Categorie e Sottocategorie</CardTitle>
-            <CardDescription>
-              Le categorie sono definite centralmente e utilizzate dall'assistente AI.
-            </CardDescription>
+          <CardHeader className='flex-row items-center justify-between'>
+            <div>
+              <CardTitle>Categorie e Sottocategorie</CardTitle>
+              <CardDescription>
+                Gestisci le categorie per i movimenti e i suggerimenti AI.
+              </CardDescription>
+            </div>
+            <Button onClick={handleAddCategory}>
+              <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
+            </Button>
           </CardHeader>
           <CardContent>
             <Accordion type="single" collapsible className="w-full">
@@ -362,8 +364,15 @@ export default function ImpostazioniPage() {
                       {subcategories.map(sub => (
                         <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
                           <span>{sub}</span>
+                           <Button variant="ghost" size="icon" onClick={() => toast({ title: 'Funzionalità in sviluppo' })}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
                         </div>
                       ))}
+                       <div className="flex gap-2 pt-2">
+                          <Input placeholder="Nuova sottocategoria..." />
+                          <Button onClick={() => toast({ title: 'Funzionalità in sviluppo' })}>Aggiungi Sottocategoria</Button>
+                        </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>

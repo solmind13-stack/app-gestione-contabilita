@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import type { PrevisioneUscita, AppUser } from '@/lib/types';
+import { CATEGORIE_USCITE, CERTEZZA_USCITE, STATI_USCITE, RICORRENZE_USCITE, IVA_PERCENTAGES } from '@/lib/constants';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -68,18 +69,6 @@ interface AddExpenseForecastDialogProps {
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
 }
-
-const CATEGORIE = {
-    'Fornitori': ['Materiali', 'Lavori/Manutenzione', 'Impianti', 'Servizi'],
-    'Gestione Immobili': ['Spese Condominiali', 'Manutenzione', 'Ristrutturazione', 'Utenze'],
-    'Gestione Generale': ['Spese Bancarie', 'Commercialista', 'Telefonia', 'Altre Spese', 'Gestione'],
-    'Tasse': ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali'],
-    'Finanziamenti': ['Rate Mutuo', 'Rate Prestito', 'Rimborso'],
-};
-const CERTEZZA = ['Certa', 'Probabile', 'Incerta'];
-const STATI = ['Da pagare', 'Pagato', 'Parziale', 'Annullato'];
-const RICORRENZE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale', 'Altro'];
-const IVA_PERCENTAGES = [0.22, 0.10, 0.04, 0.00];
 
 export function AddExpenseForecastDialog({
   isOpen,
@@ -201,10 +190,10 @@ export function AddExpenseForecastDialog({
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField control={form.control} name="categoria" render={({ field }) => (
-                    <FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{Object.keys(CATEGORIE).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{Object.keys(CATEGORIE_USCITE).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="sottocategoria" render={({ field }) => (
-                    <FormItem><FormLabel>Sottocategoria</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Sottocategoria</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{selectedCategory && CATEGORIE_USCITE[selectedCategory as keyof typeof CATEGORIE_USCITE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="iva" render={({ field }) => (
                     <FormItem><FormLabel>% IVA</FormLabel><Select onValueChange={(val) => field.onChange(parseFloat(val))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{IVA_PERCENTAGES.map(iva => <SelectItem key={iva} value={String(iva)}>{iva * 100}%</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
@@ -213,7 +202,7 @@ export function AddExpenseForecastDialog({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="certezza" render={({ field }) => (
-                    <FormItem><FormLabel>Certezza</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{CERTEZZA.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Certezza</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{CERTEZZA_USCITE.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                 )} />
                  <FormField control={form.control} name="probabilita" render={({ field }) => (
                     <FormItem><FormLabel>Probabilità (%)</FormLabel><FormControl><Input type="number" step="0.1" min="0" max="1" {...field} /></FormControl><FormMessage /></FormItem>
@@ -221,12 +210,12 @@ export function AddExpenseForecastDialog({
             </div>
              
             {isEditMode && <FormField control={form.control} name="stato" render={({ field }) => (
-                <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI_USCITE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
             )} />}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="ricorrenza" render={({ field }) => (
-                    <FormItem><FormLabel>Ricorrenza</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{RICORRENZE.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Ricorrenza</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{RICORRENZE_USCITE.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                 )} />
                  <FormField control={form.control} name="fonteContratto" render={({ field }) => (
                     <FormItem><FormLabel>Fonte/Contratto</FormLabel><FormControl><Input {...field} placeholder="Es: Contratto affitto, Mutuo BAPR..." /></FormControl><FormMessage /></FormItem>
