@@ -18,21 +18,27 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { CATEGORIE as initialCategories } from '@/lib/constants';
+import { CATEGORIE as initialCategories, METODI_PAGAMENTO } from '@/lib/constants';
 import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog';
 
 
 // Mock data based on the user's image
 const initialData = {
   accounts: ['LNC-BAPR', 'STG-BAPR'],
-  paymentMethods: ['Bonifico', 'Contanti', 'Carta', 'Addebito'],
 };
 
 type CategoryData = typeof initialCategories;
 
-// Generic component for managing a simple list (operators, accounts, etc.)
-const SettingsListManager = ({ title, items, setItems }: { title: string, items: string[], setItems: (items: string[]) => void }) => {
+type ItemToDelete = {
+    type: 'category' | 'subcategory' | 'account' | 'paymentMethod';
+    name: string;
+    parent?: string;
+}
+
+// Generic component for managing a simple list (accounts, payment methods)
+const SettingsListManager = ({ title, items, setItems, itemType }: { title: string, items: string[], setItems: (items: string[]) => void, itemType: 'account' | 'paymentMethod' }) => {
   const [newItem, setNewItem] = useState('');
+  const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
 
   const handleAddItem = () => {
     if (newItem && !items.includes(newItem)) {
@@ -41,11 +47,33 @@ const SettingsListManager = ({ title, items, setItems }: { title: string, items:
     }
   };
 
-  const handleRemoveItem = (itemToRemove: string) => {
-    setItems(items.filter(item => item !== itemToRemove));
+  const handleDelete = () => {
+    if (!itemToDelete) return;
+    setItems(items.filter(item => item !== itemToDelete.name));
+    setItemToDelete(null);
   };
+  
+  const openDeleteDialog = (item: string) => {
+    setItemToDelete({ type: itemType, name: item });
+  }
 
   return (
+    <>
+    <AlertDialog open={!!itemToDelete} onOpenChange={(isOpen) => !isOpen && setItemToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Questa azione non può essere annullata. Verrà eliminato permanentemente <span className="font-bold">{itemToDelete?.name}</span>.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
@@ -55,7 +83,7 @@ const SettingsListManager = ({ title, items, setItems }: { title: string, items:
           {items.map(item => (
             <div key={item} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
               <span>{item}</span>
-              <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item)}>
+              <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(item)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </div>
@@ -75,6 +103,7 @@ const SettingsListManager = ({ title, items, setItems }: { title: string, items:
         </div>
       </CardContent>
     </Card>
+    </>
   );
 };
 
@@ -312,9 +341,10 @@ const UserManagementCard = () => {
 export default function ImpostazioniPage() {
   const { user } = useUser();
   const [accounts, setAccounts] = useState(initialData.accounts);
-  const [paymentMethods, setPaymentMethods] = useState(initialData.paymentMethods);
+  const [paymentMethods, setPaymentMethods] = useState(METODI_PAGAMENTO);
   const [categories, setCategories] = useState<CategoryData>(initialCategories);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
   const { toast } = useToast();
 
   const handleSaveCategory = (type: 'category' | 'subcategory', name: string, parent?: string) => {
@@ -326,7 +356,7 @@ export default function ImpostazioniPage() {
         setCategories(prev => ({...prev, [name]: [] }));
         toast({ title: 'Categoria Aggiunta', description: `La categoria "${name}" è stata creata.` });
     } else if (type === 'subcategory' && parent) {
-         if (categories[parent]?.includes(name)) {
+         if (categories[parent as keyof typeof categories]?.includes(name)) {
             toast({ variant: 'destructive', title: 'Sottocategoria Esistente', description: `"${name}" esiste già in "${parent}".` });
             return;
         }
@@ -338,6 +368,30 @@ export default function ImpostazioniPage() {
     }
   }
 
+  const handleDeleteCategoryItem = () => {
+    if (!itemToDelete) return;
+
+    const { type, name, parent } = itemToDelete;
+
+    if (type === 'category') {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [name]: _, ...rest } = categories;
+        setCategories(rest);
+        toast({ title: 'Categoria Eliminata', description: `La categoria "${name}" e le sue sottocategorie sono state eliminate.` });
+    } else if (type === 'subcategory' && parent) {
+        setCategories(prev => ({
+            ...prev,
+            [parent]: prev[parent as keyof typeof prev].filter(sub => sub !== name)
+        }));
+        toast({ title: 'Sottocategoria Eliminata', description: `La sottocategoria "${name}" è stata eliminata da "${parent}".` });
+    }
+    setItemToDelete(null);
+  };
+  
+  const openDeleteDialog = (type: 'category' | 'subcategory', name: string, parent?: string) => {
+    setItemToDelete({ type, name, parent });
+  }
+
   return (
     <div className="space-y-8">
       <AddCategoryDialog
@@ -346,6 +400,24 @@ export default function ImpostazioniPage() {
         onSave={handleSaveCategory}
         existingCategories={Object.keys(categories)}
       />
+       <AlertDialog open={!!itemToDelete && (itemToDelete.type === 'category' || itemToDelete.type === 'subcategory')} onOpenChange={(isOpen) => !isOpen && setItemToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {itemToDelete?.type === 'category' ?
+                          `Questa azione eliminerà la categoria "${itemToDelete.name}" e tutte le sue sottocategorie. L'azione non può essere annullata.` :
+                          `Questa azione eliminerà la sottocategoria "${itemToDelete?.name}" da "${itemToDelete?.parent}". L'azione non può essere annullata.`
+                        }
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteCategoryItem} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
       <div>
         <h1 className="text-3xl font-bold">Impostazioni</h1>
         <p className="text-muted-foreground">
@@ -357,8 +429,8 @@ export default function ImpostazioniPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-8">
-          <SettingsListManager title="Conti" items={accounts} setItems={setAccounts} />
-          <SettingsListManager title="Metodi di Pagamento" items={paymentMethods} setItems={setPaymentMethods} />
+          <SettingsListManager title="Conti" items={accounts} setItems={setAccounts} itemType="account" />
+          <SettingsListManager title="Metodi di Pagamento" items={paymentMethods} setItems={setPaymentMethods} itemType="paymentMethod" />
         </div>
 
         <Card>
@@ -377,19 +449,25 @@ export default function ImpostazioniPage() {
             <Accordion type="single" collapsible className="w-full">
               {Object.entries(categories).map(([category, subcategories]) => (
                 <AccordionItem value={category} key={category}>
-                   <AccordionTrigger>
-                        <span className="font-semibold">{category}</span>
+                   <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center justify-between w-full">
+                            <span className="font-semibold text-left">{category}</span>
+                            <Button variant="ghost" size="icon" className="mr-2 shrink-0" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                        </div>
                     </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-2 pl-4">
                       {subcategories.map(sub => (
                         <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
                           <span>{sub}</span>
-                           <Button variant="ghost" size="icon" onClick={() => toast({ title: 'Funzionalità in sviluppo' })}>
+                           <Button variant="ghost" size="icon" onClick={() => openDeleteDialog('subcategory', sub, category)}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                         </div>
                       ))}
+                        {subcategories.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">Nessuna sottocategoria.</p>}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
