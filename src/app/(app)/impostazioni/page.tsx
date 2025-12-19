@@ -9,12 +9,13 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { PlusCircle, Trash2, Loader2, Pencil } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import type { AppUser } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { EditUserDialog } from '@/components/impostazioni/edit-user-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 
 // Mock data based on the user's image
@@ -88,10 +89,10 @@ const UserManagementCard = () => {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+    const [deletingUser, setDeletingUser] = useState<AppUser | null>(null);
 
     const usersQuery = useMemoFirebase(() => {
         if (!firestore) return null;
-        // This query will be protected by security rules, only admins can execute it.
         return query(collection(firestore, 'users'));
     }, [firestore]);
 
@@ -100,6 +101,10 @@ const UserManagementCard = () => {
     const handleOpenEditDialog = (user: AppUser) => {
         setEditingUser(user);
     };
+
+    const handleOpenDeleteDialog = (user: AppUser) => {
+        setDeletingUser(user);
+    }
 
     const handleUpdateUser = async (updatedUser: AppUser) => {
         if (!firestore || !updatedUser.uid) {
@@ -120,6 +125,21 @@ const UserManagementCard = () => {
             toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile salvare le modifiche. Controlla i permessi.' });
         }
     };
+    
+    const handleDeleteUser = async () => {
+        if (!firestore || !deletingUser) return;
+
+        try {
+            const userDocRef = doc(firestore, 'users', deletingUser.uid);
+            await deleteDoc(userDocRef);
+            toast({ title: 'Utente Eliminato', description: `L'utente ${deletingUser.displayName} è stato eliminato.` });
+        } catch(e) {
+            console.error('Error deleting user:', e);
+            toast({ variant: 'destructive', title: 'Errore Eliminazione', description: 'Impossibile eliminare l\'utente. Controlla i permessi.' });
+        } finally {
+            setDeletingUser(null);
+        }
+    }
 
 
     return (
@@ -130,11 +150,26 @@ const UserManagementCard = () => {
             user={editingUser}
             onUpdateUser={handleUpdateUser}
         />
+        <AlertDialog open={!!deletingUser} onOpenChange={(isOpen) => !isOpen && setDeletingUser(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Sei sicuro?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Questa azione non può essere annullata. Verrà eliminato permanentemente il profilo utente di <span className="font-bold">{deletingUser?.displayName}</span> dal database.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
         <Card>
             <CardHeader>
                 <CardTitle>Gestione Utenti</CardTitle>
                 <CardDescription>
-                    Visualizza e modifica gli utenti registrati, i loro ruoli e le società associate.
+                    Visualizza, modifica ed elimina gli utenti registrati, i loro ruoli e le società associate.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -175,6 +210,9 @@ const UserManagementCard = () => {
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(user)}>
                                             <Pencil className="h-4 w-4" />
+                                        </Button>
+                                         <Button variant="ghost" size="icon" onClick={() => handleOpenDeleteDialog(user)}>
+                                            <Trash2 className="h-4 w-4 text-destructive" />
                                         </Button>
                                     </TableCell>
                                 </TableRow>
