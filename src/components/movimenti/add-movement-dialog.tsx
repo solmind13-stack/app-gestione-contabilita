@@ -101,7 +101,7 @@ export function AddMovementDialog({
           sottocategoria: movementToEdit.sottocategoria,
           iva: movementToEdit.iva,
           conto: movementToEdit.conto || '',
-          operatore: movementToEdit.operatore || '',
+          operatore: movementToEdit.operatore || currentUser?.displayName || '',
           metodoPag: movementToEdit.metodoPag || '',
           note: movementToEdit.note || '',
         });
@@ -379,7 +379,7 @@ export function AddMovementDialog({
                         <FormItem>
                         <FormLabel>Operatore</FormLabel>
                          <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled />
                         </FormControl>
                         <FormMessage />
                         </FormItem>

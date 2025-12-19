@@ -18,17 +18,17 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { CATEGORIE } from '@/lib/constants';
+import { CATEGORIE as initialCategories } from '@/lib/constants';
+import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog';
 
 
 // Mock data based on the user's image
 const initialData = {
-  operators: ['Gibilisco Salvato', 'Gibilisco Nuccio'],
   accounts: ['LNC-BAPR', 'STG-BAPR'],
   paymentMethods: ['Bonifico', 'Contanti', 'Carta', 'Addebito'],
 };
 
-type CategoryData = typeof CATEGORIE;
+type CategoryData = typeof initialCategories;
 
 // Generic component for managing a simple list (operators, accounts, etc.)
 const SettingsListManager = ({ title, items, setItems }: { title: string, items: string[], setItems: (items: string[]) => void }) => {
@@ -240,7 +240,7 @@ const UserManagementCard = () => {
                 <div>
                     <CardTitle>Gestione Utenti</CardTitle>
                     <CardDescription>
-                        Visualizza, modifica ed elimina gli utenti, i loro ruoli e le società associate.
+                        Aggiungi, visualizza, modifica ed elimina gli utenti, i loro ruoli e le società associate.
                     </CardDescription>
                 </div>
                  <Button onClick={() => setIsAddUserOpen(true)}>
@@ -311,19 +311,41 @@ const UserManagementCard = () => {
 
 export default function ImpostazioniPage() {
   const { user } = useUser();
-  const [operators, setOperators] = useState(initialData.operators);
   const [accounts, setAccounts] = useState(initialData.accounts);
   const [paymentMethods, setPaymentMethods] = useState(initialData.paymentMethods);
-  const [categories, setCategories] = useState<CategoryData>(CATEGORIE);
+  const [categories, setCategories] = useState<CategoryData>(initialCategories);
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const handleAddCategory = () => {
-    // This would open a dialog to add a new category
-    toast({ title: 'Funzionalità in sviluppo', description: 'La creazione di nuove categorie sarà presto disponibile.' });
+  const handleSaveCategory = (type: 'category' | 'subcategory', name: string, parent?: string) => {
+    if (type === 'category') {
+        if (categories[name]) {
+            toast({ variant: 'destructive', title: 'Categoria Esistente', description: `La categoria "${name}" esiste già.` });
+            return;
+        }
+        setCategories(prev => ({...prev, [name]: [] }));
+        toast({ title: 'Categoria Aggiunta', description: `La categoria "${name}" è stata creata.` });
+    } else if (type === 'subcategory' && parent) {
+         if (categories[parent]?.includes(name)) {
+            toast({ variant: 'destructive', title: 'Sottocategoria Esistente', description: `"${name}" esiste già in "${parent}".` });
+            return;
+        }
+        setCategories(prev => ({
+            ...prev,
+            [parent]: [...prev[parent as keyof typeof prev], name].sort()
+        }));
+        toast({ title: 'Sottocategoria Aggiunta', description: `"${name}" è stata aggiunta a "${parent}".` });
+    }
   }
 
   return (
     <div className="space-y-8">
+      <AddCategoryDialog
+        isOpen={isCategoryDialogOpen}
+        setIsOpen={setIsCategoryDialogOpen}
+        onSave={handleSaveCategory}
+        existingCategories={Object.keys(categories)}
+      />
       <div>
         <h1 className="text-3xl font-bold">Impostazioni</h1>
         <p className="text-muted-foreground">
@@ -335,7 +357,6 @@ export default function ImpostazioniPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-8">
-          <SettingsListManager title="Operatori" items={operators} setItems={setOperators} />
           <SettingsListManager title="Conti" items={accounts} setItems={setAccounts} />
           <SettingsListManager title="Metodi di Pagamento" items={paymentMethods} setItems={setPaymentMethods} />
         </div>
@@ -348,7 +369,7 @@ export default function ImpostazioniPage() {
                 Gestisci le categorie per i movimenti e i suggerimenti AI.
               </CardDescription>
             </div>
-            <Button onClick={handleAddCategory}>
+            <Button onClick={() => setIsCategoryDialogOpen(true)}>
               <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
             </Button>
           </CardHeader>
@@ -369,10 +390,6 @@ export default function ImpostazioniPage() {
                             </Button>
                         </div>
                       ))}
-                       <div className="flex gap-2 pt-2">
-                          <Input placeholder="Nuova sottocategoria..." />
-                          <Button onClick={() => toast({ title: 'Funzionalità in sviluppo' })}>Aggiungi Sottocategoria</Button>
-                        </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
