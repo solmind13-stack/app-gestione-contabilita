@@ -37,15 +37,15 @@ const FormSchema = z.object({
   displayName: z.string().min(3, 'Il nome è obbligatorio'),
   email: z.string().email('Email non valida'),
   password: z.string().min(6, 'La password deve essere di almeno 6 caratteri'),
-  role: z.enum(['admin', 'editor', 'company'], { required_error: 'Il ruolo è obbligatorio' }),
+  role: z.enum(['admin', 'editor', 'company', 'company-editor'], { required_error: 'Il ruolo è obbligatorio' }),
   company: z.enum(['LNC', 'STG']).optional(),
 }).refine(data => {
-    if(data.role === 'company' && !data.company) {
+    if((data.role === 'company' || data.role === 'company-editor') && !data.company) {
         return false;
     }
     return true;
 }, {
-    message: "La società è obbligatoria per il ruolo 'company'",
+    message: "La società è obbligatoria per questo ruolo",
     path: ["company"],
 });
 
@@ -159,9 +159,10 @@ export function AddUserDialog({
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="editor">Editor</SelectItem>
-                            <SelectItem value="company">Company</SelectItem>
+                            <SelectItem value="admin">Admin (Tutto)</SelectItem>
+                            <SelectItem value="editor">Editor (Tutto, no utenti)</SelectItem>
+                            <SelectItem value="company-editor">Company Editor (Modifica solo sua società)</SelectItem>
+                            <SelectItem value="company">Company (Solo lettura sua società)</SelectItem>
                         </SelectContent>
                     </Select>
                     <FormMessage />
@@ -169,7 +170,7 @@ export function AddUserDialog({
                 )}
             />
 
-            {watchedRole === 'company' && (
+            {(watchedRole === 'company' || watchedRole === 'company-editor') && (
                 <FormField
                     control={form.control}
                     name="company"

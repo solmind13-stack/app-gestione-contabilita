@@ -143,7 +143,7 @@ const UserManagementCard = () => {
                 email: newUser.email,
                 displayName: data.displayName,
                 role: data.role,
-                company: data.role === 'company' ? data.company : undefined,
+                company: (data.role === 'company' || data.role === 'company-editor') ? data.company : undefined,
                 creationDate: new Date().toISOString(),
                 lastLogin: new Date().toISOString(),
             };

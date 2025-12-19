@@ -35,15 +35,15 @@ import type { AppUser, UserRole } from '@/lib/types';
 
 const FormSchema = z.object({
   displayName: z.string().min(3, 'Il nome è obbligatorio'),
-  role: z.enum(['admin', 'editor', 'company'], { required_error: 'Il ruolo è obbligatorio' }),
+  role: z.enum(['admin', 'editor', 'company', 'company-editor'], { required_error: 'Il ruolo è obbligatorio' }),
   company: z.enum(['LNC', 'STG']).optional(),
 }).refine(data => {
-    if(data.role === 'company' && !data.company) {
+    if((data.role === 'company' || data.role === 'company-editor') && !data.company) {
         return false;
     }
     return true;
 }, {
-    message: "La società è obbligatoria per il ruolo 'company'",
+    message: "La società è obbligatoria per questo ruolo",
     path: ["company"],
 });
 
@@ -88,7 +88,7 @@ export function EditUserDialog({
         ...user,
         displayName: data.displayName,
         role: data.role as UserRole,
-        company: data.role === 'company' ? data.company : undefined,
+        company: (data.role === 'company' || data.role === 'company-editor') ? data.company : undefined,
     }
 
     await onUpdateUser(updatedUserData);
@@ -135,9 +135,10 @@ export function EditUserDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="editor">Editor</SelectItem>
-                                <SelectItem value="company">Company</SelectItem>
+                                <SelectItem value="admin">Admin (Tutto)</SelectItem>
+                                <SelectItem value="editor">Editor (Tutto, no utenti)</SelectItem>
+                                <SelectItem value="company-editor">Company Editor (Modifica solo sua società)</SelectItem>
+                                <SelectItem value="company">Company (Solo lettura sua società)</SelectItem>
                             </SelectContent>
                         </Select>
                         <FormMessage />
@@ -145,7 +146,7 @@ export function EditUserDialog({
                     )}
                 />
 
-                {watchedRole === 'company' && (
+                {(watchedRole === 'company' || watchedRole === 'company-editor') && (
                     <FormField
                         control={form.control}
                         name="company"

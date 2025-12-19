@@ -62,7 +62,7 @@ export type Riepilogo = {
     ivaNetta: number;
 }
 
-export type UserRole = 'admin' | 'editor' | 'company';
+export type UserRole = 'admin' | 'editor' | 'company' | 'company-editor';
 
 export type AppUser = {
     uid: string;
