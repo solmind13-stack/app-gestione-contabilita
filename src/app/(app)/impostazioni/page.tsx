@@ -324,37 +324,6 @@ export default function ImpostazioniPage() {
   const [accounts, setAccounts] = useState(initialData.accounts);
   const [paymentMethods, setPaymentMethods] = useState(initialData.paymentMethods);
   const [categories, setCategories] = useState<CategoryData>(initialData.categories);
-  const [newCategory, setNewCategory] = useState('');
-  const [newSubcategory, setNewSubcategory] = useState<{ category: string; value: string }>({ category: '', value: '' });
-
-  const handleAddCategory = () => {
-    if (newCategory && !categories.hasOwnProperty(newCategory)) {
-      setCategories({ ...categories, [newCategory]: [] });
-      setNewCategory('');
-    }
-  };
-  
-  const handleRemoveCategory = (categoryToRemove: string) => {
-    const { [categoryToRemove as keyof CategoryData]: _, ...remainingCategories } = categories;
-    setCategories(remainingCategories);
-  };
-
-  const handleAddSubcategory = (category: string) => {
-    if (newSubcategory.value && !categories[category as keyof CategoryData].includes(newSubcategory.value)) {
-      const updatedCategories = { ...categories };
-      updatedCategories[category as keyof CategoryData] = [...updatedCategories[category as keyof CategoryData], newSubcategory.value].sort();
-      setCategories(updatedCategories);
-      setNewSubcategory({ category: '', value: '' });
-    }
-  };
-  
-  const handleRemoveSubcategory = (category: string, subcategoryToRemove: string) => {
-    const updatedCategories = { ...categories };
-    updatedCategories[category as keyof CategoryData] = updatedCategories[category as keyof CategoryData].filter(sub => sub !== subcategoryToRemove);
-    setCategories(updatedCategories);
-  };
-  
-
 
   return (
     <div className="space-y-8">
@@ -378,60 +347,28 @@ export default function ImpostazioniPage() {
           <CardHeader>
             <CardTitle>Categorie e Sottocategorie</CardTitle>
             <CardDescription>
-              Aggiungi o rimuovi categorie e le relative sottocategorie per l'organizzazione dei movimenti.
+              Le categorie sono definite centralmente e utilizzate dall'assistente AI.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Accordion type="single" collapsible className="w-full">
               {Object.entries(categories).map(([category, subcategories]) => (
                 <AccordionItem value={category} key={category}>
-                   <div className="flex items-center justify-between w-full">
-                    <AccordionTrigger className="flex-1 hover:no-underline pr-4">
+                   <AccordionTrigger>
                         <span className="font-semibold">{category}</span>
                     </AccordionTrigger>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); handleRemoveCategory(category); }}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
                   <AccordionContent>
                     <div className="space-y-2 pl-4">
                       {subcategories.map(sub => (
                         <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
                           <span>{sub}</span>
-                          <Button variant="ghost" size="icon" onClick={() => handleRemoveSubcategory(category, sub)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
                         </div>
                       ))}
-                       <div className="flex gap-2 pt-2">
-                          <Input 
-                            value={newSubcategory.category === category ? newSubcategory.value : ''}
-                            onChange={(e) => setNewSubcategory({ category, value: e.target.value })}
-                            placeholder="Nuova sottocategoria..."
-                            onKeyDown={(e) => e.key === 'Enter' && handleAddSubcategory(category)}
-                          />
-                          <Button size="sm" onClick={() => handleAddSubcategory(category)}>Aggiungi</Button>
-                        </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
-            <Separator className="my-6" />
-            <div className="space-y-2">
-                <h4 className="font-semibold">Aggiungi Nuova Categoria</h4>
-                <div className="flex gap-2">
-                <Input 
-                    value={newCategory} 
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    placeholder="Nome nuova categoria..."
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-                />
-                <Button onClick={handleAddCategory}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Crea Categoria
-                </Button>
-                </div>
-            </div>
           </CardContent>
         </Card>
       </div>
