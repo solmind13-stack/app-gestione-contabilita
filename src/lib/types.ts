@@ -71,6 +71,8 @@ export type AppUser = {
     photoURL?: string | null;
     role: UserRole;
     company?: 'LNC' | 'STG';
+    creationDate?: string;
+    lastLogin?: string;
 };
 
 export type Scadenza = {

@@ -1,0 +1,207 @@
+// src/components/impostazioni/add-user-dialog.tsx
+"use client";
+
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Loader2 } from 'lucide-react';
+import type { AppUser, UserRole } from '@/lib/types';
+
+const FormSchema = z.object({
+  displayName: z.string().min(3, 'Il nome è obbligatorio'),
+  email: z.string().email('Email non valida'),
+  password: z.string().min(6, 'La password deve essere di almeno 6 caratteri'),
+  role: z.enum(['admin', 'editor', 'company'], { required_error: 'Il ruolo è obbligatorio' }),
+  company: z.enum(['LNC', 'STG']).optional(),
+}).refine(data => {
+    if(data.role === 'company' && !data.company) {
+        return false;
+    }
+    return true;
+}, {
+    message: "La società è obbligatoria per il ruolo 'company'",
+    path: ["company"],
+});
+
+type FormValues = z.infer<typeof FormSchema>;
+
+interface AddUserDialogProps {
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+  onAddUser: (data: FormValues) => Promise<any>;
+}
+
+export function AddUserDialog({
+  isOpen,
+  setIsOpen,
+  onAddUser,
+}: AddUserDialogProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(FormSchema),
+    defaultValues: {
+        displayName: '',
+        email: '',
+        password: '',
+        role: 'company',
+        company: 'LNC',
+    }
+  });
+  
+  const watchedRole = form.watch('role');
+
+  const onSubmit = async (data: FormValues) => {
+    setIsSubmitting(true);
+    try {
+        await onAddUser(data);
+        setIsOpen(false);
+        form.reset();
+    } catch(error) {
+      // Error is handled in the parent component via toast
+      console.error("Add user failed", error);
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Aggiungi Nuovo Utente</DialogTitle>
+          <DialogDescription>
+            Crea un nuovo utente e assegna ruolo e permessi.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            
+             <FormField
+                control={form.control}
+                name="displayName"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Nome Visualizzato</FormLabel>
+                    <FormControl>
+                        <Input {...field} placeholder="Mario Rossi" />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
+
+            <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                        <Input type="email" {...field} placeholder="m.rossi@example.com"/>
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
+
+            <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                        <Input type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
+
+
+            <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Ruolo</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Seleziona un ruolo" />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="editor">Editor</SelectItem>
+                            <SelectItem value="company">Company</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
+
+            {watchedRole === 'company' && (
+                <FormField
+                    control={form.control}
+                    name="company"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Società</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Seleziona una società" />
+                            </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                            <SelectItem value="LNC">LNC</SelectItem>
+                            <SelectItem value="STG">STG</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            )}
+
+            <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
+            <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin" /> : 'Crea Utente'}
+            </Button>
+            </DialogFooter>
+        </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}

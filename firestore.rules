@@ -15,8 +15,8 @@ service cloud.firestore {
     // Rules for the 'users' collection
     match /users/{userId} {
       // CREATE: Any authenticated user can create THEIR OWN user document.
-      // This is crucial for the bootstrap page to work.
-      allow create: if isSignedIn() && isOwner(userId);
+      // Admins can create any user document.
+      allow create: if isSignedIn() && (isOwner(userId) || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
 
       // READ (get): A user can read THEIR OWN document. An admin can read any document.
       allow get: if isSignedIn() && (isOwner(userId) || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
@@ -31,8 +31,8 @@ service cloud.firestore {
                     (isOwner(userId) && request.resource.data.role == resource.data.role)
                   );
       
-      // DELETE: Only admins can delete users.
-      allow delete: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // DELETE: Only admins can delete users. They cannot delete themselves.
+      allow delete: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' && request.auth.uid != userId;
     }
 
     // Rules for financial data collections (movements, deadlines, forecasts)
@@ -60,12 +60,18 @@ service cloud.firestore {
       allow create: if isSignedIn() && canAccessCompanyData(request.resource.data.societa);
 
       // LIST (query multiple documents)
-      // Admins and editors can query freely (but will be filtered client-side).
+      // Admins and editors can query freely.
       // Company users MUST filter by their own company.
-      allow list: if isSignedIn() && (
+      allow list: if isSignedIn() && 
+                  (
                     getUserRole() == 'admin' || 
                     getUserRole() == 'editor' ||
-                    (request.query.where[0][0] == 'societa' && request.query.where[0][1] == '==' && request.query.where[0][2] == getUserCompany())
+                    (
+                      getUserRole() == 'company' &&
+                      request.query.where[0][0] == 'societa' && 
+                      request.query.where[0][1] == '==' && 
+                      request.query.where[0][2] == getUserCompany()
+                    )
                   );
     }
     
