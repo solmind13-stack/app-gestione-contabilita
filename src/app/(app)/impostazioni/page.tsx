@@ -1,3 +1,4 @@
+
 // src/app/(app)/impostazioni/page.tsx
 "use client";
 
@@ -449,14 +450,14 @@ export default function ImpostazioniPage() {
             <Accordion type="single" collapsible className="w-full">
               {Object.entries(categories).map(([category, subcategories]) => (
                 <AccordionItem value={category} key={category}>
-                   <AccordionTrigger className="hover:no-underline">
-                        <div className="flex items-center justify-between w-full">
-                            <span className="font-semibold text-left">{category}</span>
-                            <Button variant="ghost" size="icon" className="mr-2 shrink-0" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                        </div>
-                    </AccordionTrigger>
+                   <div className="flex items-center w-full">
+                        <AccordionTrigger className="flex-1 hover:no-underline">
+                           <span className="font-semibold text-left">{category}</span>
+                        </AccordionTrigger>
+                        <Button variant="ghost" size="icon" className="mr-2 shrink-0" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                    </div>
                   <AccordionContent>
                     <div className="space-y-2 pl-4">
                       {subcategories.map(sub => (
