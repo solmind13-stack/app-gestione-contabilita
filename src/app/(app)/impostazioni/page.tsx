@@ -6,13 +6,16 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PlusCircle, Trash2, Loader2 } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Pencil } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query } from 'firebase/firestore';
+import { collection, query, doc, updateDoc } from 'firebase/firestore';
 import type { AppUser } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { EditUserDialog } from '@/components/impostazioni/edit-user-dialog';
+import { useToast } from '@/hooks/use-toast';
+
 
 // Mock data based on the user's image
 const initialData = {
@@ -83,6 +86,9 @@ const SettingsListManager = ({ title, items, setItems }: { title: string, items:
 
 const UserManagementCard = () => {
     const firestore = useFirestore();
+    const { toast } = useToast();
+    const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+
     const usersQuery = useMemoFirebase(() => {
         if (!firestore) return null;
         // This query will be protected by security rules, only admins can execute it.
@@ -91,12 +97,44 @@ const UserManagementCard = () => {
 
     const { data: users, isLoading, error } = useCollection<AppUser>(usersQuery);
 
+    const handleOpenEditDialog = (user: AppUser) => {
+        setEditingUser(user);
+    };
+
+    const handleUpdateUser = async (updatedUser: AppUser) => {
+        if (!firestore || !updatedUser.uid) {
+            toast({ variant: 'destructive', title: 'Errore', description: 'Dati non validi per l\'aggiornamento.' });
+            return;
+        }
+        try {
+            const userDocRef = doc(firestore, 'users', updatedUser.uid);
+            await updateDoc(userDocRef, {
+                displayName: updatedUser.displayName,
+                role: updatedUser.role,
+                company: updatedUser.company,
+            });
+            toast({ title: 'Utente Aggiornato', description: 'I dati dell\'utente sono stati salvati.' });
+            setEditingUser(null);
+        } catch (e) {
+            console.error('Error updating user:', e);
+            toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile salvare le modifiche. Controlla i permessi.' });
+        }
+    };
+
+
     return (
+        <>
+        <EditUserDialog 
+            isOpen={!!editingUser}
+            setIsOpen={(isOpen) => !isOpen && setEditingUser(null)}
+            user={editingUser}
+            onUpdateUser={handleUpdateUser}
+        />
         <Card>
             <CardHeader>
                 <CardTitle>Gestione Utenti</CardTitle>
                 <CardDescription>
-                    Visualizza gli utenti registrati nel database e i loro ruoli. Solo gli admin possono vedere questa sezione.
+                    Visualizza e modifica gli utenti registrati, i loro ruoli e le società associate.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -107,18 +145,19 @@ const UserManagementCard = () => {
                             <TableHead>Nome</TableHead>
                             <TableHead>Ruolo</TableHead>
                             <TableHead>Società</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center">
+                                <TableCell colSpan={5} className="h-24 text-center">
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                                 </TableCell>
                             </TableRow>
                         ) : error ? (
                              <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center text-red-500">
+                                <TableCell colSpan={5} className="h-24 text-center text-red-500">
                                     Errore di autorizzazione: non hai i permessi per visualizzare gli utenti.
                                 </TableCell>
                             </TableRow>
@@ -133,11 +172,16 @@ const UserManagementCard = () => {
                                         </Badge>
                                     </TableCell>
                                     <TableCell>{user.company || 'N/A'}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(user)}>
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center">
+                                <TableCell colSpan={5} className="h-24 text-center">
                                     Nessun utente trovato nel database.
                                 </TableCell>
                             </TableRow>
@@ -146,6 +190,7 @@ const UserManagementCard = () => {
                 </Table>
             </CardContent>
         </Card>
+        </>
     )
 }
 

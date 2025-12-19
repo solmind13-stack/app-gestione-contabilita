@@ -18,14 +18,14 @@ service cloud.firestore {
       // This is crucial for the bootstrap page to work.
       allow create: if isSignedIn() && isOwner(userId);
 
-      // READ (get): A user can read THEIR OWN document.
-      allow get: if isSignedIn() && isOwner(userId);
+      // READ (get): A user can read THEIR OWN document. An admin can read any document.
+      allow get: if isSignedIn() && (isOwner(userId) || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
       
       // LIST: An admin can list all users. This is for the User Management UI.
       allow list: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       
       // UPDATE: A user can update their own profile. An admin can update any profile.
-      // A user is not allowed to change their own role.
+      // A user is not allowed to change their own role unless they are an admin.
       allow update: if isSignedIn() && (
                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') || 
                     (isOwner(userId) && request.resource.data.role == resource.data.role)
@@ -65,7 +65,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && (
                     getUserRole() == 'admin' || 
                     getUserRole() == 'editor' ||
-                    (getUserRole() == 'company' && request.query.where[0].field == 'societa' && request.query.where[0].op == '==' && request.query.where[0].value == getUserCompany())
+                    (request.query.where[0][0] == 'societa' && request.query.where[0][1] == '==' && request.query.where[0][2] == getUserCompany())
                   );
     }
     
