@@ -384,15 +384,17 @@ export default function PrevisioniEntratePage() {
                             )
                         }))}
                     </TableBody>
-                     <TableFooter>
-                        <TableRow>
-                            <TableCell colSpan={5} className="font-bold">TOTALI</TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totaleLordo)}</TableCell>
-                            <TableCell colSpan={5}></TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePonderato)}</TableCell>
-                            <TableCell colSpan={2}></TableCell>
-                        </TableRow>
-                    </TableFooter>
+                     {filteredPrevisioni.length > 0 && (
+                        <TableFooter>
+                            <TableRow>
+                                <TableCell colSpan={5} className="font-bold">TOTALI</TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totaleLordo)}</TableCell>
+                                <TableCell colSpan={5}></TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePonderato)}</TableCell>
+                                <TableCell colSpan={2}></TableCell>
+                            </TableRow>
+                        </TableFooter>
+                    )}
                 </Table>
             </div>
             </CardContent>

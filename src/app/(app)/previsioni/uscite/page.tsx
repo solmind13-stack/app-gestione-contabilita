@@ -461,17 +461,19 @@ export default function PrevisioniUscitePage() {
                             )
                         }))}
                     </TableBody>
-                     <TableFooter>
-                        <TableRow>
-                            <TableCell colSpan={6} className="font-bold">TOTALI</TableCell>
-                            <TableCell className="text-right font-bold text-red-600">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
-                            <TableCell colSpan={5}></TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePonderato)}</TableCell>
-                            <TableCell colSpan={2}></TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totaleEffettivo)}</TableCell>
-                            <TableCell colSpan={3}></TableCell>
-                        </TableRow>
-                    </TableFooter>
+                     {filteredPrevisioni.length > 0 && (
+                        <TableFooter>
+                            <TableRow>
+                                <TableCell colSpan={6} className="font-bold">TOTALI</TableCell>
+                                <TableCell className="text-right font-bold text-red-600">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
+                                <TableCell colSpan={5}></TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePonderato)}</TableCell>
+                                <TableCell colSpan={2}></TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totaleEffettivo)}</TableCell>
+                                <TableCell colSpan={3}></TableCell>
+                            </TableRow>
+                        </TableFooter>
+                    )}
                 </Table>
             </div>
             </CardContent>

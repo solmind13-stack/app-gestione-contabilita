@@ -4,7 +4,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc } from 'firebase/firestore';
-import { useFilter } from '@/context/filter-context';
 
 import {
   Card,

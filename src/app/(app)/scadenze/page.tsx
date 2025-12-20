@@ -467,14 +467,16 @@ export default function ScadenzePage() {
                             </TableRow>
                         )))}
                     </TableBody>
-                    <TableFooter>
-                        <TableRow>
-                            <TableCell colSpan={5} className="font-bold">TOTALI</TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePagato)}</TableCell>
-                            <TableCell colSpan={4}></TableCell>
-                        </TableRow>
-                    </TableFooter>
+                    {filteredScadenze.length > 0 && (
+                        <TableFooter>
+                            <TableRow>
+                                <TableCell colSpan={5} className="font-bold">TOTALI</TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePagato)}</TableCell>
+                                <TableCell colSpan={4}></TableCell>
+                            </TableRow>
+                        </TableFooter>
+                    )}
                 </Table>
             </div>
             </CardContent>
