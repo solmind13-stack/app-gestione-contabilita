@@ -10,6 +10,7 @@ import { useUser } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import DashboardLoading from './dashboard/loading';
+import { FilterProvider } from '@/context/filter-context';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
@@ -31,18 +32,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // If the user has a role, they are authorized and can see the content.
   if (user?.role) {
     return (
-      <SidebarProvider>
-          <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
-              <AppSidebar />
-              <div className="flex flex-col flex-1">
-                  <AppHeader />
-                  <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-                      {children}
-                  </main>
-              </div>
-              <FloatingChatButton />
-          </div>
-      </SidebarProvider>
+      <FilterProvider>
+        <SidebarProvider>
+            <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
+                <AppSidebar />
+                <div className="flex flex-col flex-1">
+                    <AppHeader />
+                    <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+                        {children}
+                    </main>
+                </div>
+                <FloatingChatButton />
+            </div>
+        </SidebarProvider>
+      </FilterProvider>
     );
   }
 

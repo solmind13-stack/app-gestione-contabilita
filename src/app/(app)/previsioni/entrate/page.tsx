@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, where, writeBatch, getDocs, doc, CollectionReference } from 'firebase/firestore';
+import { useFilter } from '@/context/filter-context';
 import {
   Card,
   CardContent,
@@ -36,26 +37,37 @@ import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { PrevisioneEntrata, RiepilogoPrevisioniEntrate, AppUser } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
-const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
     if (!firestore || !user) return null;
-    const collectionRef = collection(firestore, 'incomeForecasts') as CollectionReference<PrevisioneEntrata>;
+    let q = collection(firestore, 'incomeForecasts') as CollectionReference<PrevisioneEntrata>;
+    let conditions: any[] = [];
 
+    // Company filter
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            return query(collectionRef, where('societa', '==', company));
+            conditions.push(where('societa', '==', company));
         }
-        return query(collectionRef);
+    } else if (user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
+        conditions.push(where('societa', '==', user.company));
     }
-    if (user.role === 'company' && user.company) {
-        return query(collectionRef, where('societa', '==', user.company));
+
+    // Year filter
+    if (year !== 'Tutti') {
+        conditions.push(where('anno', '==', year));
     }
-    return null;
+
+    if (conditions.length > 0) {
+        return query(q, ...conditions);
+    }
+    return query(q);
 }
 
 
 export default function PrevisioniEntratePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+    const { selectedYear } = useFilter();
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneEntrata, direction: 'asc' | 'desc' } | null>({ key: 'dataPrevista', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isSeeding, setIsSeeding] = useState(false);
@@ -63,7 +75,7 @@ export default function PrevisioniEntratePage() {
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
     const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
 
      useEffect(() => {
@@ -234,7 +246,7 @@ export default function PrevisioniEntratePage() {
             <CardHeader>
                 <CardTitle>{getPageTitle()}</CardTitle>
                 <CardDescription>
-                Visualizza, aggiungi e gestisci le previsioni di entrata future.
+                Visualizza, aggiungi e gestisci le previsioni di entrata future per l'anno {selectedYear}.
                 </CardDescription>
             </CardHeader>
             <CardContent>

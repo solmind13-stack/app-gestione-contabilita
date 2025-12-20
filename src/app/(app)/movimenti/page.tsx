@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc } from 'firebase/firestore';
+import { useFilter } from '@/context/filter-context';
 
 import {
   Card,
@@ -42,42 +43,44 @@ import { ImportMovementsDialog } from '@/components/movimenti/import-movements-d
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 
-const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
     if (!firestore || !user) return null;
     
-    const movimentiCollection = collection(firestore, 'movements') as CollectionReference<Movimento>;
+    let q = collection(firestore, 'movements') as CollectionReference<Movimento>;
+    let conditions: any[] = [];
 
-    // Admins and editors can see all companies, but we filter client-side
-    // or they can select a specific company.
+    // Company filter
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            return query(movimentiCollection, where('societa', '==', company));
+            conditions.push(where('societa', '==', company));
         }
-        // IMPORTANT: Firestore rules don't allow 'OR' queries easily.
-        // For admins/editors seeing 'Tutte', we'll fetch both and merge,
-        // or just fetch all if rules allow. Let's assume rules allow fetching all for admin.
-        // The new rule will enforce filtering for non-admins.
-        return query(movimentiCollection); 
-    }
-    
-    // Company users can only see their own company data
-    if (user.role === 'company' || user.role === 'company-editor') {
+    } else if (user.role === 'company' || user.role === 'company-editor') {
         if (!user.company) return null;
-        return query(movimentiCollection, where('societa', '==', user.company));
+        conditions.push(where('societa', '==', user.company));
     }
 
-    return null; // Should not happen for authorized users
+    // Year filter
+    if (year !== 'Tutti') {
+        conditions.push(where('anno', '==', year));
+    }
+    
+    if (conditions.length > 0) {
+        return query(q, ...conditions);
+    }
+
+    return query(q);
 }
 
 
 export default function MovimentiPage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+    const { selectedYear } = useFilter();
     
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
     
-    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
 
     const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
 
@@ -387,7 +390,7 @@ export default function MovimentiPage() {
             <CardHeader>
                 <CardTitle>{getPageTitle()}</CardTitle>
                 <CardDescription>
-                Visualizza, aggiungi e importa i tuoi movimenti finanziari.
+                Visualizza, aggiungi e importa i tuoi movimenti finanziari per l'anno {selectedYear}.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -564,5 +567,3 @@ export default function MovimentiPage() {
     </div>
   );
 }
-
-    

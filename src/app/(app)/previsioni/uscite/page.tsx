@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, where, writeBatch, getDocs, doc, addDoc, updateDoc, CollectionReference } from 'firebase/firestore';
+import { useFilter } from '@/context/filter-context';
 import {
   Card,
   CardContent,
@@ -38,25 +39,36 @@ import type { PrevisioneUscita, RiepilogoPrevisioniUscite, AppUser } from '@/lib
 import { AddExpenseForecastDialog } from '@/components/previsioni/add-expense-forecast-dialog';
 import { useToast } from '@/hooks/use-toast';
 
-const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
     if (!user || !firestore) return null;
-    const collectionRef = collection(firestore, 'expenseForecasts') as CollectionReference<PrevisioneUscita>;
+    let q = collection(firestore, 'expenseForecasts') as CollectionReference<PrevisioneUscita>;
+    let conditions: any[] = [];
 
+    // Company filter
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            return query(collectionRef, where('societa', '==', company));
+            conditions.push(where('societa', '==', company));
         }
-        return query(collectionRef);
+    } else if (user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
+        conditions.push(where('societa', '==', user.company));
     }
-    if (user.role === 'company' && user.company) {
-        return query(collectionRef, where('societa', '==', user.company));
+
+    // Year filter
+    if (year !== 'Tutti') {
+        conditions.push(where('anno', '==', year));
     }
-    return null;
+
+    if (conditions.length > 0) {
+        return query(q, ...conditions);
+    }
+    return query(q);
 }
 
 export default function PrevisioniUscitePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+    const { selectedYear } = useFilter();
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneUscita, direction: 'asc' | 'desc' } | null>({ key: 'dataScadenza', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -66,7 +78,7 @@ export default function PrevisioniUscitePage() {
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const expenseForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const expenseForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
 
     const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
 
@@ -285,7 +297,7 @@ export default function PrevisioniUscitePage() {
             <CardHeader>
                 <CardTitle>{getPageTitle()}</CardTitle>
                 <CardDescription>
-                Visualizza, aggiungi e gestisci le previsioni di spesa future.
+                Visualizza, aggiungi e gestisci le previsioni di spesa future per l'anno {selectedYear}.
                 </CardDescription>
             </CardHeader>
             <CardContent>

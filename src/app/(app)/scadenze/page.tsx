@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference } from 'firebase/firestore';
+import { useFilter } from '@/context/filter-context';
 import {
   Card,
   CardContent,
@@ -39,26 +40,38 @@ import type { Scadenza, AppUser } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 
-const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
     if (!firestore || !user) return null;
-    const scadenzeCollection = collection(firestore, 'deadlines') as CollectionReference<Scadenza>;
+    
+    let q = collection(firestore, 'deadlines') as CollectionReference<Scadenza>;
+    let conditions: any[] = [];
 
+    // Company filter
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            return query(scadenzeCollection, where('societa', '==', company));
+            conditions.push(where('societa', '==', company));
         }
-        return query(scadenzeCollection);
+    } else if (user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
+        conditions.push(where('societa', '==', user.company));
+    }
+
+    // Year filter
+    if (year !== 'Tutti') {
+        conditions.push(where('anno', '==', year));
     }
     
-    if (user.role === 'company' && user.company) {
-        return query(scadenzeCollection, where('societa', '==', user.company));
+    if (conditions.length > 0) {
+        return query(q, ...conditions);
     }
-    return null;
+
+    return query(q);
 }
 
 export default function ScadenzePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+    const { selectedYear } = useFilter();
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -68,7 +81,7 @@ export default function ScadenzePage() {
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
 
@@ -315,7 +328,7 @@ export default function ScadenzePage() {
             <CardHeader>
                 <CardTitle>{getPageTitle()}</CardTitle>
                 <CardDescription>
-                Visualizza, aggiungi e gestisci le tue scadenze fiscali e pagamenti.
+                Visualizza, aggiungi e gestisci le tue scadenze fiscali e pagamenti per l'anno {selectedYear}.
                 </CardDescription>
             </CardHeader>
             <CardContent>
