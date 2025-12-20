@@ -24,32 +24,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, isUserLoading, router]);
 
-  // During loading, we show a skeleton to avoid flickering.
-  if (isUserLoading) {
+  // If loading is finished but the user is not valid, we show the loading skeleton
+  // while useEffect handles the redirection. This prevents rendering a blank page.
+  if (!isUserLoading && !user?.role) {
     return <DashboardLoading />;
   }
-
-  // If the user has a role, they are authorized and can see the content.
-  if (user?.role) {
-    return (
-      <FilterProvider>
-        <SidebarProvider>
-            <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
-                <AppSidebar />
-                <div className="flex flex-col flex-1">
-                    <AppHeader />
-                    <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-                        {children}
-                    </main>
-                </div>
-                <FloatingChatButton />
-            </div>
-        </SidebarProvider>
-      </FilterProvider>
-    );
-  }
-
-  // If loading is finished but the user is not valid, we show nothing
-  // while useEffect handles the redirection.
-  return null;
+  
+  // Render the full app layout, but conditionally show the loading skeleton
+  // or the actual page content based on the user loading state.
+  // This ensures the main layout structure is consistent between server and client.
+  return (
+    <FilterProvider>
+      <SidebarProvider>
+          <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
+              <AppSidebar />
+              <div className="flex flex-col flex-1">
+                  <AppHeader />
+                  <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+                      {isUserLoading ? <DashboardLoading /> : children}
+                  </main>
+              </div>
+              <FloatingChatButton />
+          </div>
+      </SidebarProvider>
+    </FilterProvider>
+  );
 }
