@@ -42,45 +42,35 @@ import { useToast } from "@/hooks/use-toast";
 import { ImportMovementsDialog } from '@/components/movimenti/import-movements-dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CATEGORIE, YEARS } from '@/lib/constants';
 
-const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
+const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!firestore || !user) return null;
     
     let q = collection(firestore, 'movements') as CollectionReference<Movimento>;
-    let conditions: any[] = [];
 
-    // Company filter
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            conditions.push(where('societa', '==', company));
+            return query(q, where('societa', '==', company));
         }
     } else if (user.role === 'company' || user.role === 'company-editor') {
-        if (!user.company) return null;
-        conditions.push(where('societa', '==', user.company));
+        if (!user.company) return null; // Should not happen if user is set up correctly
+        return query(q, where('societa', '==', user.company));
     }
 
-    // Year filter
-    if (year !== 'Tutti') {
-        conditions.push(where('anno', '==', year));
-    }
-    
-    if (conditions.length > 0) {
-        return query(q, ...conditions);
-    }
-
-    return query(q);
+    return query(q); // For admin/editor with "Tutte" selected
 }
 
 
 export default function MovimentiPage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
-    const { selectedYear } = useFilter();
     
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
     
-    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
+    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
 
     const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
 
@@ -88,6 +78,12 @@ export default function MovimentiPage() {
     const [movementToDelete, setMovementToDelete] = useState<Movimento | null>(null);
     const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    
+    // Filters state
+    const [selectedYear, setSelectedYear] = useState<string | 'Tutti'>(YEARS[1].toString());
+    const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
+    const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Tutti');
+    const [selectedOperator, setSelectedOperator] = useState<string>('Tutti');
 
 
      useEffect(() => {
@@ -154,6 +150,7 @@ export default function MovimentiPage() {
             await addDoc(collection(firestore, 'movements'), {
                 ...newMovementData,
                 createdBy: user.uid,
+                operatore: user.displayName, // Add operator name on creation
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             });
@@ -255,12 +252,31 @@ export default function MovimentiPage() {
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
 
-    const filteredMovimenti = useMemo(() => {
+    const { 
+        filteredMovimenti, 
+        uniqueCategories, 
+        uniqueSubCategories, 
+        uniqueOperators 
+    } = useMemo(() => {
         let data = movimentiData || [];
         
-        return data
-            .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
-            .sort((a, b) => {
+        // Dynamic options for filters
+        const categories = [...new Set(data.map(m => m.categoria))].sort();
+        const operators = [...new Set(data.map(m => m.operatore).filter(Boolean))].sort();
+        
+        // Filtering logic
+        let filtered = data
+            .filter(m => selectedYear === 'Tutti' || m.anno === Number(selectedYear))
+            .filter(m => selectedCategory === 'Tutti' || m.categoria === selectedCategory)
+            .filter(m => selectedSubCategory === 'Tutti' || m.sottocategoria === selectedSubCategory)
+            .filter(m => selectedOperator === 'Tutti' || m.operatore === selectedOperator)
+            .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+        // After filtering by category, find available subcategories
+        const subCategories = [...new Set(filtered.map(m => m.sottocategoria))].sort();
+
+        // Sorting logic
+        filtered = filtered.sort((a, b) => {
                 const dateA = new Date(a.data).getTime();
                 const dateB = new Date(b.data).getTime();
                  if (sortOrder === 'asc') {
@@ -269,7 +285,21 @@ export default function MovimentiPage() {
                     return dateB - dateA;
                 }
             });
-    }, [movimentiData, searchTerm, sortOrder]);
+
+        return {
+            filteredMovimenti: filtered,
+            uniqueCategories: categories,
+            uniqueSubCategories: subCategories,
+            uniqueOperators: operators
+        };
+    }, [movimentiData, searchTerm, sortOrder, selectedYear, selectedCategory, selectedSubCategory, selectedOperator]);
+    
+    useEffect(() => {
+        // Reset subcategory if parent category changes and subcategory is no longer valid
+        if (selectedCategory === 'Tutti') {
+            setSelectedSubCategory('Tutti');
+        }
+    }, [selectedCategory]);
 
     const riepilogo = useMemo((): Riepilogo => {
         const data = filteredMovimenti;
@@ -385,12 +415,69 @@ export default function MovimentiPage() {
                 </Button>
             </div>
         </div>
+        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Anno:</label>
+                <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
+                    <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Anno" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {YEARS.map(year => (
+                            <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Categoria:</label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutte le Categorie</SelectItem>
+                        {uniqueCategories.map(cat => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Sottocategoria:</label>
+                <Select value={selectedSubCategory} onValueChange={setSelectedSubCategory} disabled={selectedCategory === 'Tutti'}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Sottocategoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutte le Sottocategorie</SelectItem>
+                        {uniqueSubCategories.map(sub => (
+                            <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Operatore:</label>
+                <Select value={selectedOperator} onValueChange={setSelectedOperator}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Operatore" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutti gli Operatori</SelectItem>
+                        {uniqueOperators.map(op => (
+                            <SelectItem key={op} value={op}>{op}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
 
         <Card>
             <CardHeader>
                 <CardTitle>{getPageTitle()}</CardTitle>
                 <CardDescription>
-                Visualizza, aggiungi e importa i tuoi movimenti finanziari per l'anno {selectedYear}.
+                    Visualizza, aggiungi e importa i tuoi movimenti finanziari per l'anno {selectedYear}.
                 </CardDescription>
             </CardHeader>
             <CardContent>
