@@ -10,6 +10,9 @@ export function Breadcrumbs() {
   const segments = pathname.split("/").filter(Boolean);
 
   const formatSegment = (segment: string) => {
+    if (segment.toLowerCase() === 'dashboard') {
+      return 'Dashboard';
+    }
     return segment
       .replace(/-/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -18,15 +21,19 @@ export function Breadcrumbs() {
   if (segments.length === 0) {
     return null;
   }
+  
+  const isDashboardHome = segments.length === 1 && segments[0] === 'dashboard';
 
   return (
     <nav aria-label="Breadcrumb" className="hidden md:flex items-center text-sm font-medium text-muted-foreground">
-      <Link href="/dashboard" className="hover:text-foreground">
-        Home
+      <Link href="/dashboard" className={cn("hover:text-foreground", isDashboardHome && "text-foreground")}>
+        {formatSegment('dashboard')}
       </Link>
-      {segments.map((segment, index) => {
-        const href = "/" + segments.slice(0, index + 1).join("/");
-        const isLast = index === segments.length - 1;
+      {!isDashboardHome && segments.slice(1).map((segment, index) => {
+        // Adjust index to account for slicing
+        const realIndex = index + 1;
+        const href = "/" + segments.slice(0, realIndex + 1).join("/");
+        const isLast = realIndex === segments.length - 1;
 
         return (
           <div key={href} className="flex items-center">
