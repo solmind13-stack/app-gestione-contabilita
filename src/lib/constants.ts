@@ -16,6 +16,7 @@ export const NAV_ITEMS = [
     subItems: [
       { href: '/previsioni/entrate', label: 'Entrate' },
       { href: '/previsioni/uscite', label: 'Uscite' },
+      { href: '/previsioni/cash-flow', label: 'Cash Flow' },
     ]
   },
   { href: '/report', icon: 'FilePieChart', label: 'Report' },
@@ -56,4 +57,3 @@ export const CATEGORIE_USCITE = {
 export const CERTEZZA_USCITE = ['Certa', 'Probabile', 'Incerta'];
 export const STATI_USCITE = ['Da pagare', 'Pagato', 'Parziale', 'Annullato'];
 export const RICORRENZE_USCITE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale', 'Altro'];
-
