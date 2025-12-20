@@ -35,6 +35,7 @@ export const CATEGORIE = {
   'Tasse': ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali'],
   'Finanziamenti': ['Rate Mutuo', 'Rate Prestito', 'Rimborso'],
   'Movimenti Interni': ['Giroconto', 'Trasferimento'],
+  'Da categorizzare': ['Da categorizzare']
 };
 
 export const IVA_PERCENTAGES = [0.22, 0.10, 0.04, 0.00];
@@ -55,3 +56,4 @@ export const CATEGORIE_USCITE = {
 export const CERTEZZA_USCITE = ['Certa', 'Probabile', 'Incerta'];
 export const STATI_USCITE = ['Da pagare', 'Pagato', 'Parziale', 'Annullato'];
 export const RICORRENZE_USCITE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale', 'Altro'];
+
