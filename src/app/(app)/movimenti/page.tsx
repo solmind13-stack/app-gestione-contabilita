@@ -40,6 +40,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { ImportMovementsDialog } from '@/components/movimenti/import-movements-dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!firestore || !user) return null;
@@ -82,6 +83,8 @@ export default function MovimentiPage() {
 
     const [isSeeding, setIsSeeding] = useState(false);
     const [movementToDelete, setMovementToDelete] = useState<Movimento | null>(null);
+    const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
 
      useEffect(() => {
@@ -183,6 +186,28 @@ export default function MovimentiPage() {
             setMovementToDelete(null);
         }
     };
+
+    const handleBulkDelete = async () => {
+        if (!firestore || selectedIds.length === 0 || user?.role !== 'admin') {
+            toast({ variant: 'destructive', title: 'Azione non permessa', description: 'Nessun elemento selezionato o permessi non sufficienti.' });
+            return;
+        }
+        try {
+            const batch = writeBatch(firestore);
+            selectedIds.forEach(id => {
+                const docRef = doc(firestore, 'movements', id);
+                batch.delete(docRef);
+            });
+            await batch.commit();
+            toast({ title: "Movimenti Eliminati", description: `${selectedIds.length} movimenti sono stati eliminati.` });
+            setSelectedIds([]); // Clear selection
+        } catch (error) {
+            console.error("Error bulk deleting movements:", error);
+            toast({ variant: 'destructive', title: 'Errore Eliminazione Multipla', description: 'Impossibile eliminare i movimenti selezionati.' });
+        } finally {
+            setIsBulkDeleteAlertOpen(false);
+        }
+    };
     
     const handleImportMovements = async (importedMovements: Omit<Movimento, 'id'>[]) => {
         if (!user || !firestore) return;
@@ -208,6 +233,21 @@ export default function MovimentiPage() {
         }
     };
 
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds(filteredMovimenti.map(m => m.id));
+        } else {
+            setSelectedIds([]);
+        }
+    };
+
+    const handleSelectRow = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedIds(prev => [...prev, id]);
+        } else {
+            setSelectedIds(prev => prev.filter(rowId => rowId !== id));
+        }
+    };
 
     const calculateNetto = (lordo: number, iva: number) => lordo / (1 + iva);
     const calculateIva = (lordo: number, iva: number) => lordo - (lordo / (1 + iva));
@@ -287,6 +327,20 @@ export default function MovimentiPage() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+        <AlertDialog open={isBulkDeleteAlertOpen} onOpenChange={setIsBulkDeleteAlertOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Questa azione non può essere annullata. Verranno eliminati permanentemente {selectedIds.length} movimenti.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90">Elimina Tutti</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
 
        <Tabs value={selectedCompany} onValueChange={(value) => setSelectedCompany(value as 'LNC' | 'STG' | 'Tutte')} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
@@ -298,6 +352,12 @@ export default function MovimentiPage() {
                 </TabsList>
             )}
             <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
+                {user?.role === 'admin' && selectedIds.length > 0 && (
+                     <Button variant="destructive" onClick={() => setIsBulkDeleteAlertOpen(true)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Elimina ({selectedIds.length})
+                    </Button>
+                )}
                 <div className="relative flex-grow">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -335,6 +395,15 @@ export default function MovimentiPage() {
                 <Table>
                 <TableHeader>
                     <TableRow>
+                    {user?.role === 'admin' && (
+                        <TableHead padding="checkbox">
+                        <Checkbox
+                            checked={selectedIds.length > 0 && selectedIds.length === filteredMovimenti.length}
+                            onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+                            aria-label="Seleziona tutte le righe"
+                        />
+                        </TableHead>
+                    )}
                     <TableHead>Società</TableHead>
                     <TableHead>Anno</TableHead>
                     <TableHead>
@@ -363,22 +432,23 @@ export default function MovimentiPage() {
                 <TableBody>
                     {(isLoadingMovimenti || isUserLoading || isSeeding) ? (
                         <TableRow>
-                            <TableCell colSpan={17} className="h-24 text-center">
+                            <TableCell colSpan={18} className="h-24 text-center">
                                 <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                             </TableCell>
                         </TableRow>
                     ) : error ? (
                          <TableRow>
-                            <TableCell colSpan={17} className="h-24 text-center text-red-500">
+                            <TableCell colSpan={18} className="h-24 text-center text-red-500">
                                 Errore nel caricamento dei dati: {error.message}
                             </TableCell>
                         </TableRow>
                     ) : filteredMovimenti.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={17} className="h-24 text-center">Nessun movimento trovato.</TableCell>
+                            <TableCell colSpan={18} className="h-24 text-center">Nessun movimento trovato.</TableCell>
                         </TableRow>
                     ) : (
                         filteredMovimenti.map((movimento) => {
+                            const isSelected = selectedIds.includes(movimento.id);
                             const entrataLorda = movimento.entrata || 0;
                             const uscitaLorda = movimento.uscita || 0;
                             const entrataNetta = entrataLorda > 0 ? calculateNetto(entrataLorda, movimento.iva) : 0;
@@ -387,7 +457,16 @@ export default function MovimentiPage() {
                             const ivaUscita = uscitaLorda > 0 ? calculateIva(uscitaLorda, movimento.iva) : 0;
 
                         return (
-                        <TableRow key={movimento.id}>
+                        <TableRow key={movimento.id} data-state={isSelected ? "selected" : ""}>
+                            {user?.role === 'admin' && (
+                                <TableCell padding="checkbox">
+                                    <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={(checked) => handleSelectRow(movimento.id, checked as boolean)}
+                                        aria-label="Seleziona riga"
+                                    />
+                                </TableCell>
+                            )}
                             <TableCell>
                                 <Badge variant={movimento.societa === 'LNC' ? 'default' : 'secondary'}>{movimento.societa}</Badge>
                             </TableCell>
@@ -431,7 +510,7 @@ export default function MovimentiPage() {
                 </TableBody>
                 <TableFooter>
                     <TableRow>
-                    <TableCell colSpan={6} className="font-bold">TOTALI</TableCell>
+                    <TableCell colSpan={user?.role === 'admin' ? 7 : 6} className="font-bold">TOTALI</TableCell>
                     <TableCell className="text-right font-bold text-green-600">{formatCurrency(riepilogo.totaleEntrate)}</TableCell>
                     <TableCell className="text-right font-bold text-red-600">{formatCurrency(riepilogo.totaleUscite)}</TableCell>
                     <TableCell />
@@ -485,3 +564,5 @@ export default function MovimentiPage() {
     </div>
   );
 }
+
+    
