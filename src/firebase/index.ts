@@ -9,21 +9,19 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 export function initializeFirebase(): { firebaseApp: FirebaseApp; auth: Auth; firestore: Firestore; } {
   let firebaseApp: FirebaseApp;
 
-  try {
-    // Attempt to get the already initialized app.
-    firebaseApp = getApp();
-  } catch (e) {
-    // If it fails, the app is not initialized yet, so initialize it.
-    try {
+  if (getApps().length === 0) {
+     try {
       // First, try initializing with environment variables (for App Hosting)
       firebaseApp = initializeApp();
-    } catch (e2) {
+    } catch (e) {
       // If that also fails, fall back to the config object (for local dev)
       if (process.env.NODE_ENV === "production") {
-        console.warn('Automatic Firebase initialization failed. Falling back to firebaseConfig.', e2);
+        console.warn('Automatic Firebase initialization failed. Falling back to firebaseConfig.', e);
       }
       firebaseApp = initializeApp(firebaseConfig);
     }
+  } else {
+    firebaseApp = getApp();
   }
 
   return getSdks(firebaseApp);

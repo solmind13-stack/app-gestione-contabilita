@@ -143,6 +143,11 @@ export const useFirebase = (): FirebaseServicesAndUser => {
   }
 
   if (!context.areServicesAvailable || !context.firebaseApp || !context.firestore || !context.auth) {
+    // During SSR or initial client render, services might not be ready.
+    // Instead of throwing, we could return a state indicating this.
+    // However, for this app's structure, client-side rendering of pages
+    // that use these hooks means they should be available post-hydration.
+    // Throwing helps catch configuration issues early.
     throw new Error('Firebase core services not available. Check FirebaseProvider props.');
   }
 
@@ -156,33 +161,43 @@ export const useFirebase = (): FirebaseServicesAndUser => {
   };
 };
 
-export const useAuth = (): Auth => {
-  const { auth } = useFirebase();
-  return auth;
+export const useMaybeFirebase = (): FirebaseContextState => {
+  const context = useContext(FirebaseContext);
+  if (context === undefined) {
+    throw new Error('useMaybeFirebase must be used within a FirebaseProvider.');
+  }
+  return context;
+}
+
+export const useAuth = (): Auth | null => {
+  return useMaybeFirebase().auth;
 };
 
-export const useFirestore = (): Firestore => {
-  const { firestore } = useFirebase();
-  return firestore;
+export const useFirestore = (): Firestore | null => {
+  return useMaybeFirebase().firestore;
 };
 
-export const useFirebaseApp = (): FirebaseApp => {
-  const { firebaseApp } = useFirebase();
-  return firebaseApp;
+export const useFirebaseApp = (): FirebaseApp | null => {
+  return useMaybeFirebase().firebaseApp;
 };
 
 type MemoFirebase <T> = T & {__memo?: boolean};
 
-export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | (MemoFirebase<T>) {
+export function useMemoFirebase<T>(factory: () => T | null, deps: DependencyList): T | null {
   const memoized = useMemo(factory, deps);
   
-  if(typeof memoized !== 'object' || memoized === null) return memoized;
-  (memoized as MemoFirebase<T>).__memo = true;
+  if(memoized === null || typeof memoized !== 'object') return memoized;
+
+  // This check is a bit of a hack to "tag" the object as memoized.
+  // It's not standard React but helps in debugging downstream hooks.
+  if (memoized && typeof memoized === 'object') {
+    (memoized as MemoFirebase<T>).__memo = true;
+  }
   
   return memoized;
 }
 
 export const useUser = (): UserHookResult => {
-  const { user, isUserLoading, userError } = useFirebase();
+  const { user, isUserLoading, userError } = useMaybeFirebase();
   return { user, isUserLoading, userError };
 };
