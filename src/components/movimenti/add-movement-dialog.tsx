@@ -126,7 +126,7 @@ export function AddMovementDialog({
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
-    const dataToSave = {
+    const dataToSave: Omit<Movimento, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'> & { anno: number } = {
         societa: data.societa,
         data: format(data.data, 'yyyy-MM-dd'),
         anno: data.data.getFullYear(),
@@ -143,7 +143,7 @@ export function AddMovementDialog({
     };
 
     if (isEditMode && movementToEdit) {
-        await onEditMovement({ ...dataToSave, id: movementToEdit.id });
+        await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy });
     } else {
         await onAddMovement(dataToSave);
     }

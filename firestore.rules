@@ -5,32 +5,26 @@ service cloud.firestore {
 
     // ========== HELPER FUNCTIONS ==========
     
-    // Funzione per verificare se l'utente è autenticato.
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Funzione per verificare se l'utente è il proprietario del documento richiesto.
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
     
-    // Funzione per ottenere i dati del profilo dell'utente che effettua la richiesta.
     function getUserProfile() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
-    // Funzione per ottenere il ruolo dell'utente.
     function getUserRole() {
       return getUserProfile().role;
     }
     
-    // Funzione per verificare se un utente è un admin
     function isAdmin() {
       return isSignedIn() && getUserRole() == 'admin';
     }
     
-    // Funzione per verificare se un utente ha permessi di scrittura globali (admin o editor)
     function hasGlobalWriteAccess() {
         let userRole = getUserRole();
         return isSignedIn() && (userRole == 'admin' || userRole == 'editor');
@@ -38,63 +32,83 @@ service cloud.firestore {
 
     // ========== COLLECTION: users ==========
     match /users/{userId} {
-      
-      // CREATE: Qualsiasi utente autenticato può creare il proprio profilo.
-      // Un admin può creare il profilo di chiunque.
       allow create: if isSignedIn() && (isOwner(userId) || isAdmin());
-
-      // READ (get): Un utente può leggere solo il proprio profilo. Un admin può leggere qualsiasi profilo.
       allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
-      
-      // READ (list): Solo un admin può elencare tutti gli utenti.
       allow list: if isAdmin();
-      
-      // UPDATE: Un utente non può modificare il proprio profilo. Solo un admin può farlo.
-      // Un utente non-admin non può cambiare il proprio ruolo.
       allow update: if isAdmin();
-      
-      // DELETE: Solo gli admin possono eliminare gli utenti. Non possono eliminare se stessi.
       allow delete: if isAdmin() && request.auth.uid != userId;
 
-      // === Sub-collections (es. chatHistory) ===
       match /{allChildren=**} {
-          // Solo il proprietario del profilo può leggere e scrivere nelle sotto-collezioni.
           allow read, write: if isSignedIn() && isOwner(userId);
       }
     }
 
     // ========== FINANCIAL DATA COLLECTIONS ==========
-    match /{collection}/{docId} where collection in ['movements', 'deadlines', 'incomeForecasts', 'expenseForecasts'] {
+    match /movements/{docId} {
+        
+        function canReadCompanyData() {
+            if (!isSignedIn()) { return false; }
+            let userRole = getUserRole();
+            let userCompany = getUserProfile().company;
+            let docCompany = resource.data.societa;
+            
+            return userRole == 'admin' || userRole == 'editor' || 
+                   ((userRole == 'company' || userRole == 'company-editor') && userCompany == docCompany);
+        }
       
-      // Funzione per verificare se l'utente può accedere in lettura ai dati di una specifica società.
-      function canReadCompanyData(company) {
+        function canWriteCompanyData() {
+            if (!isSignedIn()) { return false; }
+            let userRole = getUserRole();
+            let userCompany = getUserProfile().company;
+            let docCompany = request.resource.data.societa;
+
+            return userRole == 'admin' || userRole == 'editor' || 
+                   (userRole == 'company-editor' && userCompany == docCompany);
+        }
+
+        function isDocumentCreator() {
+            return request.auth.uid == resource.data.createdBy;
+        }
+
+        allow get: if canReadCompanyData();
+        allow create, update: if canWriteCompanyData();
+        allow delete: if isAdmin() || isDocumentCreator();
+        
+        allow list: if isSignedIn() && 
+                      (
+                        hasGlobalWriteAccess() ||
+                        (
+                          (getUserRole() == 'company' || getUserRole() == 'company-editor') &&
+                          request.query.where[0][0] == 'societa' && 
+                          request.query.where[0][1] == '==' && 
+                          request.query.where[0][2] == getUserProfile().company
+                        )
+                      );
+    }
+    
+    match /{collection}/{docId} where collection in ['deadlines', 'incomeForecasts', 'expenseForecasts'] {
+      
+      function canReadCompanyData() {
         if (!isSignedIn()) { return false; }
         let userRole = getUserRole();
         let userCompany = getUserProfile().company;
         
         return userRole == 'admin' || userRole == 'editor' || 
-               ((userRole == 'company' || userRole == 'company-editor') && userCompany == company);
+               ((userRole == 'company' || userRole == 'company-editor') && userCompany == resource.data.societa);
       }
       
-      // Funzione per verificare se l'utente può accedere in scrittura ai dati di una specifica società.
-      function canWriteCompanyData(company) {
+      function canWriteCompanyData() {
         if (!isSignedIn()) { return false; }
         let userRole = getUserRole();
         let userCompany = getUserProfile().company;
         
         return userRole == 'admin' || userRole == 'editor' || 
-               (userRole == 'company-editor' && userCompany == company);
+               (userRole == 'company-editor' && userCompany == request.resource.data.societa);
       }
 
-      // READ (get): Permesso se l'utente può leggere i dati della società del documento.
-      allow get: if canReadCompanyData(resource.data.societa);
+      allow get: if canReadCompanyData();
+      allow write: if canWriteCompanyData();
       
-      // WRITE (create, update, delete): Permesso se l'utente può scrivere sui dati della società.
-      allow write: if canWriteCompanyData(request.resource.data.societa);
-      
-      // LIST (query): Regola cruciale.
-      // Admin ed Editor possono fare query liberamente.
-      // Company e Company-Editor DEVONO OBBLIGATORIAMENTE includere un filtro 'where' sulla propria società.
       allow list: if isSignedIn() && 
                   (
                     hasGlobalWriteAccess() ||

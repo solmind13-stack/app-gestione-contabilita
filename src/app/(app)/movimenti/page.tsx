@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference } from 'firebase/firestore';
+import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc } from 'firebase/firestore';
 
 import {
   Card,
@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, Sparkles, Loader2 } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { movimentiData as initialMovimenti } from '@/lib/movimenti-data';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,7 @@ import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { ImportMovementsDialog } from '@/components/movimenti/import-movements-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!firestore || !user) return null;
@@ -59,7 +60,8 @@ const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' 
     }
     
     // Company users can only see their own company data
-    if (user.role === 'company' && user.company) {
+    if (user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
         return query(movimentiCollection, where('societa', '==', user.company));
     }
 
@@ -79,6 +81,8 @@ export default function MovimentiPage() {
     const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
 
     const [isSeeding, setIsSeeding] = useState(false);
+    const [movementToDelete, setMovementToDelete] = useState<Movimento | null>(null);
+
 
      useEffect(() => {
         const seedDatabase = async () => {
@@ -128,6 +132,8 @@ export default function MovimentiPage() {
     useEffect(() => {
         if (user?.role === 'company' && user.company) {
             setSelectedCompany(user.company);
+        } else if (user?.role === 'company-editor' && user.company) {
+            setSelectedCompany(user.company);
         }
     }, [user]);
 
@@ -157,11 +163,24 @@ export default function MovimentiPage() {
         try {
             const docRef = doc(firestore, 'movements', updatedMovement.id);
             const { id, ...dataToUpdate } = updatedMovement;
-            await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString() });
+            await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString(), createdBy: updatedMovement.createdBy || user.uid });
             toast({ title: "Movimento Aggiornato", description: "Il movimento è stato modificato." });
         } catch (error) {
              console.error("Error updating movement: ", error);
             toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare il movimento. Controlla i permessi.' });
+        }
+    };
+
+    const handleDeleteMovement = async () => {
+        if (!movementToDelete || !firestore) return;
+        try {
+            await deleteDoc(doc(firestore, 'movements', movementToDelete.id));
+            toast({ title: "Movimento Eliminato", description: "Il movimento è stato eliminato con successo." });
+        } catch (error) {
+            console.error("Error deleting movement: ", error);
+            toast({ variant: 'destructive', title: 'Errore Eliminazione', description: 'Impossibile eliminare il movimento. Controlla i permessi.' });
+        } finally {
+            setMovementToDelete(null);
         }
     };
     
@@ -230,6 +249,12 @@ export default function MovimentiPage() {
         if (selectedCompany === 'Tutte') return 'Movimenti';
         return `Movimenti - ${selectedCompany}`;
     }
+    
+    const canDelete = (movimento: Movimento) => {
+        if (!user) return false;
+        if (user.role === 'admin') return true;
+        return user.uid === movimento.createdBy;
+    }
 
   return (
     <div className="flex flex-col gap-6">
@@ -248,6 +273,21 @@ export default function MovimentiPage() {
             onImport={handleImportMovements}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
         />
+        <AlertDialog open={!!movementToDelete} onOpenChange={(open) => !open && setMovementToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Questa azione non può essere annullata. Il movimento &quot;{movementToDelete?.descrizione}&quot; del {movementToDelete && formatDate(movementToDelete.data)} per un importo di {movementToDelete && formatCurrency(movementToDelete.entrata > 0 ? movementToDelete.entrata : movementToDelete.uscita)} sarà eliminato permanentemente.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteMovement} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
        <Tabs value={selectedCompany} onValueChange={(value) => setSelectedCompany(value as 'LNC' | 'STG' | 'Tutte')} className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             {user && (user.role === 'admin' || user.role === 'editor') && (
@@ -374,9 +414,16 @@ export default function MovimentiPage() {
                             <TableCell>{movimento.metodoPag}</TableCell>
                             <TableCell>{movimento.note}</TableCell>
                             <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" onClick={() => handleOpenAddDialog(movimento)}>
-                                <Pencil className="h-4 w-4" />
-                            </Button>
+                                <div className='flex justify-end'>
+                                    <Button variant="ghost" size="icon" onClick={() => handleOpenAddDialog(movimento)}>
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    {canDelete(movimento) && (
+                                        <Button variant="ghost" size="icon" onClick={() => setMovementToDelete(movimento)}>
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    )}
+                                </div>
                             </TableCell>
                         </TableRow>
                         );
