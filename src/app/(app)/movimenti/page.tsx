@@ -79,10 +79,17 @@ export default function MovimentiPage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     
     // Filters state
-    const [selectedYear, setSelectedYear] = useState<string | 'Tutti'>(YEARS[1].toString());
+    const [selectedYear, setSelectedYear] = useState<string | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
     const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Tutti');
     const [selectedOperator, setSelectedOperator] = useState<string>('Tutti');
+    const [isClient, setIsClient] = useState(false)
+
+    useEffect(() => {
+        setIsClient(true);
+        // Set default year on client side to prevent hydration mismatch
+        setSelectedYear(YEARS[1].toString());
+    }, []);
 
 
      useEffect(() => {
@@ -414,7 +421,7 @@ export default function MovimentiPage() {
                 </Button>
             </div>
         </div>
-        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+        {isClient && <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
                 <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
@@ -470,7 +477,7 @@ export default function MovimentiPage() {
                     </SelectContent>
                 </Select>
             </div>
-        </div>
+        </div>}
 
         <Card>
             <CardHeader>

@@ -66,11 +66,17 @@ export default function PrevisioniUscitePage() {
     const [isSeeding, setIsSeeding] = useState(false);
     
     // Filters
-    const [selectedYear, setSelectedYear] = useState<string | 'Tutti'>(YEARS[1].toString());
+    const [selectedYear, setSelectedYear] = useState<string | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
     const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Tutti');
     const [selectedCertainty, setSelectedCertainty] = useState<string>('Tutti');
     const [selectedStatus, setSelectedStatus] = useState<string>('Tutti');
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+        setIsClient(true);
+        setSelectedYear(YEARS[1].toString());
+    }, []);
 
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
@@ -236,7 +242,7 @@ export default function PrevisioniUscitePage() {
     };
     
     const getPageTitle = () => {
-        if (selectedCompany === 'Tutte') return 'Previsioni Uscite';
+        if (selectedCompany === 'Tutti') return 'Previsioni Uscite';
         return `Previsioni Uscite - ${selectedCompany}`;
     };
 
@@ -324,7 +330,7 @@ export default function PrevisioniUscitePage() {
             </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+        {isClient && <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
                 <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
@@ -372,7 +378,7 @@ export default function PrevisioniUscitePage() {
                     </SelectContent>
                 </Select>
             </div>
-        </div>
+        </div>}
 
         <Card>
             <CardHeader>
