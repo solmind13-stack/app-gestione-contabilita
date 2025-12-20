@@ -4,7 +4,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, where, writeBatch, getDocs, doc, addDoc, updateDoc, CollectionReference } from 'firebase/firestore';
-import { useFilter } from '@/context/filter-context';
 import {
   Card,
   CardContent,
@@ -33,52 +32,50 @@ import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percen
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { previsioniUsciteData as initialData } from '@/lib/previsioni-uscite-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { PrevisioneUscita, RiepilogoPrevisioniUscite, AppUser } from '@/lib/types';
 import { AddExpenseForecastDialog } from '@/components/previsioni/add-expense-forecast-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { YEARS } from '@/lib/constants';
 
-const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
+const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!user || !firestore) return null;
     let q = collection(firestore, 'expenseForecasts') as CollectionReference<PrevisioneUscita>;
-    let conditions: any[] = [];
-
-    // Company filter
+    
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            conditions.push(where('societa', '==', company));
+            return query(q, where('societa', '==', company));
         }
     } else if (user.role === 'company' || user.role === 'company-editor') {
         if (!user.company) return null;
-        conditions.push(where('societa', '==', user.company));
+        return query(q, where('societa', '==', user.company));
     }
-
-    // Year filter
-    if (year !== 'Tutti') {
-        conditions.push(where('anno', '==', year));
-    }
-
-    if (conditions.length > 0) {
-        return query(q, ...conditions);
-    }
+    
     return query(q);
 }
 
 export default function PrevisioniUscitePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
-    const { selectedYear } = useFilter();
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneUscita, direction: 'asc' | 'desc' } | null>({ key: 'dataScadenza', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingForecast, setEditingForecast] = useState<PrevisioneUscita | null>(null);
     const [isSeeding, setIsSeeding] = useState(false);
     
+    // Filters
+    const [selectedYear, setSelectedYear] = useState<string | 'Tutti'>(YEARS[1].toString());
+    const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
+    const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Tutti');
+    const [selectedCertainty, setSelectedCertainty] = useState<string>('Tutti');
+    const [selectedStatus, setSelectedStatus] = useState<string>('Tutti');
+
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const expenseForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
+    const expenseForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
 
     const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
 
@@ -116,6 +113,8 @@ export default function PrevisioniUscitePage() {
 
     useEffect(() => {
         if (user?.role === 'company' && user.company) {
+            setSelectedCompany(user.company);
+        } else if (user?.role === 'company-editor' && user.company) {
             setSelectedCompany(user.company);
         }
     }, [user]);
@@ -158,13 +157,32 @@ export default function PrevisioniUscitePage() {
     const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);
     const calculatePonderato = (importo: number, probabilita: number) => importo * probabilita;
 
-    const filteredPrevisioni = useMemo(() => {
+    const { 
+        filteredPrevisioni,
+        uniqueCategories,
+        uniqueSubCategories,
+        uniqueCertainties,
+        uniqueStatuses,
+        riepilogo 
+    } = useMemo(() => {
         let data = previsioni || [];
 
-        let sortableItems = [...data].filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+        const categories = [...new Set(data.map(item => item.categoria))].sort();
+        const certainties = [...new Set(data.map(item => item.certezza))].sort();
+        const statuses = [...new Set(data.map(item => item.stato))].sort();
+
+        let filtered = data
+            .filter(p => selectedYear === 'Tutti' || p.anno === Number(selectedYear))
+            .filter(p => selectedCategory === 'Tutti' || p.categoria === selectedCategory)
+            .filter(p => selectedSubCategory === 'Tutti' || p.sottocategoria === selectedSubCategory)
+            .filter(p => selectedCertainty === 'Tutti' || p.certezza === selectedCertainty)
+            .filter(p => selectedStatus === 'Tutti' || p.stato === selectedStatus)
+            .filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        const subCategories = [...new Set(filtered.map(item => item.sottocategoria).filter(Boolean))].sort();
 
         if (sortConfig !== null) {
-            sortableItems.sort((a, b) => {
+            filtered.sort((a, b) => {
             const valA = a[sortConfig.key];
             const valB = b[sortConfig.key];
             if (valA < valB) {
@@ -176,18 +194,31 @@ export default function PrevisioniUscitePage() {
             return 0;
             });
         }
-        return sortableItems;
-    }, [previsioni, searchTerm, sortConfig]);
+        
+        const riepilogoData: RiepilogoPrevisioniUscite = {
+            totalePrevisto: filtered.reduce((acc, p) => acc + p.importoLordo, 0),
+            totalePonderato: filtered.reduce((acc, p) => acc + calculatePonderato(p.importoLordo, p.probabilita), 0),
+            totaleEffettivo: filtered.reduce((acc, p) => acc + (p.importoEffettivo || 0), 0),
+            daPagare: filtered.reduce((acc, p) => acc + (p.importoLordo - (p.importoEffettivo || 0)), 0),
+            percentualePagato: 0,
+        };
+        riepilogoData.percentualePagato = riepilogoData.totalePrevisto > 0 ? (riepilogoData.totaleEffettivo / riepilogoData.totalePrevisto) * 100 : 0;
 
-    const riepilogo = useMemo((): RiepilogoPrevisioniUscite => {
-        const data = filteredPrevisioni;
-        const totalePrevisto = data.reduce((acc, p) => acc + p.importoLordo, 0);
-        const totalePonderato = data.reduce((acc, p) => acc + calculatePonderato(p.importoLordo, p.probabilita), 0);
-        const totaleEffettivo = data.reduce((acc, p) => acc + (p.importoEffettivo || 0), 0);
-        const daPagare = totalePrevisto - totaleEffettivo;
-        const percentualePagato = totalePrevisto > 0 ? (totaleEffettivo / totalePrevisto) * 100 : 0;
-        return { totalePrevisto, totalePonderato, totaleEffettivo, daPagare, percentualePagato };
-    }, [filteredPrevisioni]);
+        return {
+            filteredPrevisioni: filtered,
+            uniqueCategories: categories,
+            uniqueSubCategories: subCategories,
+            uniqueCertainties: certainties,
+            uniqueStatuses: statuses,
+            riepilogo: riepilogoData,
+        };
+    }, [previsioni, searchTerm, sortConfig, selectedYear, selectedCategory, selectedSubCategory, selectedCertainty, selectedStatus]);
+    
+    useEffect(() => {
+        if (selectedCategory === 'Tutti') {
+            setSelectedSubCategory('Tutti');
+        }
+    }, [selectedCategory]);
 
     const requestSort = (key: keyof PrevisioneUscita) => {
         let direction: 'asc' | 'desc' = 'asc';
@@ -205,7 +236,7 @@ export default function PrevisioniUscitePage() {
     };
     
     const getPageTitle = () => {
-        if (selectedCompany === 'Tutte') return 'Previsioni Uscite - Tutte le società';
+        if (selectedCompany === 'Tutte') return 'Previsioni Uscite';
         return `Previsioni Uscite - ${selectedCompany}`;
     };
 
@@ -290,6 +321,56 @@ export default function PrevisioniUscitePage() {
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+            </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Anno:</label>
+                <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
+                    <SelectTrigger className="w-[120px]"><SelectValue placeholder="Anno" /></SelectTrigger>
+                    <SelectContent>{YEARS.map(year => <SelectItem key={year} value={String(year)}>{year}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+            <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Categoria:</label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-[180px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutte le Categorie</SelectItem>
+                        {uniqueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Sottocategoria:</label>
+                 <Select value={selectedSubCategory} onValueChange={setSelectedSubCategory} disabled={selectedCategory === 'Tutti'}>
+                    <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sottocategoria" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutte le Sottocategorie</SelectItem>
+                        {uniqueSubCategories.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Certezza:</label>
+                <Select value={selectedCertainty} onValueChange={setSelectedCertainty}>
+                    <SelectTrigger className="w-[150px]"><SelectValue placeholder="Certezza" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutti i Livelli</SelectItem>
+                        {uniqueCertainties.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Stato:</label>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <SelectTrigger className="w-[150px]"><SelectValue placeholder="Stato" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutti gli Stati</SelectItem>
+                        {uniqueStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
             </div>
         </div>
 

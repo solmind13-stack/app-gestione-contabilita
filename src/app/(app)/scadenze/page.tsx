@@ -4,7 +4,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference } from 'firebase/firestore';
-import { useFilter } from '@/context/filter-context';
 import {
   Card,
   CardContent,
@@ -33,36 +32,27 @@ import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { scadenzeData as initialScadenzeData } from '@/lib/scadenze-data';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Scadenza, AppUser } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { YEARS, CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
 
-const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
+const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!firestore || !user) return null;
     
     let q = collection(firestore, 'deadlines') as CollectionReference<Scadenza>;
-    let conditions: any[] = [];
 
-    // Company filter
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            conditions.push(where('societa', '==', company));
+            return query(q, where('societa', '==', company));
         }
     } else if (user.role === 'company' || user.role === 'company-editor') {
         if (!user.company) return null;
-        conditions.push(where('societa', '==', user.company));
-    }
-
-    // Year filter
-    if (year !== 'Tutti') {
-        conditions.push(where('anno', '==', year));
-    }
-    
-    if (conditions.length > 0) {
-        return query(q, ...conditions);
+        return query(q, where('societa', '==', user.company));
     }
 
     return query(q);
@@ -71,17 +61,22 @@ const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' |
 export default function ScadenzePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
-    const { selectedYear } = useFilter();
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
     const [isSeeding, setIsSeeding] = useState(false);
 
+    // Filters
+    const [selectedYear, setSelectedYear] = useState<string | 'Tutti'>(YEARS[1].toString());
+    const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
+    const [selectedStatus, setSelectedStatus] = useState<string>('Tutti');
+    const [selectedRecurrence, setSelectedRecurrence] = useState<string>('Tutti');
+
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
+    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
 
@@ -119,6 +114,9 @@ export default function ScadenzePage() {
 
     useEffect(() => {
         if (user?.role === 'company' && user.company) {
+            setSelectedCompany(user.company);
+        }
+         else if (user?.role === 'company-editor' && user.company) {
             setSelectedCompany(user.company);
         }
     }, [user]);
@@ -166,43 +164,62 @@ export default function ScadenzePage() {
         setIsDialogOpen(true);
     };
 
-    const filteredScadenze = useMemo(() => {
+    const { 
+        filteredScadenze,
+        uniqueCategories,
+        uniqueStatuses,
+        uniqueRecurrences,
+        riepilogo, 
+        scadenzeMese, 
+        scadenzeUrgenti, 
+        scadenzeScadute 
+    } = useMemo(() => {
         let data = scadenze || [];
         
-        return data
-            .filter(s => s.descrizione.toLowerCase().includes(searchTerm.toLowerCase()))
-            .sort((a, b) => {
+        const categories = [...new Set(data.map(item => item.categoria))].sort();
+        const statuses = [...new Set(data.map(item => item.stato))].sort();
+        const recurrences = [...new Set(data.map(item => item.ricorrenza))].sort();
+        
+        let filtered = data
+            .filter(s => selectedYear === 'Tutti' || s.anno === Number(selectedYear))
+            .filter(s => selectedCategory === 'Tutti' || s.categoria === selectedCategory)
+            .filter(s => selectedStatus === 'Tutti' || s.stato === selectedStatus)
+            .filter(s => selectedRecurrence === 'Tutti' || s.ricorrenza === selectedRecurrence)
+            .filter(s => s.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+        filtered = filtered.sort((a, b) => {
                 const dateA = new Date(a.dataScadenza).getTime();
                 const dateB = new Date(b.dataScadenza).getTime();
                 return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
             });
-    }, [scadenze, searchTerm, sortOrder]);
-    
-    const { riepilogo, scadenzeMese, scadenzeUrgenti, scadenzeScadute } = useMemo(() => {
-        const data = filteredScadenze;
+
         const oggi = new Date();
-        oggi.setHours(0, 0, 0, 0); // Set to start of day
+        oggi.setHours(0, 0, 0, 0);
         const setteGiorni = new Date(oggi);
         setteGiorni.setDate(oggi.getDate() + 7);
 
-        const scadenzeNelMese = data.filter(s => {
+        const scadenzeNelMese = filtered.filter(s => {
             const dataScadenza = new Date(s.dataScadenza);
             return dataScadenza.getMonth() === oggi.getMonth() && dataScadenza.getFullYear() === oggi.getFullYear() && s.stato !== 'Pagato';
         });
 
-        const scadenzeUrg = data.filter(s => {
+        const scadenzeUrg = filtered.filter(s => {
             const dataScadenza = new Date(s.dataScadenza);
             return dataScadenza >= oggi && dataScadenza <= setteGiorni && s.stato !== 'Pagato';
         });
 
-        const scadenzeOverdue = data.filter(s => new Date(s.dataScadenza) < oggi && s.stato !== 'Pagato');
+        const scadenzeOverdue = filtered.filter(s => new Date(s.dataScadenza) < oggi && s.stato !== 'Pagato');
 
-        const totalePrevisto = data.reduce((acc, s) => acc + s.importoPrevisto, 0);
-        const totalePagato = data.reduce((acc, s) => acc + s.importoPagato, 0);
+        const totalePrevisto = filtered.reduce((acc, s) => acc + s.importoPrevisto, 0);
+        const totalePagato = filtered.reduce((acc, s) => acc + s.importoPagato, 0);
         const daPagare = totalePrevisto - totalePagato;
         const percentualeCompletamento = totalePrevisto > 0 ? (totalePagato / totalePrevisto) * 100 : 0;
         
         return {
+            filteredScadenze: filtered,
+            uniqueCategories: categories,
+            uniqueStatuses: statuses,
+            uniqueRecurrences: recurrences,
             riepilogo: { totalePrevisto, totalePagato, daPagare, percentualeCompletamento },
             scadenzeMese: {
                 importo: scadenzeNelMese.reduce((acc, s) => acc + (s.importoPrevisto - s.importoPagato), 0),
@@ -217,10 +234,10 @@ export default function ScadenzePage() {
                 conteggio: scadenzeOverdue.length
             }
         };
-    }, [filteredScadenze]);
+    }, [scadenze, searchTerm, sortOrder, selectedYear, selectedCategory, selectedStatus, selectedRecurrence]);
 
     const getPageTitle = () => {
-        if (selectedCompany === 'Tutte') return 'Scadenze - Tutte le società';
+        if (selectedCompany === 'Tutte') return 'Scadenze';
         return `Scadenze - ${selectedCompany}`;
     };
 
@@ -321,6 +338,52 @@ export default function ScadenzePage() {
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+            </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Anno:</label>
+                <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
+                    <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Anno" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {YEARS.map(year => (
+                            <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Categoria:</label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-[180px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutte le Categorie</SelectItem>
+                        {uniqueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Stato:</label>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <SelectTrigger className="w-[150px]"><SelectValue placeholder="Stato" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutti gli Stati</SelectItem>
+                        {uniqueStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Ricorrenza:</label>
+                <Select value={selectedRecurrence} onValueChange={setSelectedRecurrence}>
+                    <SelectTrigger className="w-[150px]"><SelectValue placeholder="Ricorrenza" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutte le Ricorrenze</SelectItem>
+                        {uniqueRecurrences.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    </SelectContent>
+                </Select>
             </div>
         </div>
 

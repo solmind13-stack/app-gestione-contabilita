@@ -4,7 +4,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, where, writeBatch, getDocs, doc, CollectionReference } from 'firebase/firestore';
-import { useFilter } from '@/context/filter-context';
 import {
   Card,
   CardContent,
@@ -32,34 +31,26 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Percent, Wallet, CheckCircle, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { previsioniEntrateData as initialData } from '@/lib/previsioni-entrate-data';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { PrevisioneEntrata, RiepilogoPrevisioniEntrate, AppUser } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { YEARS } from '@/lib/constants';
 
-const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', year: number | 'Tutti') => {
+const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!firestore || !user) return null;
     let q = collection(firestore, 'incomeForecasts') as CollectionReference<PrevisioneEntrata>;
-    let conditions: any[] = [];
-
-    // Company filter
+    
     if (user.role === 'admin' || user.role === 'editor') {
         if (company !== 'Tutte') {
-            conditions.push(where('societa', '==', company));
+            return query(q, where('societa', '==', company));
         }
     } else if (user.role === 'company' || user.role === 'company-editor') {
         if (!user.company) return null;
-        conditions.push(where('societa', '==', user.company));
+        return query(q, where('societa', '==', user.company));
     }
-
-    // Year filter
-    if (year !== 'Tutti') {
-        conditions.push(where('anno', '==', year));
-    }
-
-    if (conditions.length > 0) {
-        return query(q, ...conditions);
-    }
+    
     return query(q);
 }
 
@@ -67,15 +58,20 @@ const getPrevisioniQuery = (firestore: any, user: AppUser | null, company: 'LNC'
 export default function PrevisioniEntratePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
-    const { selectedYear } = useFilter();
     const [sortConfig, setSortConfig] = useState<{ key: keyof PrevisioneEntrata, direction: 'asc' | 'desc' } | null>({ key: 'dataPrevista', direction: 'asc' });
     const [searchTerm, setSearchTerm] = useState('');
     const [isSeeding, setIsSeeding] = useState(false);
 
+    // Filters
+    const [selectedYear, setSelectedYear] = useState<string | 'Tutti'>(YEARS[1].toString());
+    const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
+    const [selectedCertainty, setSelectedCertainty] = useState<string>('Tutti');
+    const [selectedStatus, setSelectedStatus] = useState<string>('Tutti');
+
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany, selectedYear), [firestore, user, selectedCompany, selectedYear]);
+    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
 
      useEffect(() => {
@@ -113,6 +109,8 @@ export default function PrevisioniEntratePage() {
     useEffect(() => {
         if (user?.role === 'company' && user.company) {
             setSelectedCompany(user.company);
+        } else if (user?.role === 'company-editor' && user.company) {
+            setSelectedCompany(user.company);
         }
     }, [user]);
 
@@ -120,13 +118,28 @@ export default function PrevisioniEntratePage() {
     const calculateIva = (lordo: number, iva: number) => lordo - calculateNetto(lordo, iva);
     const calculatePonderato = (lordo: number, probabilita: number) => lordo * probabilita;
 
-    const filteredPrevisioni = useMemo(() => {
+    const { 
+        filteredPrevisioni, 
+        uniqueCategories,
+        uniqueCertainties,
+        uniqueStatuses,
+        riepilogo 
+    } = useMemo(() => {
       let data = previsioni || [];
       
-      let sortableItems = [...data].filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
+      const categories = [...new Set(data.map(item => item.categoria))].sort();
+      const certainties = [...new Set(data.map(item => item.certezza))].sort();
+      const statuses = [...new Set(data.map(item => item.stato))].sort();
+
+      let filtered = data
+        .filter(p => selectedYear === 'Tutti' || p.anno === Number(selectedYear))
+        .filter(p => selectedCategory === 'Tutti' || p.categoria === selectedCategory)
+        .filter(p => selectedCertainty === 'Tutti' || p.certezza === selectedCertainty)
+        .filter(p => selectedStatus === 'Tutti' || p.stato === selectedStatus)
+        .filter(p => p.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
 
       if (sortConfig !== null) {
-        sortableItems.sort((a, b) => {
+        filtered.sort((a, b) => {
           if (a[sortConfig.key] < b[sortConfig.key]) {
             return sortConfig.direction === 'asc' ? -1 : 1;
           }
@@ -136,16 +149,21 @@ export default function PrevisioniEntratePage() {
           return 0;
         });
       }
-      return sortableItems;
-    }, [previsioni, searchTerm, sortConfig]);
 
-    const riepilogo = useMemo((): RiepilogoPrevisioniEntrate => {
-        const data = filteredPrevisioni;
-        const totaleLordo = data.reduce((acc, p) => acc + p.importoLordo, 0);
-        const totalePonderato = data.reduce((acc, p) => acc + calculatePonderato(p.importoLordo, p.probabilita), 0);
-        const totaleIncassato = data.filter(p => p.stato === 'Incassato').reduce((acc, p) => acc + p.importoLordo, 0);
-        return { totaleLordo, totalePonderato, totaleIncassato };
-    }, [filteredPrevisioni]);
+      const riepilogoData: RiepilogoPrevisioniEntrate = {
+        totaleLordo: filtered.reduce((acc, p) => acc + p.importoLordo, 0),
+        totalePonderato: filtered.reduce((acc, p) => acc + calculatePonderato(p.importoLordo, p.probabilita), 0),
+        totaleIncassato: filtered.filter(p => p.stato === 'Incassato').reduce((acc, p) => acc + p.importoLordo, 0),
+      };
+      
+      return {
+        filteredPrevisioni: filtered,
+        uniqueCategories: categories,
+        uniqueCertainties: certainties,
+        uniqueStatuses: statuses,
+        riepilogo: riepilogoData,
+      };
+    }, [previsioni, searchTerm, sortConfig, selectedYear, selectedCategory, selectedCertainty, selectedStatus]);
 
     const requestSort = (key: keyof PrevisioneEntrata) => {
         let direction: 'asc' | 'desc' = 'asc';
@@ -163,7 +181,7 @@ export default function PrevisioniEntratePage() {
     };
 
     const getPageTitle = () => {
-        if (selectedCompany === 'Tutte') return 'Previsioni Entrate - Tutte le società';
+        if (selectedCompany === 'Tutte') return 'Previsioni Entrate';
         return `Previsioni Entrate - ${selectedCompany}`;
     };
 
@@ -241,6 +259,47 @@ export default function PrevisioniEntratePage() {
                 </DropdownMenu>
             </div>
         </div>
+
+        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Anno:</label>
+                <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
+                    <SelectTrigger className="w-[120px]"><SelectValue placeholder="Anno" /></SelectTrigger>
+                    <SelectContent>{YEARS.map(year => <SelectItem key={year} value={String(year)}>{year}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+            <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Categoria:</label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-[180px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutte le Categorie</SelectItem>
+                        {uniqueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Certezza:</label>
+                <Select value={selectedCertainty} onValueChange={setSelectedCertainty}>
+                    <SelectTrigger className="w-[150px]"><SelectValue placeholder="Certezza" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutti i Livelli</SelectItem>
+                        {uniqueCertainties.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Stato:</label>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <SelectTrigger className="w-[150px]"><SelectValue placeholder="Stato" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutti">Tutti gli Stati</SelectItem>
+                        {uniqueStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
+
 
         <Card>
             <CardHeader>
