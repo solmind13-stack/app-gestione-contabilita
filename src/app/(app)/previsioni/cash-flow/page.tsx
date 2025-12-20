@@ -1,13 +1,13 @@
 // src/app/(app)/previsioni/cash-flow/page.tsx
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Wand2, LineChart, Wallet, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 import { analyzeCashFlow, type AnalyzeCashFlowOutput } from '@/ai/flows/analyze-cash-flow';
@@ -22,9 +22,9 @@ export default function CashFlowPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
 
-  const movimentiQuery = useMemoFirebase(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
-  const previsioniEntrateQuery = useMemoFirebase(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
-  const previsioniUsciteQuery = useMemoFirebase(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
+  const movimentiQuery = useMemo(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
+  const previsioniEntrateQuery = useMemo(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
+  const previsioniUsciteQuery = useMemo(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
 
   const { data: movimentiData } = useCollection<Movimento>(movimentiQuery);
   const { data: previsioniEntrateData } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);

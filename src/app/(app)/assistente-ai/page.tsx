@@ -1,14 +1,14 @@
 // src/app/(app)/assistente-ai/page.tsx
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Send, Sparkles, Loader2 } from 'lucide-react';
-import { useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -30,10 +30,10 @@ export default function AssistenteAiPage() {
 
   const firestore = useFirestore();
 
-  const movimentiQuery = useMemoFirebase(() => collection(firestore, 'movements'), [firestore]);
-  const scadenzeQuery = useMemoFirebase(() => collection(firestore, 'deadlines'), [firestore]);
-  const previsioniEntrateQuery = useMemoFirebase(() => collection(firestore, 'incomeForecasts'), [firestore]);
-  const previsioniUsciteQuery = useMemoFirebase(() => collection(firestore, 'expenseForecasts'), [firestore]);
+  const movimentiQuery = useMemo(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
+  const scadenzeQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
+  const previsioniEntrateQuery = useMemo(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
+  const previsioniUsciteQuery = useMemo(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
 
   const { data: movimenti } = useCollection<Movimento>(movimentiQuery);
   const { data: scadenze } = useCollection<Scadenza>(scadenzeQuery);

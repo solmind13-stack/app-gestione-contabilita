@@ -1,9 +1,9 @@
 // src/firebase/provider.tsx
 'use client';
 
-import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc, serverTimestamp, collection, getDocs, query } from 'firebase/firestore';
+import { Firestore, doc, getDoc } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import type { AppUser, UserRole } from '@/lib/types';
@@ -77,7 +77,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       auth,
       async (firebaseUser: FirebaseUser | null) => {
         if (firebaseUser) {
-           setUserAuthState({ user: null, isUserLoading: true, userError: null });
+           setUserAuthState(prev => ({ ...prev, isUserLoading: true }));
            const userDocRef = doc(firestore, 'users', firebaseUser.uid);
           try {
             const userDocSnap = await getDoc(userDocRef);
@@ -180,22 +180,6 @@ export const useFirestore = (): Firestore | null => {
 export const useFirebaseApp = (): FirebaseApp | null => {
   return useMaybeFirebase().firebaseApp;
 };
-
-type MemoFirebase <T> = T & {__memo?: boolean};
-
-export function useMemoFirebase<T>(factory: () => T | null, deps: DependencyList): T | null {
-  const memoized = useMemo(factory, deps);
-  
-  if(memoized === null || typeof memoized !== 'object') return memoized;
-
-  // This check is a bit of a hack to "tag" the object as memoized.
-  // It's not standard React but helps in debugging downstream hooks.
-  if (memoized && typeof memoized === 'object') {
-    (memoized as MemoFirebase<T>).__memo = true;
-  }
-  
-  return memoized;
-}
 
 export const useUser = (): UserHookResult => {
   const { user, isUserLoading, userError } = useMaybeFirebase();

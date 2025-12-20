@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc } from 'firebase/firestore';
 
 import {
@@ -69,7 +69,7 @@ export default function MovimentiPage() {
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
     
-    const movimentiQuery = useMemoFirebase(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const movimentiQuery = useMemo(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
 
     const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
 
@@ -88,7 +88,9 @@ export default function MovimentiPage() {
     useEffect(() => {
         setIsClient(true);
         // Set default year on client side to prevent hydration mismatch
-        setSelectedYear(YEARS[1].toString());
+        if (!selectedYear) {
+            setSelectedYear(YEARS[1].toString());
+        }
     }, []);
 
 
@@ -272,7 +274,7 @@ export default function MovimentiPage() {
         
         // Filtering logic
         let filtered = data
-            .filter(m => selectedYear === 'Tutti' || m.anno === Number(selectedYear))
+            .filter(m => !selectedYear || selectedYear === 'Tutti' || m.anno === Number(selectedYear))
             .filter(m => selectedCategory === 'Tutti' || m.categoria === selectedCategory)
             .filter(m => selectedSubCategory === 'Tutti' || m.sottocategoria === selectedSubCategory)
             .filter(m => selectedOperator === 'Tutti' || m.operatore === selectedOperator)
@@ -424,7 +426,7 @@ export default function MovimentiPage() {
         {isClient && <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
-                <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
+                <Select value={selectedYear || ''} onValueChange={(value) => setSelectedYear(value)}>
                     <SelectTrigger className="w-[120px]">
                         <SelectValue placeholder="Anno" />
                     </SelectTrigger>

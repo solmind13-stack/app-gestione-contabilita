@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, where, writeBatch, getDocs, doc, CollectionReference } from 'firebase/firestore';
+import { useCollection, useFirestore, useUser } from '@/firebase';
+import { collection, query, where, writeBatch, getDocs, doc, addDoc, updateDoc, CollectionReference } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -71,13 +71,15 @@ export default function PrevisioniEntratePage() {
 
     useEffect(() => {
         setIsClient(true);
-        setSelectedYear(YEARS[1].toString());
+        if (!selectedYear) {
+            setSelectedYear(YEARS[1].toString());
+        }
     }, []);
 
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const incomeForecastsQuery = useMemoFirebase(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const incomeForecastsQuery = useMemo(() => getPrevisioniQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     const { data: previsioni, isLoading: isLoadingPrevisioni, error } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
 
      useEffect(() => {
@@ -138,7 +140,7 @@ export default function PrevisioniEntratePage() {
       const statuses = [...new Set(data.map(item => item.stato))].sort();
 
       let filtered = data
-        .filter(p => selectedYear === 'Tutti' || p.anno === Number(selectedYear))
+        .filter(p => !selectedYear || selectedYear === 'Tutti' || p.anno === Number(selectedYear))
         .filter(p => selectedCategory === 'Tutti' || p.categoria === selectedCategory)
         .filter(p => selectedCertainty === 'Tutti' || p.certezza === selectedCertainty)
         .filter(p => selectedStatus === 'Tutti' || p.stato === selectedStatus)
@@ -269,7 +271,7 @@ export default function PrevisioniEntratePage() {
         {isClient && <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
-                <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
+                <Select value={selectedYear || ''} onValueChange={(value) => setSelectedYear(value)}>
                     <SelectTrigger className="w-[120px]"><SelectValue placeholder="Anno" /></SelectTrigger>
                     <SelectContent>{YEARS.map(year => <SelectItem key={year} value={String(year)}>{year}</SelectItem>)}</SelectContent>
                 </Select>

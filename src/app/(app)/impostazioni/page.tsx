@@ -1,14 +1,14 @@
 // src/app/(app)/impostazioni/page.tsx
 "use client";
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PlusCircle, Trash2, Loader2, Pencil } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where } from 'firebase/firestore';
 import type { AppUser } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -115,7 +115,7 @@ const UserManagementCard = () => {
     const [editingUser, setEditingUser] = useState<AppUser | null>(null);
     const [deletingUser, setDeletingUser] = useState<AppUser | null>(null);
 
-    const usersQuery = useMemoFirebase(() => {
+    const usersQuery = useMemo(() => {
         if (!firestore) return null;
         return query(collection(firestore, 'users'));
     }, [firestore]);

@@ -10,16 +10,7 @@ export function initializeFirebase(): { firebaseApp: FirebaseApp; auth: Auth; fi
   let firebaseApp: FirebaseApp;
 
   if (getApps().length === 0) {
-     try {
-      // First, try initializing with environment variables (for App Hosting)
-      firebaseApp = initializeApp();
-    } catch (e) {
-      // If that also fails, fall back to the config object (for local dev)
-      if (process.env.NODE_ENV === "production") {
-        console.warn('Automatic Firebase initialization failed. Falling back to firebaseConfig.', e);
-      }
-      firebaseApp = initializeApp(firebaseConfig);
-    }
+    firebaseApp = initializeApp(firebaseConfig);
   } else {
     firebaseApp = getApp();
   }

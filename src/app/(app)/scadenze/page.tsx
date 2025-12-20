@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference } from 'firebase/firestore';
 import {
   Card,
@@ -76,13 +76,15 @@ export default function ScadenzePage() {
 
     useEffect(() => {
         setIsClient(true);
-        setSelectedYear(YEARS[1].toString());
+        if (!selectedYear) {
+            setSelectedYear(YEARS[1].toString());
+        }
     }, []);
 
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const deadlinesQuery = useMemoFirebase(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const deadlinesQuery = useMemo(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
 
@@ -187,7 +189,7 @@ export default function ScadenzePage() {
         const recurrences = [...new Set(data.map(item => item.ricorrenza))].sort();
         
         let filtered = data
-            .filter(s => selectedYear === 'Tutti' || s.anno === Number(selectedYear))
+            .filter(s => !selectedYear || selectedYear === 'Tutti' || s.anno === Number(selectedYear))
             .filter(s => selectedCategory === 'Tutti' || s.categoria === selectedCategory)
             .filter(s => selectedStatus === 'Tutti' || s.stato === selectedStatus)
             .filter(s => selectedRecurrence === 'Tutti' || s.ricorrenza === selectedRecurrence)
@@ -350,7 +352,7 @@ export default function ScadenzePage() {
         {isClient && <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
-                <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(value)}>
+                <Select value={selectedYear || ''} onValueChange={(value) => setSelectedYear(value)}>
                     <SelectTrigger className="w-[120px]">
                         <SelectValue placeholder="Anno" />
                     </SelectTrigger>
