@@ -598,19 +598,21 @@ export default function MovimentiPage() {
                         );
                     }))}
                 </TableBody>
-                <TableFooter>
-                    <TableRow>
-                    <TableCell colSpan={user?.role === 'admin' ? 7 : 6} className="font-bold">TOTALI</TableCell>
-                    <TableCell className="text-right font-bold text-green-600">{formatCurrency(riepilogo.totaleEntrate)}</TableCell>
-                    <TableCell className="text-right font-bold text-red-600">{formatCurrency(riepilogo.totaleUscite)}</TableCell>
-                    <TableCell />
-                    <TableCell className="text-right font-bold">{formatCurrency(totalEntrateNette)}</TableCell>
-                    <TableCell className="text-right font-bold">{formatCurrency(totalIvaEntrate)}</TableCell>
-                    <TableCell className="text-right font-bold">{formatCurrency(totalUsciteNette)}</TableCell>
-                    <TableCell className="text-right font-bold">{formatCurrency(totalIvaUscite)}</TableCell>
-                    <TableCell colSpan={5}></TableCell>
-                    </TableRow>
-                </TableFooter>
+                {filteredMovimenti.length > 0 && (
+                    <TableFooter>
+                        <TableRow>
+                        <TableCell colSpan={user?.role === 'admin' ? 7 : 6} className="font-bold">TOTALI</TableCell>
+                        <TableCell className="text-right font-bold text-green-600">{formatCurrency(riepilogo.totaleEntrate)}</TableCell>
+                        <TableCell className="text-right font-bold text-red-600">{formatCurrency(riepilogo.totaleUscite)}</TableCell>
+                        <TableCell />
+                        <TableCell className="text-right font-bold">{formatCurrency(totalEntrateNette)}</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(totalIvaEntrate)}</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(totalUsciteNette)}</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(totalIvaUscite)}</TableCell>
+                        <TableCell colSpan={5}></TableCell>
+                        </TableRow>
+                    </TableFooter>
+                )}
                 </Table>
             </div>
             </CardContent>
