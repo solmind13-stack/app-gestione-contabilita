@@ -24,9 +24,9 @@ export default function CashFlowPage() {
   const firestore = useFirestore();
 
   // Fetching all necessary data
-  const movimentiQuery = useMemoFirebase(() => collection(firestore, 'movements'), [firestore]);
-  const previsioniEntrateQuery = useMemoFirebase(() => collection(firestore, 'incomeForecasts'), [firestore]);
-  const previsioniUsciteQuery = useMemoFirebase(() => collection(firestore, 'expenseForecasts'), [firestore]);
+  const movimentiQuery = useMemoFirebase(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
+  const previsioniEntrateQuery = useMemoFirebase(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
+  const previsioniUsciteQuery = useMemoFirebase(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
 
   const { data: movimentiData } = useCollection<Movimento>(movimentiQuery);
   const { data: previsioniEntrateData } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
