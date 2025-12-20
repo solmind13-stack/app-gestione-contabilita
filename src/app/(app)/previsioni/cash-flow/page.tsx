@@ -7,23 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Wand2, LineChart, Wallet, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 import { analyzeCashFlow, type AnalyzeCashFlowOutput } from '@/ai/flows/analyze-cash-flow';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { formatCurrency } from '@/lib/utils';
 
-
 export default function CashFlowPage() {
   const [analysis, setAnalysis] = useState<AnalyzeCashFlowOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [period, setPeriod] = useState('90'); // Default to 3 months for a better slide presentation
+  const [period, setPeriod] = useState('90');
   const [company, setCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
   const { toast } = useToast();
   const firestore = useFirestore();
 
-  // Fetching all necessary data
   const movimentiQuery = useMemoFirebase(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
   const previsioniEntrateQuery = useMemoFirebase(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
   const previsioniUsciteQuery = useMemoFirebase(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
