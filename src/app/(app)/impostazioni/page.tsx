@@ -1,4 +1,3 @@
-
 // src/app/(app)/impostazioni/page.tsx
 "use client";
 
@@ -450,20 +449,20 @@ export default function ImpostazioniPage() {
             <Accordion type="single" collapsible className="w-full">
               {Object.entries(categories).map(([category, subcategories]) => (
                 <AccordionItem value={category} key={category}>
-                   <div className="flex items-center w-full">
+                   <div className="flex items-center w-full group">
                         <AccordionTrigger className="flex-1 hover:no-underline">
                            <span className="font-semibold text-left">{category}</span>
                         </AccordionTrigger>
-                        <Button variant="ghost" size="icon" className="mr-2 shrink-0" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
+                        <Button variant="ghost" size="icon" className="mr-2 shrink-0 opacity-50 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                     </div>
                   <AccordionContent>
                     <div className="space-y-2 pl-4">
                       {subcategories.map(sub => (
-                        <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                        <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50 group">
                           <span>{sub}</span>
-                           <Button variant="ghost" size="icon" onClick={() => openDeleteDialog('subcategory', sub, category)}>
+                           <Button variant="ghost" size="icon" className="opacity-50 group-hover:opacity-100" onClick={() => openDeleteDialog('subcategory', sub, category)}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                         </div>
