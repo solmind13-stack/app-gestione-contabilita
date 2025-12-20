@@ -73,13 +73,12 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       return;
     }
 
-    setUserAuthState(prev => ({ ...prev, isUserLoading: true }));
-
     const unsubscribe = onAuthStateChanged(
       auth,
       async (firebaseUser: FirebaseUser | null) => {
         if (firebaseUser) {
-          const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+           setUserAuthState({ user: null, isUserLoading: true, userError: null });
+           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
           try {
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
@@ -94,10 +93,8 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               };
                setUserAuthState({ user: appUser, isUserLoading: false, userError: null });
             } else {
-              // This case can happen if the user was created in Auth but the Firestore doc creation failed.
-              // We'll log it, but the bootstrap page is the primary way to create the admin.
-              console.warn(`User document not found for UID: ${firebaseUser.uid}. Please use the bootstrap page if this is the admin.`);
-              setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Profilo utente non trovato nel database.") });
+              console.warn(`User document not found for UID: ${firebaseUser.uid}. This may be expected if the user is signing up.`);
+              setUserAuthState({ user: null, isUserLoading: false, userError: null }); // Not an error, just no profile yet
             }
           } catch (error) {
             console.error("Error fetching user profile:", error);
