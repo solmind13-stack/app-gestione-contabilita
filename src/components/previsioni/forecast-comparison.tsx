@@ -24,10 +24,22 @@ const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    const data = payload[0].payload;
     return (
       <div className="rounded-lg border bg-background p-2 shadow-sm">
-        <p className="font-bold">{`${payload[0].name}: ${formatCurrency(payload[0].value)}`}</p>
-        <p className="text-sm text-muted-foreground">{`(${(payload[0].percent * 100).toFixed(0)}%)`}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col space-y-1">
+            <span className="text-[0.7rem] uppercase text-muted-foreground">
+              {payload[0].name}
+            </span>
+            <span className="font-bold text-muted-foreground">
+              {formatCurrency(payload[0].value)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              ({(payload[0].percent * 100).toFixed(0)}%)
+            </span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -116,19 +128,19 @@ export function ForecastComparison({
     }, {} as { [key: string]: number });
 
 
-    const allIncomeCategories = new Set([...Object.keys(categoryIncomeTotals[mainYear]), ...Object.keys(categoryIncomeTotals[comparisonYear])]);
-    const allExpenseCategories = new Set([...Object.keys(categoryExpenseTotals[mainYear]), ...Object.keys(categoryExpenseTotals[comparisonYear])]);
+    const allIncomeCategories = new Set([...Object.keys(categoryIncomeTotals[mainYear] || {}), ...Object.keys(categoryIncomeTotals[comparisonYear] || {})]);
+    const allExpenseCategories = new Set([...Object.keys(categoryExpenseTotals[mainYear] || {}), ...Object.keys(categoryExpenseTotals[comparisonYear] || {})]);
     
     const combinedIncomeTotals = Array.from(allIncomeCategories).map(cat => ({
         category: cat,
-        totalMain: categoryIncomeTotals[mainYear][cat] || 0,
-        totalComparison: categoryIncomeTotals[comparisonYear][cat] || 0,
+        totalMain: categoryIncomeTotals[mainYear]?.[cat] || 0,
+        totalComparison: categoryIncomeTotals[comparisonYear]?.[cat] || 0,
     })).sort((a,b) => b.totalMain - a.totalMain);
 
     const combinedExpenseTotals = Array.from(allExpenseCategories).map(cat => ({
         category: cat,
-        totalMain: categoryExpenseTotals[mainYear][cat] || 0,
-        totalComparison: categoryExpenseTotals[comparisonYear][cat] || 0,
+        totalMain: categoryExpenseTotals[mainYear]?.[cat] || 0,
+        totalComparison: categoryExpenseTotals[comparisonYear]?.[cat] || 0,
     })).sort((a,b) => b.totalMain - a.totalMain);
 
 
@@ -143,8 +155,8 @@ export function ForecastComparison({
 
   }, [mainYear, comparisonYear, company, movements, incomeForecasts, expenseForecasts]);
   
-  const pieIncomeData = categoryTotals.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain }));
-  const pieExpenseData = categoryTotals.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain }));
+  const pieIncomeData = useMemo(() => categoryTotals.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.income]);
+  const pieExpenseData = useMemo(() => categoryTotals.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.expense]);
 
   return (
     <div className="space-y-6">
@@ -220,13 +232,13 @@ export function ForecastComparison({
                 ) : pieIncomeData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label>
+                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" label={false} labelLine={false}>
                                 {pieIncomeData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend />
+                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
@@ -246,13 +258,13 @@ export function ForecastComparison({
                 ) : pieExpenseData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label>
+                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" label={false} labelLine={false}>
                                 {pieExpenseData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend />
+                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
