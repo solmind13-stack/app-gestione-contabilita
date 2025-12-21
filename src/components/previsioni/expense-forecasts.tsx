@@ -87,6 +87,7 @@ export function ExpenseForecasts({ data, year, isLoading, onAdd, onEdit, onDelet
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead>Società</TableHead>
                                     <TableHead>Descrizione</TableHead>
                                     <TableHead>Data</TableHead>
                                     <TableHead className="text-right">Importo Lordo</TableHead>
@@ -98,19 +99,22 @@ export function ExpenseForecasts({ data, year, isLoading, onAdd, onEdit, onDelet
                             <TableBody>
                                 {isLoading ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={7} className="h-24 text-center">
                                             <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                                         </TableCell>
                                     </TableRow>
                                 ) : filteredData.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={7} className="h-24 text-center">
                                             Nessuna previsione di uscita per il {year}.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     filteredData.map(item => (
                                         <TableRow key={item.id}>
+                                            <TableCell>
+                                                <Badge variant={item.societa === 'LNC' ? 'default' : 'secondary'}>{item.societa}</Badge>
+                                            </TableCell>
                                             <TableCell className="font-medium">{item.descrizione}</TableCell>
                                             <TableCell>{formatDate(item.dataScadenza)}</TableCell>
                                             <TableCell className="text-right">{formatCurrency(item.importoLordo)}</TableCell>
