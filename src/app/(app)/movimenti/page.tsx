@@ -409,10 +409,6 @@ export default function MovimentiPage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                 <Button variant="outline" onClick={() => {}} disabled>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Suggerisci Scadenze
-                </Button>
                 <Button onClick={() => handleOpenAddDialog()} className="flex-shrink-0" disabled={!user}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi

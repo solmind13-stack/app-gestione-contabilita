@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2 } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -328,6 +328,10 @@ export default function ScadenzePage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+                 <Button variant="outline" onClick={() => {}} disabled>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Suggerisci Scadenze
+                </Button>
                 <Button onClick={() => handleOpenDialog()} className="flex-shrink-0" disabled={!user}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Aggiungi
