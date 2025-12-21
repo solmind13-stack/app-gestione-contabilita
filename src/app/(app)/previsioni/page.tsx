@@ -14,6 +14,7 @@ import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { CashflowDetail } from '@/components/previsioni/cashflow-detail';
 
 
 const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', collectionName: string) => {
@@ -59,7 +60,7 @@ export default function PrevisioniPage() {
     } else if (user?.role === 'company-editor' && user.company) {
         setSelectedCompany(user.company);
     }
-  }, [user]);
+  }, [user, mainYear]);
 
   const handleMainYearChange = (yearValue: string) => {
     const year = Number(yearValue);
@@ -216,8 +217,9 @@ export default function PrevisioniPage() {
       </div>
       
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="cashflow">Dettaglio Cash Flow</TabsTrigger>
           <TabsTrigger value="entrate">Dettaglio Entrate</TabsTrigger>
           <TabsTrigger value="uscite">Dettaglio Uscite</TabsTrigger>
           <TabsTrigger value="agente-ai">Agente AI</TabsTrigger>
@@ -232,6 +234,14 @@ export default function PrevisioniPage() {
             expenseForecasts={previsioniUscite || []}
             isLoading={isLoading}
           />
+        </TabsContent>
+        <TabsContent value="cashflow">
+            <CashflowDetail 
+                year={mainYear}
+                company={selectedCompany}
+                allData={allData}
+                isLoading={isLoading}
+            />
         </TabsContent>
         <TabsContent value="entrate">
            <IncomeForecasts
