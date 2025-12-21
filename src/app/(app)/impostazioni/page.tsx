@@ -25,18 +25,19 @@ import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog
 // Mock data based on the user's image
 const initialData = {
   accounts: ['LNC-BAPR', 'STG-BAPR'],
+  operatori: ['Nuccio Senior', 'Nuccio Junior', 'Mario Rossi']
 };
 
 type CategoryData = typeof initialCategories;
 
 type ItemToDelete = {
-    type: 'category' | 'subcategory' | 'account' | 'paymentMethod';
+    type: 'category' | 'subcategory' | 'account' | 'paymentMethod' | 'operator';
     name: string;
     parent?: string;
 }
 
 // Generic component for managing a simple list (accounts, payment methods)
-const SettingsListManager = ({ title, items, setItems, itemType }: { title: string, items: string[], setItems: (items: string[]) => void, itemType: 'account' | 'paymentMethod' }) => {
+const SettingsListManager = ({ title, items, setItems, itemType }: { title: string, items: string[], setItems: (items: string[]) => void, itemType: 'account' | 'paymentMethod' | 'operator' }) => {
   const [newItem, setNewItem] = useState('');
   const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
 
@@ -342,6 +343,7 @@ export default function ImpostazioniPage() {
   const { user } = useUser();
   const [accounts, setAccounts] = useState(initialData.accounts);
   const [paymentMethods, setPaymentMethods] = useState(METODI_PAGAMENTO);
+  const [operatori, setOperatori] = useState(initialData.operatori);
   const [categories, setCategories] = useState<CategoryData>(initialCategories);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
@@ -432,49 +434,51 @@ export default function ImpostazioniPage() {
           <SettingsListManager title="Conti" items={accounts} setItems={setAccounts} itemType="account" />
           <SettingsListManager title="Metodi di Pagamento" items={paymentMethods} setItems={setPaymentMethods} itemType="paymentMethod" />
         </div>
-
-        <Card>
-          <CardHeader className='flex-row items-center justify-between'>
-            <div>
-              <CardTitle>Categorie e Sottocategorie</CardTitle>
-              <CardDescription>
-                Gestisci le categorie per i movimenti e i suggerimenti AI.
-              </CardDescription>
-            </div>
-            <Button onClick={() => setIsCategoryDialogOpen(true)}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Accordion type="single" collapsible className="w-full">
-              {Object.entries(categories).map(([category, subcategories]) => (
-                <AccordionItem value={category} key={category}>
-                   <div className="flex items-center w-full group">
-                        <AccordionTrigger className="flex-1 hover:no-underline">
-                           <span className="font-semibold text-left">{category}</span>
-                        </AccordionTrigger>
-                        <Button variant="ghost" size="icon" className="mr-2 shrink-0 opacity-50 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                    </div>
-                  <AccordionContent>
-                    <div className="space-y-2 pl-4">
-                      {subcategories.map(sub => (
-                        <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50 group">
-                          <span>{sub}</span>
-                           <Button variant="ghost" size="icon" className="opacity-50 group-hover:opacity-100" onClick={() => openDeleteDialog('subcategory', sub, category)}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                        </div>
-                      ))}
-                        {subcategories.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">Nessuna sottocategoria.</p>}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          </CardContent>
-        </Card>
+        <div className="space-y-8">
+          <SettingsListManager title="Operatori" items={operatori} setItems={setOperatori} itemType="operator" />
+          <Card>
+            <CardHeader className='flex-row items-center justify-between'>
+              <div>
+                <CardTitle>Categorie e Sottocategorie</CardTitle>
+                <CardDescription>
+                  Gestisci le categorie per i movimenti e i suggerimenti AI.
+                </CardDescription>
+              </div>
+              <Button onClick={() => setIsCategoryDialogOpen(true)}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Accordion type="single" collapsible className="w-full">
+                {Object.entries(categories).map(([category, subcategories]) => (
+                  <AccordionItem value={category} key={category}>
+                    <div className="flex items-center w-full group">
+                          <AccordionTrigger className="flex-1 hover:no-underline">
+                            <span className="font-semibold text-left">{category}</span>
+                          </AccordionTrigger>
+                          <Button variant="ghost" size="icon" className="mr-2 shrink-0 opacity-50 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                      </div>
+                    <AccordionContent>
+                      <div className="space-y-2 pl-4">
+                        {subcategories.map(sub => (
+                          <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50 group">
+                            <span>{sub}</span>
+                            <Button variant="ghost" size="icon" className="opacity-50 group-hover:opacity-100" onClick={() => openDeleteDialog('subcategory', sub, category)}>
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                          </div>
+                        ))}
+                          {subcategories.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">Nessuna sottocategoria.</p>}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
