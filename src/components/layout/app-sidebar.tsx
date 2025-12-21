@@ -14,11 +14,6 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   LayoutGrid,
   ArrowRightLeft,
   CalendarDays,
@@ -26,13 +21,11 @@ import {
   FilePieChart,
   Sparkles,
   Settings,
-  ChevronDown,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
-import { cn } from "@/lib/utils";
+import { useUser } from "@/firebase";
 import { NAV_ITEMS, ADMIN_NAV_ITEMS } from "@/lib/constants";
 import type { NavItem } from "@/lib/types";
-import { useUser } from "@/firebase";
 
 const ICONS: { [key: string]: React.ElementType } = {
   LayoutGrid,
