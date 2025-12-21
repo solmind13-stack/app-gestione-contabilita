@@ -2,17 +2,66 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Wand2, LineChart, Wallet, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
+import { Loader2, Wand2, LineChart, TrendingUp, TrendingDown, PieChart as PieChartIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useFirestore } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 import { analyzeCashFlow, type AnalyzeCashFlowOutput } from '@/ai/flows/analyze-cash-flow';
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { formatCurrency } from '@/lib/utils';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
+
+const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+
+const renderActiveShape = (props: any) => {
+  const RADIAN = Math.PI / 180;
+  const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
+  const sin = Math.sin(-RADIAN * midAngle);
+  const cos = Math.cos(-RADIAN * midAngle);
+  const sx = cx + (outerRadius + 10) * cos;
+  const sy = cy + (outerRadius + 10) * sin;
+  const mx = cx + (outerRadius + 30) * cos;
+  const my = cy + (outerRadius + 30) * sin;
+  const ex = mx + (cos >= 0 ? 1 : -1) * 22;
+  const ey = my;
+  const textAnchor = cos >= 0 ? 'start' : 'end';
+
+  return (
+    <g>
+      <text x={cx} y={cy} dy={8} textAnchor="middle" fill={fill} className="font-bold text-lg">
+        {payload.name}
+      </text>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+      />
+      <Sector
+        cx={cx}
+        cy={cy}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        innerRadius={outerRadius + 6}
+        outerRadius={outerRadius + 10}
+        fill={fill}
+      />
+      <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
+      <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
+      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))" className="text-sm">{`${formatCurrency(value)}`}</text>
+      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))" className="text-xs">
+        {`(${(percent * 100).toFixed(2)}%)`}
+      </text>
+    </g>
+  );
+};
+
 
 export default function CashFlowPage() {
   const [analysis, setAnalysis] = useState<AnalyzeCashFlowOutput | null>(null);
@@ -21,6 +70,8 @@ export default function CashFlowPage() {
   const [company, setCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
   const { toast } = useToast();
   const firestore = useFirestore();
+  const [activeIndexInflow, setActiveIndexInflow] = useState(0);
+  const [activeIndexOutflow, setActiveIndexOutflow] = useState(0);
 
   const movimentiQuery = useMemo(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
   const previsioniEntrateQuery = useMemo(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
@@ -37,7 +88,12 @@ export default function CashFlowPage() {
     const entrate = previsioniEntrateData?.filter(filterByCompany) || [];
     const uscite = previsioniUsciteData?.filter(filterByCompany) || [];
 
-    return { movimenti, entrate, uscite };
+    return JSON.stringify({
+        movements: movimenti,
+        incomeForecasts: entrate,
+        expenseForecasts: uscite
+    }, null, 2);
+
   }, [movimentiData, previsioniEntrateData, previsioniUsciteData, company]);
 
   const handleAnalyze = async () => {
@@ -49,14 +105,8 @@ export default function CashFlowPage() {
     });
 
     try {
-      const { movimenti, entrate, uscite } = getFilteredData();
+      const financialDataSummary = getFilteredData();
       
-      const financialDataSummary = JSON.stringify({
-          movements: movimenti,
-          incomeForecasts: entrate,
-          expenseForecasts: uscite
-      });
-
       const result = await analyzeCashFlow({
         financialData: financialDataSummary,
         analysisPeriodDays: parseInt(period, 10),
@@ -65,7 +115,7 @@ export default function CashFlowPage() {
 
       setAnalysis(result);
       toast({
-        title: 'Presentazione Pronta!',
+        title: 'Analisi Pronta!',
         description: 'La proiezione del cash flow è stata generata.',
         className: 'bg-green-100 dark:bg-green-900',
       });
@@ -87,10 +137,10 @@ export default function CashFlowPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <LineChart className="h-6 w-6 text-primary" />
-            Presentazione Cash Flow con AI
+            Analisi e Previsione Cash Flow con AI
           </CardTitle>
           <CardDescription>
-            Ottieni una presentazione a slide della tua liquidità futura e scopri la capacità di investimento mese per mese.
+            Ottieni un'analisi visiva della tua liquidità futura e scopri la capacità di investimento.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4 items-center">
@@ -121,7 +171,7 @@ export default function CashFlowPage() {
             {isLoading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analisi in corso...</>
             ) : (
-               <><Wand2 className="mr-2 h-4 w-4" />Genera Presentazione</>
+               <><Wand2 className="mr-2 h-4 w-4" />Genera Analisi</>
             )}
           </Button>
         </CardContent>
@@ -131,65 +181,111 @@ export default function CashFlowPage() {
         <Card>
             <CardContent className="pt-6 text-center">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary"/>
-                <p className="mt-2 text-muted-foreground">L'AI sta preparando le slide...</p>
+                <p className="mt-2 text-muted-foreground">L'AI sta analizzando i dati...</p>
             </CardContent>
         </Card>
       )}
 
-      {analysis && analysis.monthlyBreakdown.length > 0 && (
+      {analysis && analysis.monthlyAnalysis.length > 0 && (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Riepilogo Generale</CardTitle>
+                    <CardTitle>Riepilogo e Capacità di Investimento Totale</CardTitle>
                 </CardHeader>
                 <CardContent className='flex flex-col md:flex-row gap-6 items-start'>
                      <div className="prose prose-sm dark:prose-invert max-w-full flex-1">
                         <p>{analysis.overallSummary}</p>
                     </div>
-                     <div className="p-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 w-full md:w-auto">
-                        <h3 className="font-semibold text-lg text-green-800 dark:text-green-300">Capacità di Investimento Finale</h3>
-                        <p className="text-3xl font-bold text-green-700 dark:text-green-400 mt-2">{analysis.finalInvestmentCapacity}</p>
+                     <div className="p-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 w-full md:w-auto text-center">
+                        <h3 className="font-semibold text-lg text-green-800 dark:text-green-300">Capacità di Investimento Totale</h3>
+                        <p className="text-4xl font-bold text-green-700 dark:text-green-400 mt-2">{formatCurrency(analysis.totalInvestmentCapacity)}</p>
                         <p className="text-sm text-muted-foreground mt-1">Liquidità extra stimata alla fine del periodo.</p>
                     </div>
                 </CardContent>
             </Card>
 
-            <Carousel className="w-full" opts={{ align: "start", loop: false }}>
-                <CarouselContent className="-ml-4">
-                {analysis.monthlyBreakdown.map((slide, index) => (
-                    <CarouselItem key={index} className="pl-4 md:basis-1/2 lg:basis-1/3">
-                    <div className="p-1 h-full">
-                        <Card className="h-full flex flex-col">
-                        <CardHeader>
-                            <CardTitle>{slide.monthName}</CardTitle>
-                            <CardDescription className='text-xs'>Slide {index + 1} di {analysis.monthlyBreakdown.length}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4 flex-grow flex flex-col justify-between">
-                            <div className='space-y-4'>
-                                <div className="text-sm text-muted-foreground">{slide.summary}</div>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between items-center"><span>Saldo Iniziale:</span> <span className="font-medium">{formatCurrency(slide.startingBalance)}</span></div>
-                                    <div className="flex justify-between items-center text-green-600"><span><TrendingUp className="inline-block h-4 w-4 mr-1"/>Entrate Previste:</span> <span className="font-medium">{formatCurrency(slide.totalInflows)}</span></div>
-                                    <div className="flex justify-between items-center text-red-600"><span><TrendingDown className="inline-block h-4 w-4 mr-1"/>Uscite Previste:</span> <span className="font-medium">{formatCurrency(slide.totalOutflows)}</span></div>
-                                    <div className="flex justify-between items-center border-t pt-2 mt-2"><strong>Saldo Finale:</strong> <strong className="text-lg">{formatCurrency(slide.endingBalance)}</strong></div>
-                                </div>
-                            </div>
-                            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                                <h4 className="font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-2"><Wallet/>Capacità di Investimento</h4>
-                                <p className="text-2xl font-bold text-blue-700 dark:text-blue-400 mt-1">{formatCurrency(slide.investmentCapacity)}</p>
-                            </div>
-                        </CardContent>
-                        </Card>
-                    </div>
-                    </CarouselItem>
-                ))}
-                </CarouselContent>
-                <CarouselPrevious className="ml-14" />
-                <CarouselNext className="mr-14" />
-            </Carousel>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Andamento Mensile Entrate vs. Uscite</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={analysis.monthlyAnalysis}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="month" tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
+                            <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}}/>
+                            <Tooltip
+                                contentStyle={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))", borderRadius: "var(--radius)" }}
+                                labelStyle={{ color: "hsl(var(--foreground))" }}
+                                formatter={(value: number) => formatCurrency(value)}
+                            />
+                            <Legend />
+                            <Bar dataKey="inflows" fill="hsl(var(--chart-2))" name="Entrate" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="outflows" fill="hsl(var(--chart-4))" name="Uscite" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-green-500" />Composizione Entrate Previste</CardTitle>
+                        <CardDescription>Suddivisione per categoria del totale entrate nel periodo</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                         <ResponsiveContainer width="100%" height={300}>
+                            <PieChart>
+                                <Pie 
+                                    data={analysis.inflowBreakdown}
+                                    cx="50%"
+                                    cy="50%"
+                                    labelLine={false}
+                                    outerRadius={80}
+                                    fill="#8884d8"
+                                    dataKey="amount"
+                                    nameKey="name"
+                                    activeIndex={activeIndexInflow}
+                                    activeShape={renderActiveShape}
+                                    onMouseEnter={(_, index) => setActiveIndexInflow(index)}
+                                >
+                                    {analysis.inflowBreakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                </Pie>
+                            </PieChart>
+                         </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><TrendingDown className="h-5 w-5 text-red-500" />Composizione Uscite Previste</CardTitle>
+                        <CardDescription>Suddivisione per categoria del totale uscite nel periodo</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <PieChart>
+                                <Pie 
+                                    data={analysis.outflowBreakdown}
+                                    cx="50%"
+                                    cy="50%"
+                                    labelLine={false}
+                                    outerRadius={80}
+                                    fill="#8884d8"
+                                    dataKey="amount"
+                                    nameKey="name"
+                                    activeIndex={activeIndexOutflow}
+                                    activeShape={renderActiveShape}
+                                    onMouseEnter={(_, index) => setActiveIndexOutflow(index)}
+                                >
+                                    {analysis.outflowBreakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                </Pie>
+                            </PieChart>
+                         </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
       )}
-       {analysis && analysis.monthlyBreakdown.length === 0 && (
+       {analysis && analysis.monthlyAnalysis.length === 0 && (
          <Card>
             <CardHeader>
                 <CardTitle>Risultato Analisi</CardTitle>
@@ -202,3 +298,5 @@ export default function CashFlowPage() {
     </div>
   );
 }
+
+    
