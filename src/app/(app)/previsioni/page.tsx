@@ -189,22 +189,14 @@ export default function PrevisioniPage() {
           <TabsTrigger value="agente-ai">Agente AI</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard">
-          <Card>
-            <CardHeader>
-              <CardTitle>Riepilogo Generale</CardTitle>
-              <CardDescription>Confronto entrate/uscite (dati storici e previsti) per l'anno {selectedYear} verso il {selectedYear ? Number(selectedYear) - 1 : ''}.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ForecastComparison 
-                year={Number(selectedYear)} 
-                company={selectedCompany}
-                movements={movimenti || []}
-                incomeForecasts={previsioniEntrate || []}
-                expenseForecasts={previsioniUscite || []}
-                isLoading={isLoading}
-              />
-            </CardContent>
-          </Card>
+          <ForecastComparison 
+            year={Number(selectedYear)} 
+            company={selectedCompany}
+            movements={movimenti || []}
+            incomeForecasts={previsioniEntrate || []}
+            expenseForecasts={previsioniUscite || []}
+            isLoading={isLoading}
+          />
         </TabsContent>
         <TabsContent value="entrate">
            <IncomeForecasts
