@@ -1,7 +1,7 @@
 // src/components/movimenti/import-movements-dialog.tsx
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,18 +17,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, File, Trash2, Wand2 } from 'lucide-react';
-import type { Movimento } from '@/lib/types';
+import type { Movimento, AppUser } from '@/lib/types';
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Label } from '../ui/label';
 
 interface ImportMovementsDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onImport: (movements: Omit<Movimento, 'id'>[]) => Promise<void>;
   defaultCompany?: 'LNC' | 'STG';
+  currentUser: AppUser | null;
 }
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -45,11 +48,25 @@ export function ImportMovementsDialog({
   setIsOpen,
   onImport,
   defaultCompany,
+  currentUser,
 }: ImportMovementsDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedMovements, setExtractedMovements] = useState<Omit<Movimento, 'id'>[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG'>('LNC');
   const { toast } = useToast();
+
+  useEffect(() => {
+    if(isOpen) {
+        if (currentUser?.role === 'company' || currentUser?.role === 'company-editor') {
+            setSelectedCompany(currentUser.company!);
+        } else if (defaultCompany) {
+            setSelectedCompany(defaultCompany);
+        } else {
+            setSelectedCompany('LNC');
+        }
+    }
+  }, [isOpen, currentUser, defaultCompany])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -71,7 +88,7 @@ export function ImportMovementsDialog({
       const result = await importTransactions({
         fileDataUri: fileDataUri,
         fileType: file.type,
-        defaultCompany: defaultCompany || 'LNC',
+        company: selectedCompany,
       });
       
       setExtractedMovements(result.movements);
@@ -110,6 +127,8 @@ export function ImportMovementsDialog({
     }
     setIsOpen(open);
   }
+
+  const canSelectCompany = currentUser?.role === 'admin' || currentUser?.role === 'editor';
   
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -122,28 +141,44 @@ export function ImportMovementsDialog({
         </DialogHeader>
         
         {!extractedMovements.length ? (
-            <div className="py-8">
-            <div className="flex items-center justify-center w-full">
-                <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
-                        <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
-                        <p className="text-xs text-muted-foreground">XLSX, PDF, PNG, JPG</p>
-                    </div>
-                    <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" />
-                </label>
-            </div> 
-            {file && (
-                <div className="mt-4 flex items-center justify-between p-3 rounded-lg border bg-muted/50">
-                    <div className='flex items-center gap-2'>
-                        <File className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm font-medium">{file.name}</span>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => setFile(null)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+            <div className="py-8 space-y-4">
+                <div className="grid w-full max-w-sm items-center gap-1.5">
+                    <Label htmlFor="company-select">Importa per la società</Label>
+                    <Select 
+                        value={selectedCompany} 
+                        onValueChange={(v) => setSelectedCompany(v as 'LNC' | 'STG')}
+                        disabled={!canSelectCompany}
+                    >
+                        <SelectTrigger id="company-select">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="LNC">LNC</SelectItem>
+                            <SelectItem value="STG">STG</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
-            )}
+                <div className="flex items-center justify-center w-full">
+                    <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
+                            <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
+                            <p className="text-xs text-muted-foreground">XLSX, PDF, PNG, JPG</p>
+                        </div>
+                        <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" />
+                    </label>
+                </div> 
+                {file && (
+                    <div className="mt-4 flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                        <div className='flex items-center gap-2'>
+                            <File className="h-5 w-5 text-muted-foreground" />
+                            <span className="text-sm font-medium">{file.name}</span>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => setFile(null)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                    </div>
+                )}
             </div>
         ) : (
             <div className="py-4">

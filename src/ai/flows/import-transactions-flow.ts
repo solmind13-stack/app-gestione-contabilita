@@ -9,7 +9,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { Movimento } from '@/lib/types';
 import { format } from 'date-fns';
 
@@ -18,7 +18,7 @@ const ImportTransactionsInputSchema = z.object({
     "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'."
   ),
   fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf')."),
-  defaultCompany: z.enum(['LNC', 'STG']).describe("The default company to assign to the transactions."),
+  company: z.enum(['LNC', 'STG']).describe("The company to assign to the transactions."),
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
@@ -52,7 +52,7 @@ const prompt = ai.definePrompt({
   Analyze the provided file content and extract all financial movements.
   The current year is ${new Date().getFullYear()}. If the year is not specified in a date, assume it's the current year.
   For each transaction, determine if it is an income (entrata) or an expense (uscita).
-  You must assign a default company of '{{defaultCompany}}' if the company is not clearly specified for a transaction.
+  You must assign the company '{{company}}' to every extracted transaction in the 'societa' field.
   The transaction date must be in YYYY-MM-DD format.
   
   Please provide the response in a structured JSON format.
@@ -79,7 +79,7 @@ const importTransactionsFlow = ai.defineFlow(
         const today = new Date();
         return {
             ...mov,
-            societa: mov.societa || input.defaultCompany,
+            societa: mov.societa || input.company,
             anno: new Date(mov.data).getFullYear(),
             categoria: mov.categoria || 'Da categorizzare',
             sottocategoria: mov.sottocategoria || 'Da categorizzare',

@@ -157,7 +157,7 @@ export default function MovimentiPage() {
         setIsAddDialogOpen(true);
     }
     
-    const handleAddMovement = async (newMovementData: Omit<Movimento, 'id'>) => {
+    const handleAddMovement = async (newMovementData: Omit<Movimento, 'id' | 'createdBy' | 'createdAt' | 'updatedAt' | 'inseritoDa'>) => {
         if (!user || !firestore) return;
         try {
             await addDoc(collection(firestore, 'movements'), {
@@ -363,7 +363,8 @@ export default function MovimentiPage() {
             isOpen={isImportDialogOpen}
             setIsOpen={setIsImportDialogOpen}
             onImport={handleImportMovements}
-            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+            currentUser={user}
         />
         <AlertDialog open={!!movementToDelete} onOpenChange={(open) => !open && setMovementToDelete(null)}>
             <AlertDialogContent>
