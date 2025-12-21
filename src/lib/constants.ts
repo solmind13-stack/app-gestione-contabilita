@@ -1,6 +1,6 @@
 export const YEARS = ['Tutti', 2025, 2024, 2023];
 export const COMPANIES = [
-  { value: 'all', label: 'Tutte' },
+  { value: 'Tutte', label: 'Tutte' },
   { value: 'LNC', label: 'LNC' },
   { value: 'STG', label: 'STG' },
 ];
@@ -13,11 +13,6 @@ export const NAV_ITEMS = [
     href: '/previsioni', 
     icon: 'TrendingUp', 
     label: 'Previsioni',
-    subItems: [
-      { href: '/previsioni/entrate', label: 'Entrate' },
-      { href: '/previsioni/uscite', label: 'Uscite' },
-      { href: '/previsioni/cash-flow', label: 'Cash Flow' },
-    ]
   },
   { href: '/report', icon: 'FilePieChart', label: 'Report' },
   { href: '/assistente-ai', icon: 'Sparkles', label: 'Assistente AI' },

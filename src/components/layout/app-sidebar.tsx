@@ -50,41 +50,7 @@ export function AppSidebar() {
 
   const renderNavItem = (item: NavItem) => {
     const Icon = ICONS[item.icon];
-    const isActive = pathname === item.href || (item.subItems && pathname.startsWith(item.href));
-
-    if (item.subItems) {
-      return (
-        <Collapsible key={item.href} defaultOpen={isActive}>
-          <SidebarMenuItem>
-             <CollapsibleTrigger
-              className={cn(
-                "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 justify-between h-8"
-              )}
-              data-active={isActive}
-            >
-              <div className="flex items-center gap-2">
-                  <Icon />
-                  <span>{item.label}</span>
-              </div>
-              <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-          </SidebarMenuItem>
-          <CollapsibleContent>
-            <SidebarMenu>
-              {item.subItems.map(subItem => (
-                <SidebarMenuItem key={subItem.href}>
-                  <Link href={subItem.href}>
-                    <SidebarMenuButton variant="ghost" className="h-8 justify-start" isActive={pathname === subItem.href}>
-                        <span className="ml-6">{subItem.label}</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </CollapsibleContent>
-        </Collapsible>
-      );
-    }
+    const isActive = pathname === item.href;
 
     return (
       <SidebarMenuItem key={item.href}>
