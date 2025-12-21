@@ -7,7 +7,6 @@ import { formatCurrency } from '@/lib/utils';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
-import { CATEGORIE, CATEGORIE_ENTRATE, CATEGORIE_USCITE } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 
@@ -20,18 +19,6 @@ interface ForecastComparisonProps {
   isLoading: boolean;
 }
 
-const COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F', '#FFBB28'
-];
-
-const allCategories = [...Object.keys(CATEGORIE_ENTRATE), ...Object.keys(CATEGORIE_USCITE)];
-const uniqueCategories = [...new Set(allCategories)];
-
 export function ForecastComparison({
   year,
   company,
@@ -43,9 +30,11 @@ export function ForecastComparison({
 
   const { chartData, totals, categoryTotals } = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => i);
-
-    const categoryIncomeTotals: { [key: string]: number } = {};
-    const categoryExpenseTotals: { [key: string]: number } = {};
+    
+    const categoryIncomeTotalsCurrent: { [key: string]: number } = {};
+    const categoryExpenseTotalsCurrent: { [key: string]: number } = {};
+    const categoryIncomeTotalsPrevious: { [key: string]: number } = {};
+    const categoryExpenseTotalsPrevious: { [key: string]: number } = {};
 
     const data = months.map(monthIndex => {
         const monthName = new Date(year, monthIndex).toLocaleString('it-IT', { month: 'long' });
@@ -53,25 +42,23 @@ export function ForecastComparison({
 
         const monthData: any = {
             month: monthShort,
-            entrateAnnoCorrente: 0,
-            usciteAnnoCorrente: 0,
-            entrateAnnoPrecedente: 0,
-            usciteAnnoPrecedente: 0,
+            [`entrate${year}`]: 0,
+            [`uscite${year}`]: 0,
+            [`entrate${year - 1}`]: 0,
+            [`uscite${year - 1}`]: 0,
         };
-
-        // Initialize categories for the month
-        uniqueCategories.forEach(cat => {
-          monthData[`entrate-${cat}`] = 0;
-          monthData[`uscite-${cat}`] = 0;
-        });
 
         // Previous year from movements
         movements.forEach(mov => {
             const movDate = new Date(mov.data);
             if (movDate.getFullYear() === year - 1 && movDate.getMonth() === monthIndex) {
                 if (!company || company === 'Tutte' || mov.societa === company) {
-                    monthData.entrateAnnoPrecedente += mov.entrata || 0;
-                    monthData.usciteAnnoPrecedente += mov.uscita || 0;
+                    const income = mov.entrata || 0;
+                    const expense = mov.uscita || 0;
+                    monthData[`entrate${year - 1}`] += income;
+                    monthData[`uscite${year - 1}`] += expense;
+                    if (income > 0) categoryIncomeTotalsPrevious[mov.categoria] = (categoryIncomeTotalsPrevious[mov.categoria] || 0) + income;
+                    if (expense > 0) categoryExpenseTotalsPrevious[mov.categoria] = (categoryExpenseTotalsPrevious[mov.categoria] || 0) + expense;
                 }
             }
         });
@@ -83,13 +70,10 @@ export function ForecastComparison({
                  if (!company || company === 'Tutte' || mov.societa === company) {
                     const income = mov.entrata || 0;
                     const expense = mov.uscita || 0;
-                    monthData.entrateAnnoCorrente += income;
-                    monthData.usciteAnnoCorrente += expense;
-                    monthData[`entrate-${mov.categoria}`] += income;
-                    monthData[`uscite-${mov.categoria}`] += expense;
-
-                    if (income > 0) categoryIncomeTotals[mov.categoria] = (categoryIncomeTotals[mov.categoria] || 0) + income;
-                    if (expense > 0) categoryExpenseTotals[mov.categoria] = (categoryExpenseTotals[mov.categoria] || 0) + expense;
+                    monthData[`entrate${year}`] += income;
+                    monthData[`uscite${year}`] += expense;
+                    if (income > 0) categoryIncomeTotalsCurrent[mov.categoria] = (categoryIncomeTotalsCurrent[mov.categoria] || 0) + income;
+                    if (expense > 0) categoryExpenseTotalsCurrent[mov.categoria] = (categoryExpenseTotalsCurrent[mov.categoria] || 0) + expense;
                 }
             }
         });
@@ -102,9 +86,8 @@ export function ForecastComparison({
                 if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
                     if (!company || company === 'Tutte' || forecast.societa === company) {
                         const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
-                        monthData.entrateAnnoCorrente += weightedIncome;
-                        monthData[`entrate-${forecast.categoria}`] += weightedIncome;
-                        categoryIncomeTotals[forecast.categoria] = (categoryIncomeTotals[forecast.categoria] || 0) + weightedIncome;
+                        monthData[`entrate${year}`] += weightedIncome;
+                         if (weightedIncome > 0) categoryIncomeTotalsCurrent[forecast.categoria] = (categoryIncomeTotalsCurrent[forecast.categoria] || 0) + weightedIncome;
                     }
                 }
             });
@@ -114,9 +97,8 @@ export function ForecastComparison({
                 if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
                     if (!company || company === 'Tutte' || forecast.societa === company) {
                         const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
-                        monthData.usciteAnnoCorrente += weightedExpense;
-                        monthData[`uscite-${forecast.categoria}`] += weightedExpense;
-                        categoryExpenseTotals[forecast.categoria] = (categoryExpenseTotals[forecast.categoria] || 0) + weightedExpense;
+                        monthData[`uscite${year}`] += weightedExpense;
+                        if (weightedExpense > 0) categoryExpenseTotalsCurrent[forecast.categoria] = (categoryExpenseTotalsCurrent[forecast.categoria] || 0) + weightedExpense;
                     }
                 }
             });
@@ -126,10 +108,10 @@ export function ForecastComparison({
     });
     
     const total = data.reduce((acc, month) => {
-        acc.entrateAnnoCorrente += month.entrateAnnoCorrente || 0;
-        acc.usciteAnnoCorrente += month.usciteAnnoCorrente || 0;
-        acc.entrateAnnoPrecedente += month.entrateAnnoPrecedente || 0;
-        acc.usciteAnnoPrecedente += month.usciteAnnoPrecedente || 0;
+        acc.entrateAnnoCorrente += month[`entrate${year}`] || 0;
+        acc.usciteAnnoCorrente += month[`uscite${year}`] || 0;
+        acc.entrateAnnoPrecedente += month[`entrate${year - 1}`] || 0;
+        acc.usciteAnnoPrecedente += month[`uscite${year - 1}`] || 0;
         return acc;
     }, {
         entrateAnnoCorrente: 0,
@@ -137,16 +119,29 @@ export function ForecastComparison({
         entrateAnnoPrecedente: 0,
         usciteAnnoPrecedente: 0,
     });
+    
+    const allIncomeCategories = new Set([...Object.keys(categoryIncomeTotalsCurrent), ...Object.keys(categoryIncomeTotalsPrevious)]);
+    const allExpenseCategories = new Set([...Object.keys(categoryExpenseTotalsCurrent), ...Object.keys(categoryExpenseTotalsPrevious)]);
 
-    const sortedCategoryIncome = Object.entries(categoryIncomeTotals).sort(([, a], [, b]) => b - a);
-    const sortedCategoryExpense = Object.entries(categoryExpenseTotals).sort(([, a], [, b]) => b - a);
+    const combinedIncomeTotals = Array.from(allIncomeCategories).map(cat => ({
+        category: cat,
+        totalCurrent: categoryIncomeTotalsCurrent[cat] || 0,
+        totalPrevious: categoryIncomeTotalsPrevious[cat] || 0,
+    })).sort((a,b) => b.totalCurrent - a.totalCurrent);
+
+    const combinedExpenseTotals = Array.from(allExpenseCategories).map(cat => ({
+        category: cat,
+        totalCurrent: categoryExpenseTotalsCurrent[cat] || 0,
+        totalPrevious: categoryExpenseTotalsPrevious[cat] || 0,
+    })).sort((a,b) => b.totalCurrent - a.totalCurrent);
+
 
     return { 
         chartData: data, 
         totals: total,
         categoryTotals: {
-            income: sortedCategoryIncome,
-            expense: sortedCategoryExpense,
+            income: combinedIncomeTotals,
+            expense: combinedExpenseTotals,
         }
     };
 
@@ -182,32 +177,28 @@ export function ForecastComparison({
           </Card>
       </div>
 
-      <div className="h-[300px]">
+      <div className="h-[250px]">
        {isLoading ? (
           <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
           </div>
        ) : (
           <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
-              <Tooltip
-                  contentStyle={{
-                      background: 'hsl(var(--background))',
-                      borderColor: 'hsl(var(--border))',
-                  }}
-                  formatter={(value: number) => formatCurrency(value)}
-              />
-              <Legend wrapperStyle={{fontSize: "12px"}} />
-              {uniqueCategories.map((cat, index) => (
-                <Bar key={cat} dataKey={`entrate-${cat}`} stackId="entrate" name={cat} fill={COLORS[index % COLORS.length]} />
-              ))}
-               {uniqueCategories.map((cat, index) => (
-                <Bar key={`uscita-${cat}`} dataKey={`uscite-${cat}`} stackId="uscite" name={cat} fill={COLORS[index % COLORS.length]} hide />
-              ))}
-          </BarChart>
+            <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+                <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
+                <Tooltip
+                    contentStyle={{
+                        background: 'hsl(var(--background))',
+                        borderColor: 'hsl(var(--border))',
+                    }}
+                    formatter={(value: number) => formatCurrency(value)}
+                />
+                <Legend wrapperStyle={{fontSize: "12px"}} />
+                <Bar dataKey={`entrate${year}`} name={`Entrate ${year}`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey={`uscite${year}`} name={`Uscite ${year}`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
        )}
       </div>
@@ -222,7 +213,8 @@ export function ForecastComparison({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Categoria</TableHead>
-                    <TableHead className="text-right">Importo</TableHead>
+                    <TableHead className="text-right">{`Totale ${year}`}</TableHead>
+                    <TableHead className="text-right">{`Totale ${year - 1}`}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -231,18 +223,20 @@ export function ForecastComparison({
                         <TableRow key={i}>
                           <TableCell><Skeleton className="h-5 w-24"/></TableCell>
                           <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
+                           <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
                         </TableRow>
                       ))
                   ) : categoryTotals.income.length > 0 ? (
-                    categoryTotals.income.map(([category, total]) => (
+                    categoryTotals.income.map(({category, totalCurrent, totalPrevious}) => (
                       <TableRow key={category}>
                         <TableCell className="font-medium">{category}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(total)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(totalCurrent)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatCurrency(totalPrevious)}</TableCell>
                       </TableRow>
                     ))
                   ) : (
                      <TableRow>
-                        <TableCell colSpan={2} className="h-24 text-center">
+                        <TableCell colSpan={3} className="h-24 text-center">
                           Nessuna entrata per il periodo selezionato.
                         </TableCell>
                       </TableRow>
@@ -260,7 +254,8 @@ export function ForecastComparison({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Categoria</TableHead>
-                    <TableHead className="text-right">Importo</TableHead>
+                    <TableHead className="text-right">{`Totale ${year}`}</TableHead>
+                    <TableHead className="text-right">{`Totale ${year - 1}`}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,18 +264,20 @@ export function ForecastComparison({
                         <TableRow key={i}>
                           <TableCell><Skeleton className="h-5 w-24"/></TableCell>
                           <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
+                          <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
                         </TableRow>
                       ))
                   ) : categoryTotals.expense.length > 0 ? (
-                    categoryTotals.expense.map(([category, total]) => (
+                    categoryTotals.expense.map(({category, totalCurrent, totalPrevious}) => (
                       <TableRow key={category}>
                         <TableCell className="font-medium">{category}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(total)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(totalCurrent)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatCurrency(totalPrevious)}</TableCell>
                       </TableRow>
                     ))
                   ) : (
                      <TableRow>
-                        <TableCell colSpan={2} className="h-24 text-center">
+                        <TableCell colSpan={3} className="h-24 text-center">
                            Nessuna uscita per il periodo selezionato.
                         </TableCell>
                       </TableRow>
