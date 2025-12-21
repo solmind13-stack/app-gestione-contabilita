@@ -30,10 +30,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col space-y-1">
             <span className="text-[0.7rem] uppercase text-muted-foreground">
-              {payload[0].name}
+              {data.name}
             </span>
-            <span className="font-bold text-muted-foreground">
-              {formatCurrency(payload[0].value)}
+            <span className="font-bold text-foreground">
+              {formatCurrency(data.value)}
             </span>
             <span className="text-xs text-muted-foreground">
               ({(payload[0].percent * 100).toFixed(0)}%)
@@ -232,13 +232,13 @@ export function ForecastComparison({
                 ) : pieIncomeData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" label={false} labelLine={false}>
+                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label={false}>
                                 {pieIncomeData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px"}}/>
+                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px", paddingTop: "20px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
@@ -258,13 +258,13 @@ export function ForecastComparison({
                 ) : pieExpenseData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" label={false} labelLine={false}>
+                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label={false}>
                                 {pieExpenseData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px"}}/>
+                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px", paddingTop: "20px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
