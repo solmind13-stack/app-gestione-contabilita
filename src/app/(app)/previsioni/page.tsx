@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
@@ -16,38 +15,11 @@ export default function PrevisioniPage() {
   const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
   const [selectedYear, setSelectedYear] = useState<string>(YEARS[1].toString());
 
-  const firestore = useFirestore();
+  // Mock data - will be replaced with Firestore data
+  const movimenti: Movimento[] = [];
+  const previsioniEntrate: PrevisioneEntrata[] = [];
+  const previsioniUscite: PrevisioneUscita[] = [];
 
-  const movimentiQuery = useMemo(() => {
-    if (!firestore) return null;
-    let q = collection(firestore, 'movements');
-    if (selectedCompany !== 'Tutte') {
-      return query(q, where('societa', '==', selectedCompany));
-    }
-    return q;
-  }, [firestore, selectedCompany]);
-
-  const previsioniEntrateQuery = useMemo(() => {
-    if (!firestore) return null;
-    let q = collection(firestore, 'incomeForecasts');
-    if (selectedCompany !== 'Tutte') {
-      return query(q, where('societa', '==', selectedCompany));
-    }
-    return q;
-  }, [firestore, selectedCompany]);
-
-  const previsioniUsciteQuery = useMemo(() => {
-    if (!firestore) return null;
-    let q = collection(firestore, 'expenseForecasts');
-    if (selectedCompany !== 'Tutte') {
-      return query(q, where('societa', '==', selectedCompany));
-    }
-    return q;
-  }, [firestore, selectedCompany]);
-
-  const { data: movimenti } = useCollection<Movimento>(movimentiQuery);
-  const { data: previsioniEntrate } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
-  const { data: previsioniUscite } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
 
   useEffect(() => {
     setIsClient(true);
@@ -66,7 +38,7 @@ export default function PrevisioniPage() {
         <div>
           <h1 className="text-3xl font-bold">Previsioni e Analisi</h1>
           <p className="text-muted-foreground">
-            Analizza i trend, proietta la liquidità e dialoga con l&apos;AI per ottimizzare le tue strategie.
+            Analizza i trend, proietta la liquidità e dialoga con l'AI per ottimizzare le tue strategie.
           </p>
         </div>
         <div className="flex items-center gap-4">

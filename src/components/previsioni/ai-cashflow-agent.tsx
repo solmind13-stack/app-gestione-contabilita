@@ -9,9 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Send, Sparkles, Loader2, LineChart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { provideAiChatAssistant } from '@/ai/flows/provide-ai-chat-assistant';
 import type { Movimento, Scadenza, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
-import { analyzeCashFlow, type AnalyzeCashFlowOutput } from '@/ai/flows/analyze-cash-flow';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { formatCurrency } from '@/lib/utils';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -35,95 +33,8 @@ export function AiCashflowAgent({ company, allData }: AiCashflowAgentProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
-  
-  const [analysisResult, setAnalysisResult] = useState<AnalyzeCashFlowOutput | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [period, setPeriod] = useState('90');
-
-
-  const financialDataJSON = useMemo(() => {
-    return JSON.stringify({
-        movements: allData.movements,
-        incomeForecasts: allData.incomeForecasts,
-        expenseForecasts: allData.expenseForecasts,
-    }, null, 2);
-  }, [allData]);
-
-
-  const handleGenerateAnalysis = async () => {
-    setIsAnalyzing(true);
-    setAnalysisResult(null);
-    toast({
-        title: 'Analisi Cash Flow in corso...',
-        description: 'L\'AI sta elaborando i dati. Potrebbero volerci alcuni istanti.',
-    });
-    try {
-        const result = await analyzeCashFlow({
-            financialData: financialDataJSON,
-            analysisPeriodDays: parseInt(period),
-            company: company,
-        });
-        setAnalysisResult(result);
-        toast({
-            title: 'Analisi Pronta!',
-            description: 'La proiezione del cash flow è stata generata.',
-        });
-    } catch (error) {
-        console.error("Error during cash flow analysis:", error);
-        toast({ variant: 'destructive', title: 'Errore Analisi', description: 'Impossibile generare la proiezione.' });
-    } finally {
-        setIsAnalyzing(false);
-    }
-  }
-
-  const handleSendMessage = async () => {
-    if (input.trim() === '' || isLoading) return;
-
-    const userMessage: Message = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
-    const currentInput = input;
-    setInput('');
-    setIsLoading(true);
-    
-    try {
-      const result = await provideAiChatAssistant({
-        query: currentInput,
-        financialData: financialDataJSON,
-        company: company,
-        chatHistory: messages,
-      });
-      
-      const assistantMessage: Message = { role: 'model', content: result.response };
-      setMessages(prev => [...prev, assistantMessage]);
-
-    } catch (error) {
-       console.error("Error calling AI assistant:", error);
-       const errorMessage: Message = { 
-         role: 'model', 
-         content: "Mi dispiace, ma al momento non riesco a rispondere. Riprova tra qualche istante."
-       };
-       setMessages(prev => [...prev, errorMessage]);
-       toast({
-        variant: "destructive",
-        title: "Errore Assistente AI",
-        description: "Impossibile ottenere una risposta dall'AI.",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      setTimeout(() => {
-        scrollAreaRef.current?.scrollTo({
-          top: scrollAreaRef.current.scrollHeight,
-          behavior: 'smooth',
-        });
-      }, 100);
-    }
-  }, [messages]);
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">
@@ -134,7 +45,7 @@ export function AiCashflowAgent({ company, allData }: AiCashflowAgentProps) {
                     Proiezione di Liquidità
                 </CardTitle>
                 <CardDescription>
-                    Genera un&apos;analisi di cash flow per un periodo specifico per stimare la capacità di investimento.
+                    Genera un'analisi di cash flow per un periodo specifico per stimare la capacità di investimento.
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col gap-4">
@@ -151,42 +62,15 @@ export function AiCashflowAgent({ company, allData }: AiCashflowAgentProps) {
                                 <SelectItem value="180">Prossimo semestre</SelectItem>
                             </SelectContent>
                         </Select>
-                        <Button onClick={handleGenerateAnalysis} disabled={isAnalyzing} className="w-full sm:w-auto">
+                        <Button disabled={isAnalyzing} className="w-full sm:w-auto">
                             {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
                             Genera
                         </Button>
                     </div>
                 </div>
-
-                {isAnalyzing && <div className="flex-1 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}
-
-                {analysisResult && (
-                    <div className="space-y-4">
-                        <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg text-center">
-                            <h3 className="font-semibold text-lg text-green-800 dark:text-green-300">Capacità di Investimento Totale</h3>
-                            <p className="text-3xl font-bold text-green-700 dark:text-green-400 mt-1">{formatCurrency(analysisResult.totalInvestmentCapacity)}</p>
-                        </div>
-                         <div className="prose prose-sm dark:prose-invert max-w-full">
-                            <p>{analysisResult.overallSummary}</p>
-                        </div>
-                        <div className="h-[250px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={analysisResult.monthlyAnalysis}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="month" tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
-                                    <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}}/>
-                                    <Tooltip
-                                        contentStyle={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))", borderRadius: "var(--radius)" }}
-                                        formatter={(value: number) => formatCurrency(value)}
-                                    />
-                                    <Legend />
-                                    <Bar dataKey="inflows" name="Entrate" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="outflows" name="Uscite" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                )}
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                    <p>L'analisi AI sarà visualizzata qui.</p>
+                </div>
             </CardContent>
         </Card>
 
@@ -263,7 +147,6 @@ export function AiCashflowAgent({ company, allData }: AiCashflowAgentProps) {
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    handleSendMessage();
                     }
                 }}
                 className="pr-20"
@@ -272,7 +155,6 @@ export function AiCashflowAgent({ company, allData }: AiCashflowAgentProps) {
                 <Button
                 size="icon"
                 className="absolute top-1/2 right-3 -translate-y-1/2"
-                onClick={handleSendMessage}
                 disabled={isLoading || input.trim() === ''}
                 aria-label="Invia messaggio"
                 >
