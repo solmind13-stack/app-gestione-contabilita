@@ -9,6 +9,7 @@ import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { CashflowChart } from '../dashboard/cashflow-chart';
 
 interface ForecastComparisonProps {
   mainYear: number;
@@ -171,6 +172,12 @@ export function ForecastComparison({
   const pieIncomeData = useMemo(() => categoryTotals.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.income]);
   const pieExpenseData = useMemo(() => categoryTotals.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.expense]);
 
+  const allData = useMemo(() => ({
+    movements,
+    incomeForecasts,
+    expenseForecasts,
+  }), [movements, incomeForecasts, expenseForecasts]);
+
   return (
     <div className="space-y-6">
        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -302,6 +309,10 @@ export function ForecastComparison({
                 )}
             </CardContent>
         </Card>
+      </div>
+
+       <div className="grid grid-cols-1 gap-6">
+         <CashflowChart data={allData} />
       </div>
 
 
