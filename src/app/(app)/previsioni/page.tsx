@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useUser, useCollection, useFirestore }from '@/firebase';
+import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
@@ -12,7 +12,8 @@ import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser } from '@/
 import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
 import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
-
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', collectionName: string) => {
     if (!firestore || !user) return null;
@@ -27,13 +28,12 @@ const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' |
             return query(q, where('societa', '==', company));
         }
     } else if (role === 'company' || role === 'company-editor') {
-        if (!userCompany) return null; 
+        if (!userCompany) return null;
         return query(q, where('societa', '==', userCompany));
     }
     
     return query(q);
 }
-
 
 export default function PrevisioniPage() {
   const { user } = useUser();
@@ -107,7 +107,6 @@ export default function PrevisioniPage() {
     }
   };
 
-
   const handleAddExpenseForecast = async (forecast: Omit<PrevisioneUscita, 'id'>) => {
     if (!firestore || !user) return;
     try {
@@ -147,7 +146,6 @@ export default function PrevisioniPage() {
     }
   };
 
-
   if (!isClient) {
     return null; 
   }
@@ -182,47 +180,67 @@ export default function PrevisioniPage() {
             </Select>
         </div>
       </div>
-
-      <ForecastComparison 
-        year={Number(selectedYear)} 
-        company={selectedCompany}
-        movements={movimenti || []}
-        incomeForecasts={previsioniEntrate || []}
-        expenseForecasts={previsioniUscite || []}
-        isLoading={isLoading}
-      />
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <IncomeForecasts
-            data={previsioniEntrate || []}
-            year={Number(selectedYear)}
-            isLoading={isLoadingIncome}
-            onAdd={handleAddIncomeForecast}
-            onEdit={handleEditIncomeForecast}
-            onDelete={handleDeleteIncomeForecast}
-            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
-            currentUser={user!}
-        />
-        <ExpenseForecasts
-            data={previsioniUscite || []}
-            year={Number(selectedYear)}
-            isLoading={isLoadingExpenses}
-            onAdd={handleAddExpenseForecast}
-            onEdit={handleEditExpenseForecast}
-            onDelete={handleDeleteExpenseForecast}
-            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
-            currentUser={user!}
-        />
-      </div>
-
-      <AiCashflowAgent 
-         company={selectedCompany}
-         allData={{
-            movements: movimenti || [],
-            incomeForecasts: previsioniEntrate || [],
-            expenseForecasts: previsioniUscite || [],
-         }}
-      />
+      <Tabs defaultValue="dashboard" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="entrate">Dettaglio Entrate</TabsTrigger>
+          <TabsTrigger value="uscite">Dettaglio Uscite</TabsTrigger>
+          <TabsTrigger value="agente-ai">Agente AI</TabsTrigger>
+        </TabsList>
+        <TabsContent value="dashboard">
+          <Card>
+            <CardHeader>
+              <CardTitle>Riepilogo Generale</CardTitle>
+              <CardDescription>Confronto entrate/uscite (dati storici e previsti) per l'anno {selectedYear} verso il {selectedYear ? Number(selectedYear) - 1 : ''}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ForecastComparison 
+                year={Number(selectedYear)} 
+                company={selectedCompany}
+                movements={movimenti || []}
+                incomeForecasts={previsioniEntrate || []}
+                expenseForecasts={previsioniUscite || []}
+                isLoading={isLoading}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="entrate">
+           <IncomeForecasts
+              data={previsioniEntrate || []}
+              year={Number(selectedYear)}
+              isLoading={isLoadingIncome}
+              onAdd={handleAddIncomeForecast}
+              onEdit={handleEditIncomeForecast}
+              onDelete={handleDeleteIncomeForecast}
+              defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
+              currentUser={user!}
+          />
+        </TabsContent>
+        <TabsContent value="uscite">
+          <ExpenseForecasts
+              data={previsioniUscite || []}
+              year={Number(selectedYear)}
+              isLoading={isLoadingExpenses}
+              onAdd={handleAddExpenseForecast}
+              onEdit={handleEditExpenseForecast}
+              onDelete={handleDeleteExpenseForecast}
+              defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
+              currentUser={user!}
+          />
+        </TabsContent>
+        <TabsContent value="agente-ai">
+            <AiCashflowAgent 
+                company={selectedCompany}
+                allData={{
+                    movements: movimenti || [],
+                    incomeForecasts: previsioniEntrate || [],
+                    expenseForecasts: previsioniUscite || [],
+                }}
+            />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
