@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query, where, CollectionReference } from 'firebase/firestore';
+import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
@@ -56,10 +56,11 @@ export default function PrevisioniPage() {
   const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'expenseForecasts'), [firestore, user, selectedCompany]);
 
   // Data fetching hooks
-  const { data: movimenti } = useCollection<Movimento>(movimentiQuery);
-  const { data: previsioniEntrate } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
-  const { data: previsioniUscite } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
+  const { data: movimenti, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
+  const { data: previsioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
+  const { data: previsioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
   
+  const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses;
 
   if (!isClient) {
     // Render a skeleton or null during SSR to avoid hydration mismatches
@@ -91,7 +92,7 @@ export default function PrevisioniPage() {
                 <SelectValue placeholder="Anno" />
               </SelectTrigger>
               <SelectContent>
-                {YEARS.map(year => <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>)}
+                {YEARS.filter(y => y !== 'Tutti').map(year => <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>)}
               </SelectContent>
             </Select>
         </div>
@@ -103,6 +104,7 @@ export default function PrevisioniPage() {
         movements={movimenti || []}
         incomeForecasts={previsioniEntrate || []}
         expenseForecasts={previsioniUscite || []}
+        isLoading={isLoading}
       />
       
       <AiCashflowAgent 
