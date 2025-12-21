@@ -27,7 +27,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     const data = payload[0].payload;
     return (
       <div className="rounded-lg border bg-background p-2 shadow-sm">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-1">
           <div className="flex flex-col space-y-1">
             <span className="text-[0.7rem] uppercase text-muted-foreground">
               {data.name}
@@ -44,6 +44,19 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     );
   }
   return null;
+};
+
+const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
+  if (percent < 0.05) return null; // Non mostrare l'etichetta per fette troppo piccole
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+  const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
 };
 
 
@@ -232,13 +245,22 @@ export function ForecastComparison({
                 ) : pieIncomeData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label={false}>
+                            <Pie 
+                                data={pieIncomeData} 
+                                dataKey="value" 
+                                nameKey="name" 
+                                cx="50%" 
+                                cy="50%" 
+                                outerRadius={80} 
+                                labelLine={false}
+                                label={renderCustomizedLabel}
+                            >
                                 {pieIncomeData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px", paddingTop: "20px"}}/>
+                            <Legend iconSize={10} wrapperStyle={{fontSize: "11px", paddingTop: "15px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
@@ -258,13 +280,21 @@ export function ForecastComparison({
                 ) : pieExpenseData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label={false}>
+                            <Pie 
+                                data={pieExpenseData} 
+                                dataKey="value" 
+                                nameKey="name" cx="50%" 
+                                cy="50%" 
+                                outerRadius={80}
+                                labelLine={false}
+                                label={renderCustomizedLabel}
+                            >
                                 {pieExpenseData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconSize={10} wrapperStyle={{fontSize: "12px", paddingTop: "20px"}}/>
+                            <Legend iconSize={10} wrapperStyle={{fontSize: "11px", paddingTop: "15px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
@@ -279,6 +309,7 @@ export function ForecastComparison({
         <Card>
           <CardHeader>
             <CardTitle>Riepilogo Categorie Entrate</CardTitle>
+             <CardDescription>Confronto tra {mainYear} e {comparisonYear}</CardDescription>
           </CardHeader>
           <CardContent>
              <Table>
@@ -320,6 +351,7 @@ export function ForecastComparison({
          <Card>
           <CardHeader>
             <CardTitle>Riepilogo Categorie Uscite</CardTitle>
+            <CardDescription>Confronto tra {mainYear} e {comparisonYear}</CardDescription>
           </CardHeader>
           <CardContent>
              <Table>

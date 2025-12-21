@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
@@ -13,6 +13,8 @@ import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
 import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+
 
 const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', collectionName: string) => {
     if (!firestore || !user) return null;
@@ -55,7 +57,7 @@ export default function PrevisioniPage() {
     if (user?.role === 'company' && user.company) {
       setSelectedCompany(user.company);
     } else if (user?.role === 'company-editor' && user.company) {
-      setSelectedCompany(user.company);
+        setSelectedCompany(user.company);
     }
   }, [user]);
 
