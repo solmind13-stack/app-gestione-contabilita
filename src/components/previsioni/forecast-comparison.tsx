@@ -2,12 +2,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 
 interface ForecastComparisonProps {
@@ -19,6 +19,21 @@ interface ForecastComparisonProps {
   expenseForecasts: PrevisioneUscita[];
   isLoading: boolean;
 }
+
+const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="rounded-lg border bg-background p-2 shadow-sm">
+        <p className="font-bold">{`${payload[0].name}: ${formatCurrency(payload[0].value)}`}</p>
+        <p className="text-sm text-muted-foreground">{`(${(payload[0].percent * 100).toFixed(0)}%)`}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 
 export function ForecastComparison({
   mainYear,
@@ -128,61 +143,125 @@ export function ForecastComparison({
 
   }, [mainYear, comparisonYear, company, movements, incomeForecasts, expenseForecasts]);
   
+  const pieIncomeData = categoryTotals.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain }));
+  const pieExpenseData = categoryTotals.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain }));
 
   return (
     <div className="space-y-6">
        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
           <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Entrate {mainYear}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate ${mainYear}`}</CardTitle></CardHeader>
             <CardContent>
               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`entrate${mainYear}`] || 0)}</p>}
             </CardContent>
           </Card>
            <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Uscite {mainYear}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite ${mainYear}`}</CardTitle></CardHeader>
             <CardContent>
               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`uscite${mainYear}`] || 0)}</p>}
             </CardContent>
           </Card>
            <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Entrate {comparisonYear}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate ${comparisonYear}`}</CardTitle></CardHeader>
             <CardContent>
                {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-muted-foreground">{formatCurrency(totals[`entrate${comparisonYear}`] || 0)}</p>}
             </CardContent>
           </Card>
            <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Uscite {comparisonYear}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite ${comparisonYear}`}</CardTitle></CardHeader>
             <CardContent>
               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-muted-foreground">{formatCurrency(totals[`uscite${comparisonYear}`] || 0)}</p>}
             </CardContent>
           </Card>
       </div>
 
-      <div className="h-[250px]">
-       {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
-          </div>
-       ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
-                <Tooltip
-                    contentStyle={{
-                        background: 'hsl(var(--background))',
-                        borderColor: 'hsl(var(--border))',
-                    }}
-                    formatter={(value: number) => formatCurrency(value)}
-                />
-                <Legend wrapperStyle={{fontSize: "12px"}} />
-                <Bar dataKey={`entrate${mainYear}`} name={`Entrate ${mainYear}`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey={`uscite${mainYear}`} name={`Uscite ${mainYear}`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-       )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Andamento Mensile</CardTitle>
+          <CardDescription>{`Confronto entrate e uscite per l'anno ${mainYear}`}</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[200px]">
+        {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
+            </div>
+        ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
+                  <Tooltip
+                      contentStyle={{
+                          background: 'hsl(var(--background))',
+                          borderColor: 'hsl(var(--border))',
+                      }}
+                      formatter={(value: number) => formatCurrency(value)}
+                  />
+                  <Legend wrapperStyle={{fontSize: "12px"}} />
+                  <Bar dataKey={`entrate${mainYear}`} name={`Entrate ${mainYear}`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`uscite${mainYear}`} name={`Uscite ${mainYear}`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+        )}
+        </CardContent>
+      </Card>
+      
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+            <CardHeader>
+                <CardTitle>Composizione Entrate {mainYear}</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[200px]">
+                 {isLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
+                    </div>
+                ) : pieIncomeData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label>
+                                {pieIncomeData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                ): (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">Nessun dato per il grafico.</div>
+                )}
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle>Composizione Uscite {mainYear}</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[200px]">
+                 {isLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
+                    </div>
+                ) : pieExpenseData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="hsl(var(--chart-1))" labelLine={false} label>
+                                {pieExpenseData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                ): (
+                     <div className="flex items-center justify-center h-full text-muted-foreground">Nessun dato per il grafico.</div>
+                )}
+            </CardContent>
+        </Card>
       </div>
+
 
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
