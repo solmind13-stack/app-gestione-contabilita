@@ -2,7 +2,7 @@
 'use server';
 
 /**
- * @fileOverview An AI flow to analyze cash flow based on financial data and provide investment capacity.
+ * @fileOverview An AI flow to analyze cash flow, providing a rich, structured output for dashboard visualization.
  *
  * - analyzeCashFlow - A function that handles the cash flow analysis.
  * - AnalyzeCashFlowInput - The input type for the analyzeCashFlow function.
@@ -100,5 +100,3 @@ const analyzeCashFlowFlow = ai.defineFlow(
     }
   }
 );
-
-    
