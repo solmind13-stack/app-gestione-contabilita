@@ -7,6 +7,9 @@ import { formatCurrency } from '@/lib/utils';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
 import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
+import { CATEGORIE, CATEGORIE_ENTRATE, CATEGORIE_USCITE } from '@/lib/constants';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 
 interface ForecastComparisonProps {
   year: number;
@@ -17,6 +20,18 @@ interface ForecastComparisonProps {
   isLoading: boolean;
 }
 
+const COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+  '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F', '#FFBB28'
+];
+
+const allCategories = [...Object.keys(CATEGORIE_ENTRATE), ...Object.keys(CATEGORIE_USCITE)];
+const uniqueCategories = [...new Set(allCategories)];
+
 export function ForecastComparison({
   year,
   company,
@@ -26,67 +41,95 @@ export function ForecastComparison({
   isLoading,
 }: ForecastComparisonProps) {
 
-  const { chartData, totals } = useMemo(() => {
+  const { chartData, totals, categoryTotals } = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => i);
-    
+
+    const categoryIncomeTotals: { [key: string]: number } = {};
+    const categoryExpenseTotals: { [key: string]: number } = {};
+
     const data = months.map(monthIndex => {
         const monthName = new Date(year, monthIndex).toLocaleString('it-IT', { month: 'long' });
         const monthShort = monthName.charAt(0).toUpperCase() + monthName.slice(1, 3);
 
-        const currentYearData = {
-            entrate: 0,
-            uscite: 0,
+        const monthData: any = {
+            month: monthShort,
+            entrateAnnoCorrente: 0,
+            usciteAnnoCorrente: 0,
+            entrateAnnoPrecedente: 0,
+            usciteAnnoPrecedente: 0,
         };
 
-        const previousYearData = {
-            entrate: 0,
-            uscite: 0,
-        };
-        
+        // Initialize categories for the month
+        uniqueCategories.forEach(cat => {
+          monthData[`entrate-${cat}`] = 0;
+          monthData[`uscite-${cat}`] = 0;
+        });
+
+        // Previous year from movements
         movements.forEach(mov => {
             const movDate = new Date(mov.data);
-            const movYear = movDate.getFullYear();
-            const movMonth = movDate.getMonth();
+            if (movDate.getFullYear() === year - 1 && movDate.getMonth() === monthIndex) {
+                if (!company || company === 'Tutte' || mov.societa === company) {
+                    monthData.entrateAnnoPrecedente += mov.entrata || 0;
+                    monthData.usciteAnnoPrecedente += mov.uscita || 0;
+                }
+            }
+        });
+        
+        // Current year from movements (historical)
+        movements.forEach(mov => {
+            const movDate = new Date(mov.data);
+             if (movDate.getFullYear() === year && movDate.getMonth() === monthIndex) {
+                 if (!company || company === 'Tutte' || mov.societa === company) {
+                    const income = mov.entrata || 0;
+                    const expense = mov.uscita || 0;
+                    monthData.entrateAnnoCorrente += income;
+                    monthData.usciteAnnoCorrente += expense;
+                    monthData[`entrate-${mov.categoria}`] += income;
+                    monthData[`uscite-${mov.categoria}`] += expense;
 
-            if(movYear === year && movMonth === monthIndex) {
-                currentYearData.entrate += mov.entrata;
-                currentYearData.uscite += mov.uscita;
-            } else if (movYear === year - 1 && movMonth === monthIndex) {
-                 previousYearData.entrate += mov.entrata;
-                 previousYearData.uscite += mov.uscita;
+                    if (income > 0) categoryIncomeTotals[mov.categoria] = (categoryIncomeTotals[mov.categoria] || 0) + income;
+                    if (expense > 0) categoryExpenseTotals[mov.categoria] = (categoryExpenseTotals[mov.categoria] || 0) + expense;
+                }
             }
         });
 
+        // Current year from forecasts (future)
         const today = new Date();
         if (year > today.getFullYear() || (year === today.getFullYear() && monthIndex >= today.getMonth())) {
             incomeForecasts.forEach(forecast => {
-                if (forecast.anno === year && new Date(forecast.dataPrevista).getMonth() === monthIndex) {
-                    currentYearData.entrate += forecast.importoLordo * forecast.probabilita;
+                const forecastDate = new Date(forecast.dataPrevista);
+                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
+                    if (!company || company === 'Tutte' || forecast.societa === company) {
+                        const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
+                        monthData.entrateAnnoCorrente += weightedIncome;
+                        monthData[`entrate-${forecast.categoria}`] += weightedIncome;
+                        categoryIncomeTotals[forecast.categoria] = (categoryIncomeTotals[forecast.categoria] || 0) + weightedIncome;
+                    }
                 }
             });
 
             expenseForecasts.forEach(forecast => {
-                if (forecast.anno === year && new Date(forecast.dataScadenza).getMonth() === monthIndex) {
-                    currentYearData.uscite += forecast.importoLordo * forecast.probabilita;
+                const forecastDate = new Date(forecast.dataScadenza);
+                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
+                    if (!company || company === 'Tutte' || forecast.societa === company) {
+                        const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
+                        monthData.usciteAnnoCorrente += weightedExpense;
+                        monthData[`uscite-${forecast.categoria}`] += weightedExpense;
+                        categoryExpenseTotals[forecast.categoria] = (categoryExpenseTotals[forecast.categoria] || 0) + weightedExpense;
+                    }
                 }
             });
         }
 
-
-        return {
-            month: monthShort,
-            entrateAnnoCorrente: currentYearData.entrate,
-            usciteAnnoCorrente: currentYearData.uscite,
-            entrateAnnoPrecedente: previousYearData.entrate,
-            usciteAnnoPrecedente: previousYearData.uscite,
-        };
+        return monthData;
     });
     
     const total = data.reduce((acc, month) => {
-        acc.entrateAnnoCorrente += month.entrateAnnoCorrente;
-        acc.usciteAnnoCorrente += month.usciteAnnoCorrente;
-        acc.entrateAnnoPrecedente += month.entrateAnnoPrecedente;
-        acc.usciteAnnoPrecedente += month.usciteAnnoPrecedente;
+        acc.entrateAnnoCorrente += month.entrateAnnoCorrente || 0;
+        acc.usciteAnnoCorrente += month.usciteAnnoCorrente || 0;
+        acc.entrateAnnoPrecedente += month.entrateAnnoPrecedente || 0;
+        acc.usciteAnnoPrecedente += month.usciteAnnoPrecedente || 0;
         return acc;
     }, {
         entrateAnnoCorrente: 0,
@@ -95,14 +138,51 @@ export function ForecastComparison({
         usciteAnnoPrecedente: 0,
     });
 
-    return { chartData: data, totals: total };
+    const sortedCategoryIncome = Object.entries(categoryIncomeTotals).sort(([, a], [, b]) => b - a);
+    const sortedCategoryExpense = Object.entries(categoryExpenseTotals).sort(([, a], [, b]) => b - a);
 
-  }, [year, movements, incomeForecasts, expenseForecasts]);
+    return { 
+        chartData: data, 
+        totals: total,
+        categoryTotals: {
+            income: sortedCategoryIncome,
+            expense: sortedCategoryExpense,
+        }
+    };
+
+  }, [year, company, movements, incomeForecasts, expenseForecasts]);
   
 
   return (
     <div className="space-y-6">
-      <div className="h-[250px]">
+       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <Card>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Entrate {year}</CardTitle></CardHeader>
+            <CardContent>
+              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals.entrateAnnoCorrente)}</p>}
+            </CardContent>
+          </Card>
+           <Card>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Uscite {year}</CardTitle></CardHeader>
+            <CardContent>
+              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals.usciteAnnoCorrente)}</p>}
+            </CardContent>
+          </Card>
+           <Card>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Entrate {year - 1}</CardTitle></CardHeader>
+            <CardContent>
+               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-muted-foreground">{formatCurrency(totals.entrateAnnoPrecedente)}</p>}
+            </CardContent>
+          </Card>
+           <Card>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">Totale Uscite {year - 1}</CardTitle></CardHeader>
+            <CardContent>
+              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-muted-foreground">{formatCurrency(totals.usciteAnnoPrecedente)}</p>}
+            </CardContent>
+          </Card>
+      </div>
+
+      <div className="h-[300px]">
        {isLoading ? (
           <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
@@ -121,32 +201,96 @@ export function ForecastComparison({
                   formatter={(value: number) => formatCurrency(value)}
               />
               <Legend wrapperStyle={{fontSize: "12px"}} />
-              <Bar dataKey="entrateAnnoPrecedente" name={`Entrate ${year - 1}`} fill="hsl(var(--chart-2))" opacity={0.5} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="usciteAnnoPrecedente" name={`Uscite ${year - 1}`} fill="hsl(var(--chart-4))" opacity={0.5} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="entrateAnnoCorrente" name={`Entrate ${year}`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="usciteAnnoCorrente" name={`Uscite ${year}`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+              {uniqueCategories.map((cat, index) => (
+                <Bar key={cat} dataKey={`entrate-${cat}`} stackId="entrate" name={cat} fill={COLORS[index % COLORS.length]} />
+              ))}
+               {uniqueCategories.map((cat, index) => (
+                <Bar key={`uscita-${cat}`} dataKey={`uscite-${cat}`} stackId="uscite" name={cat} fill={COLORS[index % COLORS.length]} hide />
+              ))}
           </BarChart>
           </ResponsiveContainer>
        )}
       </div>
-       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Totale Entrate {year}</p>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto mt-1" /> : <p className="text-xl font-bold">{formatCurrency(totals.entrateAnnoCorrente)}</p>}
-          </div>
-           <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Totale Uscite {year}</p>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto mt-1" /> : <p className="text-xl font-bold">{formatCurrency(totals.usciteAnnoCorrente)}</p>}
-          </div>
-           <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Totale Entrate {year - 1}</p>
-               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto mt-1" /> : <p className="text-xl font-bold">{formatCurrency(totals.entrateAnnoPrecedente)}</p>}
-          </div>
-           <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Totale Uscite {year - 1}</p>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto mt-1" /> : <p className="text-xl font-bold">{formatCurrency(totals.usciteAnnoPrecedente)}</p>}
-          </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Riepilogo Categorie Entrate</CardTitle>
+          </CardHeader>
+          <CardContent>
+             <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead className="text-right">Importo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                     [...Array(3)].map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Skeleton className="h-5 w-24"/></TableCell>
+                          <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
+                        </TableRow>
+                      ))
+                  ) : categoryTotals.income.length > 0 ? (
+                    categoryTotals.income.map(([category, total]) => (
+                      <TableRow key={category}>
+                        <TableCell className="font-medium">{category}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(total)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                     <TableRow>
+                        <TableCell colSpan={2} className="h-24 text-center">
+                          Nessuna entrata per il periodo selezionato.
+                        </TableCell>
+                      </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+          </CardContent>
+        </Card>
+         <Card>
+          <CardHeader>
+            <CardTitle>Riepilogo Categorie Uscite</CardTitle>
+          </CardHeader>
+          <CardContent>
+             <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead className="text-right">Importo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                     [...Array(3)].map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Skeleton className="h-5 w-24"/></TableCell>
+                          <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
+                        </TableRow>
+                      ))
+                  ) : categoryTotals.expense.length > 0 ? (
+                    categoryTotals.expense.map(([category, total]) => (
+                      <TableRow key={category}>
+                        <TableCell className="font-medium">{category}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(total)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                     <TableRow>
+                        <TableCell colSpan={2} className="h-24 text-center">
+                           Nessuna uscita per il periodo selezionato.
+                        </TableCell>
+                      </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+          </CardContent>
+        </Card>
       </div>
+
     </div>
   );
 }
