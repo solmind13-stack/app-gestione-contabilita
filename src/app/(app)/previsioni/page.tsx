@@ -1,13 +1,17 @@
+// src/app/(app)/previsioni/page.tsx
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
+import { useUser, useCollection, useFirestore }from '@/firebase';
+import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
 import { YEARS, COMPANIES } from '@/lib/constants';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser } from '@/lib/types';
+import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
+import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
+import { useToast } from '@/hooks/use-toast';
 
 
 const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', collectionName: string) => {
@@ -34,6 +38,7 @@ const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' |
 export default function PrevisioniPage() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
@@ -61,9 +66,89 @@ export default function PrevisioniPage() {
   const { data: previsioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
   
   const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses;
+  
+  // CRUD Handlers for Forecasts
+  const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
+    if (!firestore || !user) return;
+    try {
+        await addDoc(collection(firestore, 'incomeForecasts'), {
+            ...forecast,
+            createdBy: user.uid,
+            createdAt: new Date().toISOString()
+        });
+        toast({ title: 'Previsione Aggiunta', description: 'La nuova previsione di entrata è stata salvata.' });
+    } catch(e) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare la previsione.' });
+        console.error(e);
+    }
+  };
+
+  const handleEditIncomeForecast = async (forecast: PrevisioneEntrata) => {
+     if (!firestore || !user || !forecast.id) return;
+     try {
+        const docRef = doc(firestore, 'incomeForecasts', forecast.id);
+        const { id, ...dataToUpdate } = forecast;
+        await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString() });
+        toast({ title: 'Previsione Aggiornata', description: 'La previsione di entrata è stata modificata.' });
+    } catch(e) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile aggiornare la previsione.' });
+        console.error(e);
+    }
+  };
+  
+  const handleDeleteIncomeForecast = async (forecastId: string) => {
+    if (!firestore) return;
+    try {
+        await deleteDoc(doc(firestore, 'incomeForecasts', forecastId));
+        toast({ title: 'Previsione Eliminata', description: 'La previsione di entrata è stata eliminata.' });
+    } catch (e) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare la previsione.' });
+        console.error(e);
+    }
+  };
+
+
+  const handleAddExpenseForecast = async (forecast: Omit<PrevisioneUscita, 'id'>) => {
+    if (!firestore || !user) return;
+    try {
+        await addDoc(collection(firestore, 'expenseForecasts'), {
+            ...forecast,
+            createdBy: user.uid,
+            createdAt: new Date().toISOString()
+        });
+        toast({ title: 'Previsione Aggiunta', description: 'La nuova previsione di uscita è stata salvata.' });
+    } catch(e) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare la previsione.' });
+        console.error(e);
+    }
+  };
+
+  const handleEditExpenseForecast = async (forecast: PrevisioneUscita) => {
+     if (!firestore || !user || !forecast.id) return;
+     try {
+        const docRef = doc(firestore, 'expenseForecasts', forecast.id);
+        const { id, ...dataToUpdate } = forecast;
+        await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString() });
+        toast({ title: 'Previsione Aggiornata', description: 'La previsione di uscita è stata modificata.' });
+    } catch(e) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile aggiornare la previsione.' });
+        console.error(e);
+    }
+  };
+
+   const handleDeleteExpenseForecast = async (forecastId: string) => {
+    if (!firestore) return;
+    try {
+        await deleteDoc(doc(firestore, 'expenseForecasts', forecastId));
+        toast({ title: 'Previsione Eliminata', description: 'La previsione di uscita è stata eliminata.' });
+    } catch (e) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare la previsione.' });
+        console.error(e);
+    }
+  };
+
 
   if (!isClient) {
-    // Render a skeleton or null during SSR to avoid hydration mismatches
     return null; 
   }
 
@@ -73,7 +158,7 @@ export default function PrevisioniPage() {
         <div>
           <h1 className="text-3xl font-bold">Previsioni e Analisi</h1>
           <p className="text-muted-foreground">
-            Analizza i trend, proietta la liquidità e dialoga con l'AI per ottimizzare le tue strategie.
+            Analizza i trend, proietta la liquidità e gestisci le previsioni di entrate e uscite.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -107,6 +192,29 @@ export default function PrevisioniPage() {
         isLoading={isLoading}
       />
       
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <IncomeForecasts
+            data={previsioniEntrate || []}
+            year={Number(selectedYear)}
+            isLoading={isLoadingIncome}
+            onAdd={handleAddIncomeForecast}
+            onEdit={handleEditIncomeForecast}
+            onDelete={handleDeleteIncomeForecast}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
+            currentUser={user!}
+        />
+        <ExpenseForecasts
+            data={previsioniUscite || []}
+            year={Number(selectedYear)}
+            isLoading={isLoadingExpenses}
+            onAdd={handleAddExpenseForecast}
+            onEdit={handleEditExpenseForecast}
+            onDelete={handleDeleteExpenseForecast}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
+            currentUser={user!}
+        />
+      </div>
+
       <AiCashflowAgent 
          company={selectedCompany}
          allData={{

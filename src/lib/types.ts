@@ -30,7 +30,6 @@ export type NavItem = {
     href: string;
     icon: any;
     label: string;
-    subItems?: { href: string; label: string }[];
 };
 
 export type Movimento = {
@@ -114,6 +113,7 @@ export type PrevisioneEntrata = {
   probabilita: number; // 0 to 1
   stato: 'Da incassare' | 'Incassato' | 'Parziale' | 'Annullato';
   note?: string;
+  importoEffettivo?: number;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;

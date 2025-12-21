@@ -58,7 +58,6 @@ export function ForecastComparison({
             }
         });
 
-        // Filter forecasts for the current month and year (only for future months)
         const today = new Date();
         if (year > today.getFullYear() || (year === today.getFullYear() && monthIndex >= today.getMonth())) {
             incomeForecasts.forEach(forecast => {
@@ -111,7 +110,7 @@ export function ForecastComparison({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="h-[350px]">
+        <div className="h-[250px]">
          {isLoading ? (
             <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
@@ -120,8 +119,8 @@ export function ForecastComparison({
             <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} />
+                <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+                <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
                 <Tooltip
                     contentStyle={{
                         background: 'hsl(var(--background))',
@@ -129,7 +128,7 @@ export function ForecastComparison({
                     }}
                     formatter={(value: number) => formatCurrency(value)}
                 />
-                <Legend />
+                <Legend wrapperStyle={{fontSize: "12px"}} />
                 <Bar dataKey="entrateAnnoPrecedente" name={`Entrate ${year - 1}`} fill="hsl(var(--chart-2))" opacity={0.5} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="usciteAnnoPrecedente" name={`Uscite ${year - 1}`} fill="hsl(var(--chart-4))" opacity={0.5} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="entrateAnnoCorrente" name={`Entrate ${year}`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />

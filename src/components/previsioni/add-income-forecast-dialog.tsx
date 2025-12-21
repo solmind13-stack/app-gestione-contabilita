@@ -1,4 +1,4 @@
-// src/components/previsioni/add-expense-forecast-dialog.tsx
+// src/components/previsioni/add-income-forecast-dialog.tsx
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -37,39 +37,37 @@ import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import type { PrevisioneUscita, AppUser } from '@/lib/types';
-import { CATEGORIE_USCITE, CERTEZZA_LIVELLI, STATI_USCITE, RICORRENZE_USCITE, IVA_PERCENTAGES } from '@/lib/constants';
+import type { PrevisioneEntrata, AppUser } from '@/lib/types';
+import { CATEGORIE_ENTRATE, CERTEZZA_LIVELLI, STATI_ENTRATE, IVA_PERCENTAGES } from '@/lib/constants';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
-  dataScadenza: z.date({ required_error: 'Seleziona una data' }),
+  dataPrevista: z.date({ required_error: 'Seleziona una data' }),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importoLordo: z.coerce.number().positive('L\'importo deve essere positivo'),
   importoEffettivo: z.coerce.number().min(0).optional(),
   categoria: z.string().min(1, 'La categoria è obbligatoria'),
-  sottocategoria: z.string().optional(),
+  sottocategoria: z.string().min(1, 'La sottocategoria è obbligatoria'),
   iva: z.coerce.number().min(0).max(1),
   certezza: z.enum(['Certa', 'Probabile', 'Incerta']),
   probabilita: z.coerce.number().min(0).max(1),
-  fonteContratto: z.string().optional(),
-  ricorrenza: z.enum(['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale', 'Altro']),
-  stato: z.enum(['Da pagare', 'Pagato', 'Parziale', 'Annullato']),
+  stato: z.enum(['Da incassare', 'Incassato', 'Parziale', 'Annullato']),
   note: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof FormSchema>;
 
-interface AddExpenseForecastDialogProps {
+interface AddIncomeForecastDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onAddForecast: (forecast: Omit<PrevisioneUscita, 'id' | 'createdBy' | 'createdAt' | 'updatedAt' >) => Promise<void>;
-  onEditForecast: (forecast: PrevisioneUscita) => Promise<void>;
-  forecastToEdit?: PrevisioneUscita | null;
+  onAddForecast: (forecast: Omit<PrevisioneEntrata, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onEditForecast: (forecast: PrevisioneEntrata) => Promise<void>;
+  forecastToEdit?: PrevisioneEntrata | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
 }
 
-export function AddExpenseForecastDialog({
+export function AddIncomeForecastDialog({
   isOpen,
   setIsOpen,
   onAddForecast,
@@ -77,30 +75,28 @@ export function AddExpenseForecastDialog({
   forecastToEdit,
   defaultCompany,
   currentUser,
-}: AddExpenseForecastDialogProps) {
+}: AddIncomeForecastDialogProps) {
   const isEditMode = !!forecastToEdit;
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
   });
-
+  
   useEffect(() => {
     if (isOpen) {
       if (isEditMode && forecastToEdit) {
         form.reset({
           societa: forecastToEdit.societa,
-          dataScadenza: new Date(forecastToEdit.dataScadenza),
+          dataPrevista: new Date(forecastToEdit.dataPrevista),
           descrizione: forecastToEdit.descrizione,
           importoLordo: forecastToEdit.importoLordo,
           importoEffettivo: forecastToEdit.importoEffettivo || 0,
           categoria: forecastToEdit.categoria,
-          sottocategoria: forecastToEdit.sottocategoria || '',
+          sottocategoria: forecastToEdit.sottocategoria,
           iva: forecastToEdit.iva,
           certezza: forecastToEdit.certezza,
           probabilita: forecastToEdit.probabilita,
-          fonteContratto: forecastToEdit.fonteContratto || '',
-          ricorrenza: forecastToEdit.ricorrenza,
           stato: forecastToEdit.stato,
           note: forecastToEdit.note || '',
         });
@@ -108,7 +104,7 @@ export function AddExpenseForecastDialog({
         const today = new Date();
         form.reset({
           societa: defaultCompany || 'LNC',
-          dataScadenza: today,
+          dataPrevista: today,
           descrizione: '',
           importoLordo: 0,
           importoEffettivo: 0,
@@ -117,9 +113,7 @@ export function AddExpenseForecastDialog({
           iva: 0.22,
           certezza: 'Probabile',
           probabilita: 0.9,
-          fonteContratto: '',
-          ricorrenza: 'Nessuna',
-          stato: 'Da pagare',
+          stato: 'Da incassare',
           note: '',
         });
       }
@@ -130,17 +124,16 @@ export function AddExpenseForecastDialog({
     setIsSubmitting(true);
     const commonData = {
         ...data,
-        mese: format(data.dataScadenza, 'MMMM', {locale: it}),
-        dataScadenza: format(data.dataScadenza, 'yyyy-MM-dd'),
-        anno: data.dataScadenza.getFullYear(),
-        sottocategoria: data.sottocategoria || '',
+        mese: format(data.dataPrevista, 'MMMM', {locale: it}),
+        dataPrevista: format(data.dataPrevista, 'yyyy-MM-dd'),
+        anno: data.dataPrevista.getFullYear(),
         importoEffettivo: data.importoEffettivo || 0,
     };
 
     if (isEditMode && forecastToEdit) {
       await onEditForecast({ ...commonData, id: forecastToEdit.id });
     } else {
-      await onAddForecast(commonData);
+        await onAddForecast(commonData);
     }
     setIsSubmitting(false);
     setIsOpen(false);
@@ -160,9 +153,9 @@ export function AddExpenseForecastDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{isEditMode ? 'Modifica Previsione Uscita' : 'Aggiungi Previsione Uscita'}</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Modifica Previsione Entrata' : 'Aggiungi Previsione Entrata'}</DialogTitle>
           <DialogDescription>
-             Inserisci i dettagli per la previsione di spesa.
+             Inserisci i dettagli per la previsione di entrata.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -179,13 +172,13 @@ export function AddExpenseForecastDialog({
                         <FormMessage />
                     </FormItem>
                 )} />
-                <FormField control={form.control} name="dataScadenza" render={({ field }) => (
-                    <FormItem className="flex flex-col"><FormLabel>Data Scadenza</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP", { locale: it }) : <span>Scegli una data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
+                <FormField control={form.control} name="dataPrevista" render={({ field }) => (
+                    <FormItem className="flex flex-col"><FormLabel>Data Prevista</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP", { locale: it }) : <span>Scegli una data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
                 )} />
             </div>
 
             <FormField control={form.control} name="descrizione" render={({ field }) => (
-                <FormItem><FormLabel>Descrizione</FormLabel><FormControl><Textarea placeholder="Es: Rata mutuo, Fattura fornitore..." {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Descrizione</FormLabel><FormControl><Textarea placeholder="Es: Affitto, Fattura cliente..." {...field} /></FormControl><FormMessage /></FormItem>
             )} />
 
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -199,10 +192,10 @@ export function AddExpenseForecastDialog({
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField control={form.control} name="categoria" render={({ field }) => (
-                    <FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{Object.keys(CATEGORIE_USCITE).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{Object.keys(CATEGORIE_ENTRATE).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="sottocategoria" render={({ field }) => (
-                    <FormItem><FormLabel>Sottocategoria</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{selectedCategory && CATEGORIE_USCITE[selectedCategory as keyof typeof CATEGORIE_USCITE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Sottocategoria</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}><FormControl><SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger></FormControl><SelectContent>{selectedCategory && CATEGORIE_ENTRATE[selectedCategory as keyof typeof CATEGORIE_ENTRATE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="iva" render={({ field }) => (
                     <FormItem><FormLabel>% IVA</FormLabel><Select onValueChange={(val) => field.onChange(parseFloat(val))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{IVA_PERCENTAGES.map(iva => <SelectItem key={iva.value} value={String(iva.value)}>{iva.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
@@ -219,18 +212,8 @@ export function AddExpenseForecastDialog({
             </div>
              
             {isEditMode && <FormField control={form.control} name="stato" render={({ field }) => (
-                <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI_USCITE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI_ENTRATE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
             )} />}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={form.control} name="ricorrenza" render={({ field }) => (
-                    <FormItem><FormLabel>Ricorrenza</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{RICORRENZE_USCITE.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
-                )} />
-                 <FormField control={form.control} name="fonteContratto" render={({ field }) => (
-                    <FormItem><FormLabel>Fonte/Contratto</FormLabel><FormControl><Input {...field} placeholder="Es: Contratto affitto, Mutuo BAPR..." /></FormControl><FormMessage /></FormItem>
-                )} />
-            </div>
-
 
             <FormField control={form.control} name="note" render={({ field }) => (
                 <FormItem><FormLabel>Note</FormLabel><FormControl><Textarea placeholder="Aggiungi note..." {...field} /></FormControl><FormMessage /></FormItem>

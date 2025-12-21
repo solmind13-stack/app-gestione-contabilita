@@ -34,7 +34,12 @@ export const CATEGORIE = {
   'Da categorizzare': ['Da categorizzare']
 };
 
-export const IVA_PERCENTAGES = [0.22, 0.10, 0.04, 0.00];
+export const IVA_PERCENTAGES = [
+    { label: '22%', value: 0.22 },
+    { label: '10%', value: 0.10 },
+    { label: '4%', value: 0.04 },
+    { label: '0%', value: 0.00 },
+];
 
 export const METODI_PAGAMENTO = ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'];
 
@@ -42,6 +47,17 @@ export const CATEGORIE_SCADENZE = ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F2
 export const RICORRENZE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale'];
 export const STATI_SCADENZE = ['Da pagare', 'Pagato', 'Parziale'];
 
+// Previsioni Entrate
+export const CATEGORIE_ENTRATE = {
+    'Immobiliare': ['Affitti', 'Vendita Immobili'],
+    'Energia': ['Quote CEF', 'Pratiche Contributo', 'Incentivi GSE', 'Vendita Energia'],
+    'Finanziamenti': ['Rimborso Prestito Soci'],
+    'Altro': ['Altro'],
+};
+export const STATI_ENTRATE = ['Da incassare', 'Incassato', 'Parziale', 'Annullato'];
+
+
+// Previsioni Uscite
 export const CATEGORIE_USCITE = {
     'Fornitori': ['Materiali', 'Lavori/Manutenzione', 'Impianti', 'Servizi'],
     'Gestione Immobili': ['Spese Condominiali', 'Manutenzione', 'Ristrutturazione', 'Utenze'],
@@ -49,6 +65,12 @@ export const CATEGORIE_USCITE = {
     'Tasse': ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali'],
     'Finanziamenti': ['Rate Mutuo', 'Rate Prestito', 'Rimborso'],
 };
-export const CERTEZZA_USCITE = ['Certa', 'Probabile', 'Incerta'];
 export const STATI_USCITE = ['Da pagare', 'Pagato', 'Parziale', 'Annullato'];
 export const RICORRENZE_USCITE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale', 'Altro'];
+
+// Comuni
+export const CERTEZZA_LIVELLI: { [key: string]: number } = {
+    'Certa': 1.0,
+    'Probabile': 0.9,
+    'Incerta': 0.5,
+};
