@@ -13,7 +13,6 @@ import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
 import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', collectionName: string) => {
     if (!firestore || !user) return null;
@@ -41,12 +40,17 @@ export default function PrevisioniPage() {
   const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
-  const [selectedYear, setSelectedYear] = useState<string | null>(null);
+  const [mainYear, setMainYear] = useState<number | null>(null);
+  const [comparisonYear, setComparisonYear] = useState<number | null>(null);
+
+  const availableYears = useMemo(() => YEARS.filter(y => typeof y === 'number') as number[], []);
 
   useEffect(() => {
     setIsClient(true);
-    if (!selectedYear) {
-      setSelectedYear(String(new Date().getFullYear()));
+    if (!mainYear) {
+      const currentYear = new Date().getFullYear();
+      setMainYear(currentYear);
+      setComparisonYear(currentYear - 1);
     }
     if (user?.role === 'company' && user.company) {
       setSelectedCompany(user.company);
@@ -55,11 +59,21 @@ export default function PrevisioniPage() {
     }
   }, [user]);
 
+  const handleMainYearChange = (yearValue: string) => {
+    const year = Number(yearValue);
+    setMainYear(year);
+    // If the comparison year is now the same or greater, adjust it
+    if (comparisonYear !== null && year <= comparisonYear) {
+      setComparisonYear(year - 1);
+    }
+  };
+
+
   // Firestore Queries
-  const movimentiQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'movements'), [firestore, user, selectedCompany]);
   const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'incomeForecasts'), [firestore, user, selectedCompany]);
   const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'expenseForecasts'), [firestore, user, selectedCompany]);
-
+  const movimentiQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'movements'), [firestore, user, selectedCompany]);
+  
   // Data fetching hooks
   const { data: movimenti, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
   const { data: previsioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
@@ -145,8 +159,15 @@ export default function PrevisioniPage() {
         console.error(e);
     }
   };
+  
+  const allData = useMemo(() => ({
+    movements: movimenti || [],
+    incomeForecasts: previsioniEntrate || [],
+    expenseForecasts: previsioniUscite || [],
+  }), [movimenti, previsioniEntrate, previsioniUscite]);
 
-  if (!isClient) {
+
+  if (!isClient || !mainYear || !comparisonYear) {
     return null; 
   }
 
@@ -170,14 +191,25 @@ export default function PrevisioniPage() {
               </SelectContent>
             </Select>
            )}
-           <Select value={selectedYear || ''} onValueChange={(value) => setSelectedYear(value)}>
+           <div className="flex items-center gap-2">
+            <Select value={String(mainYear)} onValueChange={handleMainYearChange}>
               <SelectTrigger className="w-full md:w-[120px]">
                 <SelectValue placeholder="Anno" />
               </SelectTrigger>
               <SelectContent>
-                {YEARS.filter(y => y !== 'Tutti').map(year => <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>)}
+                {availableYears.map(year => <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>)}
               </SelectContent>
             </Select>
+             <span className="text-muted-foreground font-medium">vs</span>
+            <Select value={String(comparisonYear)} onValueChange={(v) => setComparisonYear(Number(v))}>
+                <SelectTrigger className="w-full md:w-[120px]">
+                    <SelectValue placeholder="Anno" />
+                </SelectTrigger>
+                <SelectContent>
+                    {availableYears.filter(y => y < mainYear).map(year => <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>)}
+                </SelectContent>
+            </Select>
+           </div>
         </div>
       </div>
       
@@ -190,7 +222,8 @@ export default function PrevisioniPage() {
         </TabsList>
         <TabsContent value="dashboard">
           <ForecastComparison 
-            year={Number(selectedYear)} 
+            mainYear={mainYear} 
+            comparisonYear={comparisonYear}
             company={selectedCompany}
             movements={movimenti || []}
             incomeForecasts={previsioniEntrate || []}
@@ -201,7 +234,7 @@ export default function PrevisioniPage() {
         <TabsContent value="entrate">
            <IncomeForecasts
               data={previsioniEntrate || []}
-              year={Number(selectedYear)}
+              year={mainYear}
               isLoading={isLoadingIncome}
               onAdd={handleAddIncomeForecast}
               onEdit={handleEditIncomeForecast}
@@ -213,7 +246,7 @@ export default function PrevisioniPage() {
         <TabsContent value="uscite">
           <ExpenseForecasts
               data={previsioniUscite || []}
-              year={Number(selectedYear)}
+              year={mainYear}
               isLoading={isLoadingExpenses}
               onAdd={handleAddExpenseForecast}
               onEdit={handleEditExpenseForecast}
@@ -225,11 +258,7 @@ export default function PrevisioniPage() {
         <TabsContent value="agente-ai">
             <AiCashflowAgent 
                 company={selectedCompany}
-                allData={{
-                    movements: movimenti || [],
-                    incomeForecasts: previsioniEntrate || [],
-                    expenseForecasts: previsioniUscite || [],
-                }}
+                allData={allData}
             />
         </TabsContent>
       </Tabs>
