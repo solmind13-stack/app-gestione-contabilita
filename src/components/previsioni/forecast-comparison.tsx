@@ -311,11 +311,6 @@ export function ForecastComparison({
         </Card>
       </div>
 
-       <div className="grid grid-cols-1 gap-6">
-         <CashflowChart data={allData} />
-      </div>
-
-
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -403,6 +398,9 @@ export function ForecastComparison({
         </Card>
       </div>
 
+       <div className="grid grid-cols-1 gap-6">
+         <CashflowChart data={allData} />
+      </div>
     </div>
   );
 }
