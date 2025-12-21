@@ -31,7 +31,7 @@ export function ForecastComparison({
     
     const data = months.map(monthIndex => {
         const monthName = new Date(year, monthIndex).toLocaleString('it-IT', { month: 'long' });
-        const monthShort = monthName.substring(0,3);
+        const monthShort = monthName.charAt(0).toUpperCase() + monthName.slice(1, 3);
 
         const currentYearData = {
             entrate: 0,
@@ -43,7 +43,7 @@ export function ForecastComparison({
             uscite: 0,
         };
         
-        // Filter movements for the current month and year
+        // Filter movements for both years
         movements.forEach(mov => {
             const movDate = new Date(mov.data);
             const movYear = movDate.getFullYear();
@@ -58,7 +58,7 @@ export function ForecastComparison({
             }
         });
 
-        // Filter forecasts for the current month and year (only future months)
+        // Filter forecasts for the current month and year (only for future months)
         const today = new Date();
         if (year > today.getFullYear() || (year === today.getFullYear() && monthIndex >= today.getMonth())) {
             incomeForecasts.forEach(forecast => {
@@ -105,7 +105,7 @@ export function ForecastComparison({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Confronto Entrate/Uscite</CardTitle>
+        <CardTitle>Riepilogo Generale: Confronto Entrate/Uscite</CardTitle>
         <CardDescription>
           Analisi dei dati storici e previsti per l'anno {year} a confronto con il {year - 1}.
         </CardDescription>
