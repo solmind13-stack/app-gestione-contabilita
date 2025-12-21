@@ -46,8 +46,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
-  if (percent < 0.05) return null; // Non mostrare l'etichetta per fette troppo piccole
+const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+  if (percent < 0.05) return null;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
   const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
@@ -202,7 +202,7 @@ export function ForecastComparison({
 
       <Card>
         <CardHeader>
-          <CardTitle>Andamento Mensile</CardTitle>
+          <CardTitle className="text-lg">Andamento Mensile</CardTitle>
           <CardDescription>{`Confronto entrate e uscite per l'anno ${mainYear}`}</CardDescription>
         </CardHeader>
         <CardContent className="h-[200px]">
@@ -235,7 +235,7 @@ export function ForecastComparison({
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
             <CardHeader>
-                <CardTitle>Composizione Entrate {mainYear}</CardTitle>
+                <CardTitle className="text-lg">Composizione Entrate {mainYear}</CardTitle>
             </CardHeader>
             <CardContent className="h-[200px]">
                  {isLoading ? (
@@ -251,7 +251,7 @@ export function ForecastComparison({
                                 nameKey="name" 
                                 cx="50%" 
                                 cy="50%" 
-                                outerRadius={80} 
+                                outerRadius={60} 
                                 labelLine={false}
                                 label={renderCustomizedLabel}
                             >
@@ -260,7 +260,7 @@ export function ForecastComparison({
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconSize={10} wrapperStyle={{fontSize: "11px", paddingTop: "15px"}}/>
+                            <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
@@ -270,7 +270,7 @@ export function ForecastComparison({
         </Card>
         <Card>
             <CardHeader>
-                <CardTitle>Composizione Uscite {mainYear}</CardTitle>
+                <CardTitle className="text-lg">Composizione Uscite {mainYear}</CardTitle>
             </CardHeader>
             <CardContent className="h-[200px]">
                  {isLoading ? (
@@ -285,7 +285,7 @@ export function ForecastComparison({
                                 dataKey="value" 
                                 nameKey="name" cx="50%" 
                                 cy="50%" 
-                                outerRadius={80}
+                                outerRadius={60}
                                 labelLine={false}
                                 label={renderCustomizedLabel}
                             >
@@ -294,7 +294,7 @@ export function ForecastComparison({
                                 ))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconSize={10} wrapperStyle={{fontSize: "11px", paddingTop: "15px"}}/>
+                            <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
@@ -308,7 +308,7 @@ export function ForecastComparison({
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Riepilogo Categorie Entrate</CardTitle>
+            <CardTitle className="text-lg">Riepilogo Categorie Entrate</CardTitle>
              <CardDescription>Confronto tra {mainYear} e {comparisonYear}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -332,9 +332,9 @@ export function ForecastComparison({
                   ) : categoryTotals.income.length > 0 ? (
                     categoryTotals.income.map(({category, totalMain, totalComparison}) => (
                       <TableRow key={category}>
-                        <TableCell className="font-medium">{category}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(totalMain)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{formatCurrency(totalComparison)}</TableCell>
+                        <TableCell className="font-medium text-sm">{category}</TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(totalComparison)}</TableCell>
                       </TableRow>
                     ))
                   ) : (
@@ -350,7 +350,7 @@ export function ForecastComparison({
         </Card>
          <Card>
           <CardHeader>
-            <CardTitle>Riepilogo Categorie Uscite</CardTitle>
+            <CardTitle className="text-lg">Riepilogo Categorie Uscite</CardTitle>
             <CardDescription>Confronto tra {mainYear} e {comparisonYear}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -374,9 +374,9 @@ export function ForecastComparison({
                   ) : categoryTotals.expense.length > 0 ? (
                     categoryTotals.expense.map(({category, totalMain, totalComparison}) => (
                       <TableRow key={category}>
-                        <TableCell className="font-medium">{category}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(totalMain)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{formatCurrency(totalComparison)}</TableCell>
+                        <TableCell className="font-medium text-sm">{category}</TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(totalComparison)}</TableCell>
                       </TableRow>
                     ))
                   ) : (
