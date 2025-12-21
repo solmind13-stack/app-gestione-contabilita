@@ -47,7 +47,8 @@ export type Movimento = {
     operatore?: string;
     metodoPag?: string;
     note?: string;
-    createdBy?: string;
+    createdBy?: string; // UID of user who created it
+    inseritoDa?: string; // Display name of user who created/edited it
     createdAt?: string;
     updatedAt?: string;
 };

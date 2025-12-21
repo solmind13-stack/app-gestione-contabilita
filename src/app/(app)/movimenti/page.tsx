@@ -113,7 +113,12 @@ export default function MovimentiPage() {
                     initialMovimenti.forEach((movimento) => {
                         const docRef = doc(collection(firestore, "movements"));
                         const { id, ...movimentoData } = movimento;
-                        batch.set(docRef, { ...movimentoData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString() });
+                        batch.set(docRef, { 
+                            ...movimentoData, 
+                            createdBy: user?.uid || 'system',
+                            inseritoDa: 'System', 
+                            createdAt: new Date().toISOString() 
+                        });
                     });
                     
                     await batch.commit();
@@ -158,7 +163,7 @@ export default function MovimentiPage() {
             await addDoc(collection(firestore, 'movements'), {
                 ...newMovementData,
                 createdBy: user.uid,
-                operatore: user.displayName, // Add operator name on creation
+                inseritoDa: user.displayName,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             });
@@ -174,7 +179,12 @@ export default function MovimentiPage() {
         try {
             const docRef = doc(firestore, 'movements', updatedMovement.id);
             const { id, ...dataToUpdate } = updatedMovement;
-            await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString(), createdBy: updatedMovement.createdBy || user.uid });
+            await updateDoc(docRef, { 
+                ...dataToUpdate, 
+                updatedAt: new Date().toISOString(), 
+                createdBy: updatedMovement.createdBy || user.uid,
+                inseritoDa: user.displayName, // Always update with the current editor
+            });
             toast({ title: "Movimento Aggiornato", description: "Il movimento è stato modificato." });
         } catch (error) {
              console.error("Error updating movement: ", error);
@@ -226,6 +236,7 @@ export default function MovimentiPage() {
                 batch.set(docRef, {
                     ...movement,
                     createdBy: user.uid,
+                    inseritoDa: user.displayName,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                 });
@@ -517,8 +528,9 @@ export default function MovimentiPage() {
                     <TableHead className="text-right">Uscite Nette</TableHead>
                     <TableHead className="text-right">IVA Uscite</TableHead>
                     <TableHead>Conto</TableHead>
-                    <TableHead>Operatore</TableHead>
                     <TableHead>Metodo Pag.</TableHead>
+                    <TableHead>Pagato da (Operatore)</TableHead>
+                    <TableHead>Inserito Da</TableHead>
                     <TableHead>Note</TableHead>
                     <TableHead className="text-right">Azioni</TableHead>
                     </TableRow>
@@ -526,19 +538,19 @@ export default function MovimentiPage() {
                 <TableBody>
                     {(isLoadingMovimenti || isUserLoading || isSeeding) ? (
                         <TableRow>
-                            <TableCell colSpan={18} className="h-24 text-center">
+                            <TableCell colSpan={19} className="h-24 text-center">
                                 <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                             </TableCell>
                         </TableRow>
                     ) : error ? (
                          <TableRow>
-                            <TableCell colSpan={18} className="h-24 text-center text-red-500">
+                            <TableCell colSpan={19} className="h-24 text-center text-red-500">
                                 Errore nel caricamento dei dati: {error.message}
                             </TableCell>
                         </TableRow>
                     ) : filteredMovimenti.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={18} className="h-24 text-center">Nessun movimento trovato.</TableCell>
+                            <TableCell colSpan={19} className="h-24 text-center">Nessun movimento trovato.</TableCell>
                         </TableRow>
                     ) : (
                         filteredMovimenti.map((movimento) => {
@@ -583,8 +595,9 @@ export default function MovimentiPage() {
                             <TableCell className="text-right">{uscitaNetta > 0 ? formatCurrency(uscitaNetta) : '-'}</TableCell>
                             <TableCell className="text-right">{ivaUscita > 0 ? formatCurrency(ivaUscita) : '-'}</TableCell>
                             <TableCell>{movimento.conto}</TableCell>
-                            <TableCell>{movimento.operatore}</TableCell>
                             <TableCell>{movimento.metodoPag}</TableCell>
+                            <TableCell>{movimento.operatore}</TableCell>
+                            <TableCell>{movimento.inseritoDa}</TableCell>
                             <TableCell>{movimento.note}</TableCell>
                             <TableCell className="text-right">
                                 <div className='flex justify-end'>
@@ -613,7 +626,7 @@ export default function MovimentiPage() {
                         <TableCell className="text-right font-bold">{formatCurrency(totalIvaEntrate)}</TableCell>
                         <TableCell className="text-right font-bold">{formatCurrency(totalUsciteNette)}</TableCell>
                         <TableCell className="text-right font-bold">{formatCurrency(totalIvaUscite)}</TableCell>
-                        <TableCell colSpan={5}></TableCell>
+                        <TableCell colSpan={6}></TableCell>
                         </TableRow>
                     </TableFooter>
                 )}

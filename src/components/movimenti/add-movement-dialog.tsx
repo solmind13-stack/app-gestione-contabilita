@@ -101,7 +101,7 @@ export function AddMovementDialog({
           sottocategoria: movementToEdit.sottocategoria,
           iva: movementToEdit.iva,
           conto: movementToEdit.conto || '',
-          operatore: movementToEdit.operatore || currentUser?.displayName || '',
+          operatore: movementToEdit.operatore || '',
           metodoPag: movementToEdit.metodoPag || '',
           note: movementToEdit.note || '',
         });
@@ -116,7 +116,7 @@ export function AddMovementDialog({
           sottocategoria: '',
           iva: 0.22,
           conto: '',
-          operatore: currentUser?.displayName || '',
+          operatore: '',
           metodoPag: '',
           note: '',
         });
@@ -126,7 +126,7 @@ export function AddMovementDialog({
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
-    const dataToSave: Omit<Movimento, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'> & { anno: number } = {
+    const dataToSave: Omit<Movimento, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
         societa: data.societa,
         data: format(data.data, 'yyyy-MM-dd'),
         anno: data.data.getFullYear(),
@@ -140,6 +140,7 @@ export function AddMovementDialog({
         operatore: data.operatore || '',
         metodoPag: data.metodoPag || '',
         note: data.note || '',
+        // 'inseritoDa' and 'createdBy' will be set in the parent component
     };
 
     if (isEditMode && movementToEdit) {
@@ -362,7 +363,7 @@ export function AddMovementDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                            {IVA_PERCENTAGES.map(iva => <SelectItem key={iva} value={String(iva)}>{iva * 100}%</SelectItem>)}
+                            {IVA_PERCENTAGES.map(iva => <SelectItem key={iva.value} value={String(iva.value)}>{iva.label}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
@@ -377,9 +378,9 @@ export function AddMovementDialog({
                     name="operatore"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Operatore</FormLabel>
+                        <FormLabel>Pagato da (Operatore)</FormLabel>
                          <FormControl>
-                            <Input {...field} disabled />
+                            <Input {...field} placeholder="Es: Mario Rossi" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
