@@ -169,7 +169,7 @@ export default function PrevisioniPage() {
         await deleteDoc(doc(firestore, collectionName, forecastId));
         toast({ title: toastTitle, description: `L'elemento è stato eliminato.` });
     } catch (e) {
-        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare l'elemento.' });
+        toast({ variant: 'destructive', title: 'Errore', description: "Impossibile eliminare l'elemento." });
         console.error(e);
     }
   };
