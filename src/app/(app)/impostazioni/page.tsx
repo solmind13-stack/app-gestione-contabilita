@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
+import { useUser, useFirestore, useDoc, useAuth } from '@/firebase';
 import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 import type { AppUser, AppSettings, CategoryData } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,9 +17,10 @@ import { EditUserDialog } from '@/components/impostazioni/edit-user-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCollection } from '@/firebase/firestore/use-collection';
 
 type ItemToDelete = {
     type: 'category' | 'subcategory' | 'account' | 'paymentMethod' | 'operator';
@@ -120,6 +121,7 @@ const SettingsListManager = ({ title, items, itemType, onUpdate, isLoading }: { 
 const UserManagementCard = () => {
     const { user: currentUser } = useUser();
     const firestore = useFirestore();
+    const auth = useAuth(); // Use the hook to get the auth instance
     const { toast } = useToast();
     const [isAddUserOpen, setIsAddUserOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<AppUser | null>(null);
@@ -141,14 +143,12 @@ const UserManagementCard = () => {
     }
     
     const handleAddUser = async (data: any) => {
-        if (!firestore || !currentUser) {
+        if (!firestore || !auth || !currentUser) {
             toast({ variant: 'destructive', title: 'Errore', description: 'Utente non autenticato o database non disponibile.' });
             return Promise.reject("Prerequisiti falliti");
         }
         
-        const { getAuth } = await import('firebase/auth');
-        const auth = getAuth();
-
+        // Check if user with email already exists in the 'users' collection
         const q = query(collection(firestore, "users"), where("email", "==", data.email));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
@@ -157,11 +157,9 @@ const UserManagementCard = () => {
         }
 
         try {
-            // We don't have access to the Admin SDK, so we can't create a user directly.
-            // A common workaround is to create it on the client and then store the profile.
-            // This requires the current admin to be signed in.
-            // For this to work robustly, we'd need a temporary password system or email verification flow.
-            // For simplicity here, we'll create the user and they can later reset their password.
+            // Note: This pattern of creating a user on the client is not ideal for production
+            // without a more secure method (like a function to generate a temporary user).
+            // For this app, it serves the purpose of an admin creating new users.
             const tempUserCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             const newUser = tempUserCredential.user;
 
@@ -178,13 +176,15 @@ const UserManagementCard = () => {
                 lastLogin: new Date().toISOString(),
             };
             
-
-            await writeBatch(firestore).set(userDocRef, newUserProfile).commit();
+            // Use a batch to ensure the profile is created.
+            const batch = writeBatch(firestore);
+            batch.set(userDocRef, newUserProfile);
+            await batch.commit();
 
             toast({ title: 'Utente Creato', description: `${newUserProfile.displayName} è stato aggiunto.` });
             
-             // Re-enable auth for current admin, this part is tricky without admin SDK
-             // but for client-side flow, this is the best we can do. The main user session should persist.
+            // The onAuthStateChanged listener in FirebaseProvider will handle re-authentication state.
+            // We don't need to manually sign the admin back in.
 
              return Promise.resolve();
 
@@ -192,7 +192,7 @@ const UserManagementCard = () => {
             console.error('Error creating user:', e);
             let description = 'Impossibile creare il nuovo utente. Controlla la console per i dettagli.';
             if (e.code === 'auth/email-already-in-use') {
-                description = 'Questa email è già registrata nel sistema di autenticazione.';
+                description = 'Questa email è già registrata nel sistema di autenticazione. L\'utente potrebbe esistere senza un profilo nel database.';
             } else if (e.code === 'auth/weak-password') {
                 description = 'La password deve essere di almeno 6 caratteri.';
             }
@@ -200,6 +200,7 @@ const UserManagementCard = () => {
             return Promise.reject(e);
         }
     };
+
 
     const handleUpdateUser = async (updatedUser: AppUser) => {
         if (!firestore || !updatedUser.uid) {
