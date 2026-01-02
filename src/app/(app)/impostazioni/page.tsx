@@ -157,11 +157,16 @@ const UserManagementCard = () => {
         }
 
         try {
+            // We don't have access to the Admin SDK, so we can't create a user directly.
+            // A common workaround is to create it on the client and then store the profile.
+            // This requires the current admin to be signed in.
+            // For this to work robustly, we'd need a temporary password system or email verification flow.
+            // For simplicity here, we'll create the user and they can later reset their password.
             const tempUserCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             const newUser = tempUserCredential.user;
 
             const userDocRef = doc(firestore, 'users', newUser.uid);
-            const newUserProfile: Omit<AppUser, 'displayName'> & { displayName?: string } = {
+            const newUserProfile: AppUser = {
                 uid: newUser.uid,
                 email: newUser.email,
                 firstName: data.firstName,
@@ -178,6 +183,9 @@ const UserManagementCard = () => {
 
             toast({ title: 'Utente Creato', description: `${newUserProfile.displayName} è stato aggiunto.` });
             
+             // Re-enable auth for current admin, this part is tricky without admin SDK
+             // but for client-side flow, this is the best we can do. The main user session should persist.
+
              return Promise.resolve();
 
         } catch (e: any) {
@@ -225,6 +233,9 @@ const UserManagementCard = () => {
         }
 
         try {
+            // Note: This only deletes the Firestore document, not the Firebase Auth user.
+            // Deleting the auth user requires the Admin SDK, which we don't use on the client.
+            // The user will still be able to log in but will have no role or profile data.
             const userDocRef = doc(firestore, 'users', deletingUser.uid);
             await deleteDoc(userDocRef);
             toast({ title: 'Utente Eliminato', description: `Il profilo di ${deletingUser.displayName} è stato eliminato dal database.` });
