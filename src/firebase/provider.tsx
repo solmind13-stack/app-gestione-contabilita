@@ -82,10 +82,10 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
           try {
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
-              const userData = userDocSnap.data();
+              const userData = userDocSnap.data() as Omit<AppUser, 'uid' | 'email' | 'photoURL'>;
               const appUser: AppUser = {
                 uid: firebaseUser.uid,
-                email: firebaseUser.email,
+                email: firebaseUser.email!,
                 firstName: userData.firstName,
                 lastName: userData.lastName,
                 displayName: userData.displayName || `${userData.firstName} ${userData.lastName}`,

@@ -69,7 +69,7 @@ export type AppUser = {
     firstName: string;
     lastName: string;
     displayName: string;
-    email: string | null;
+    email: string;
     photoURL?: string | null;
     role: UserRole;
     company?: 'LNC' | 'STG';

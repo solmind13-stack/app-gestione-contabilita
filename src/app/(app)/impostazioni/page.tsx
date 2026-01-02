@@ -143,26 +143,22 @@ const UserManagementCard = () => {
         setDeletingUser(user);
     }
     
-    const handleAddUser = async (data: any) => {
+     const handleAddUser = async (data: any) => {
         if (!firestore || !auth || !currentUser) {
             toast({ variant: 'destructive', title: 'Errore', description: 'Utente non autenticato o database non disponibile.' });
             return Promise.reject(new Error("Prerequisiti falliti"));
         }
-        
-        const q = query(collection(firestore, "users"), where("email", "==", data.email));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            toast({ variant: 'destructive', title: 'Email già in uso', description: 'Un utente con questa email esiste già nel database.' });
-            return Promise.reject(new Error("Utente esistente"));
-        }
 
         try {
-            const tempUserCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-            const newUser = tempUserCredential.user;
+            // This is a workaround to check if the user exists in Firebase Auth
+            // since the Admin SDK is not available on the client. We try to create it,
+            // and if it fails with 'auth/email-already-in-use', we know we might need to
+            // just create the Firestore document.
+            const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+            const newUser = userCredential.user;
 
             const userDocRef = doc(firestore, 'users', newUser.uid);
-            const newUserProfile: AppUser = {
-                uid: newUser.uid,
+            const newUserProfile: Omit<AppUser, 'uid'> = {
                 email: newUser.email!,
                 firstName: data.firstName,
                 lastName: data.lastName,
@@ -174,19 +170,37 @@ const UserManagementCard = () => {
             };
             
             await setDoc(userDocRef, newUserProfile);
-
             toast({ title: 'Utente Creato', description: `${newUserProfile.displayName} è stato aggiunto.` });
-            return Promise.resolve();
 
         } catch (e: any) {
-            console.error('Error creating user:', e);
-            let description = 'Impossibile creare il nuovo utente. Controlla la console per i dettagli.';
             if (e.code === 'auth/email-already-in-use') {
-                description = 'Questa email è già registrata nel sistema di autenticazione. L\'utente potrebbe esistere senza un profilo nel database.';
+                // The user exists in Auth, but maybe not in Firestore. Let's try to create just the Firestore doc.
+                toast({ title: 'Utente già esistente in Auth', description: 'Provo a creare solo il profilo nel database...' });
+                const q = query(collection(firestore, "users"), where("email", "==", data.email));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    toast({ variant: 'destructive', title: 'Profilo già esistente', description: 'Un profilo utente con questa email esiste già nel database.' });
+                    return Promise.reject(new Error("Profilo esistente"));
+                }
+                
+                // At this point, we need a UID, but we can't get it without the user logging in.
+                // This indicates a desync that must be resolved manually in the Firebase console for now.
+                // We'll show a more informative error.
+                 toast({ 
+                    variant: 'destructive', 
+                    title: 'Sincronizzazione Richiesta', 
+                    description: 'L\'utente esiste nel sistema di autenticazione ma non ha un profilo. Per risolvere, elimina l\'utente dalla sezione "Authentication" della Console Firebase e riprova.' 
+                });
+                return Promise.reject(new Error("Utente Auth senza profilo DB"));
+
+
             } else if (e.code === 'auth/weak-password') {
-                description = 'La password deve essere di almeno 6 caratteri.';
+                 toast({ variant: 'destructive', title: 'Password Debole', description: 'La password deve essere di almeno 6 caratteri.' });
+            } else {
+                 console.error('Error creating user:', e);
+                 toast({ variant: 'destructive', title: 'Errore Creazione Utente', description: 'Impossibile creare il nuovo utente. Controlla la console per i dettagli.' });
             }
-            toast({ variant: 'destructive', title: 'Errore Creazione Utente', description });
             return Promise.reject(e);
         }
     };
@@ -445,7 +459,7 @@ export default function ImpostazioniPage() {
     }
   };
   
-  const openDeleteDialog = (type: 'category' | 'subcategory', name: string, parent?: string) => {
+  const openDeleteDialog = (type: 'category' | 'subcategory' | 'operator', name: string, parent?: string) => {
     setItemToDelete({ type, name, parent });
   }
 
