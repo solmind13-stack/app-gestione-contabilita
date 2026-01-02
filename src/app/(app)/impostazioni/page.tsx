@@ -88,7 +88,7 @@ const SettingsListManager = ({ title, items, itemType, onUpdate, isLoading }: { 
             </div>
         ) : (
             <div className="space-y-2">
-            {items.map(item => (
+            {(items || []).map(item => (
                 <div key={item} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
                 <span>{item}</span>
                 <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(item)} disabled={!!isDeleting}>
@@ -173,9 +173,7 @@ const UserManagementCard = () => {
                 lastLogin: new Date().toISOString(),
             };
             
-            const batch = writeBatch(firestore);
-            batch.set(userDocRef, newUserProfile);
-            await batch.commit();
+            await setDoc(userDocRef, newUserProfile);
 
             toast({ title: 'Utente Creato', description: `${newUserProfile.displayName} è stato aggiunto.` });
             return Promise.resolve();
