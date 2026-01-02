@@ -99,12 +99,6 @@ export function UserNav() {
             <Palette className="mr-2 h-4 w-4" />
             <span>Preferenze</span>
           </DropdownMenuItem>
-           {user?.role === 'admin' && (
-            <DropdownMenuItem onClick={() => router.push('/impostazioni')}>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Amministrazione</span>
-            </DropdownMenuItem>
-           )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
