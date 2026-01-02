@@ -4,7 +4,7 @@
 import { useMemo, useEffect, useState } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
-import { endOfMonth, startOfMonth, addDays, isWithinInterval } from 'date-fns';
+import { endOfMonth, startOfMonth, addDays, isWithinInterval, startOfYear, endOfYear, getMonth } from 'date-fns';
 
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { OverviewChart } from "@/components/dashboard/overview-chart";

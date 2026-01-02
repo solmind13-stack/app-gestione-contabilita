@@ -68,7 +68,6 @@ export default function ScadenzePage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
-    const [isSeeding, setIsSeeding] = useState(false);
     const [deadlineToDelete, setDeadlineToDelete] = useState<Scadenza | null>(null);
     const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -93,38 +92,6 @@ export default function ScadenzePage() {
     const deadlinesQuery = useMemo(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
-
-    useEffect(() => {
-        const seedDatabase = async () => {
-            if (!firestore || isSeeding || (scadenze && scadenze.length > 0)) return;
-            
-            const q = query(collection(firestore, "deadlines"));
-            const querySnapshot = await getDocs(q);
-
-            if (querySnapshot.empty) {
-                setIsSeeding(true);
-                toast({ title: "Popolamento database...", description: "Caricamento dati iniziali per le scadenze." });
-                const batch = writeBatch(firestore);
-                initialScadenzeData.forEach((scadenza) => {
-                    const docRef = doc(collection(firestore, "deadlines"));
-                    const { id, ...scadenzaData } = scadenza; // Exclude our static ID
-                    batch.set(docRef, { ...scadenzaData, createdBy: user?.uid || 'system', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-                });
-                try {
-                    await batch.commit();
-                    toast({ title: "Database popolato!", description: "I dati delle scadenze sono stati caricati." });
-                } catch (error) {
-                    console.error("Error seeding deadlines:", error);
-                    toast({ variant: "destructive", title: "Errore nel popolamento", description: "Impossibile caricare i dati iniziali delle scadenze." });
-                } finally {
-                    setIsSeeding(false);
-                }
-            }
-        };
-        if (firestore && !isLoadingScadenze && user) {
-          seedDatabase();
-        }
-    }, [firestore, toast, isSeeding, scadenze, isLoadingScadenze, user]);
 
     useEffect(() => {
         if (user?.role === 'company' && user.company) {
@@ -539,7 +506,7 @@ export default function ScadenzePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {(isLoadingScadenze || isUserLoading || isSeeding) ? (
+                        {(isLoadingScadenze || isUserLoading) ? (
                             <TableRow>
                                 <TableCell colSpan={12} className="h-24 text-center">
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />

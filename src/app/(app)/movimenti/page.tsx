@@ -94,49 +94,6 @@ export default function MovimentiPage() {
     }, []);
 
 
-     useEffect(() => {
-        const seedDatabase = async () => {
-            if (!firestore || isSeeding) return;
-
-            // Check if seeding is necessary by checking one collection
-            const q = query(collection(firestore, "movements"));
-            const querySnapshot = await getDocs(q);
-
-            if (querySnapshot.empty) {
-                setIsSeeding(true);
-                toast({ title: "Popolamento database...", description: "Caricamento dati iniziali in corso. Potrebbe richiedere un istante." });
-                
-                try {
-                    const batch = writeBatch(firestore);
-                    
-                    // Seed movements
-                    initialMovimenti.forEach((movimento) => {
-                        const docRef = doc(collection(firestore, "movements"));
-                        const { id, ...movimentoData } = movimento;
-                        batch.set(docRef, { 
-                            ...movimentoData, 
-                            createdBy: user?.uid || 'system',
-                            inseritoDa: 'System', 
-                            createdAt: new Date().toISOString() 
-                        });
-                    });
-                    
-                    await batch.commit();
-                    toast({ title: "Database popolato!", description: "I dati iniziali sono stati caricati con successo." });
-                } catch (error) {
-                    console.error("Error seeding database:", error);
-                    toast({ variant: "destructive", title: "Errore nel popolamento", description: "Impossibile caricare i dati iniziali." });
-                } finally {
-                    setIsSeeding(false);
-                }
-            }
-        };
-        if (firestore && user && !isLoadingMovimenti) {
-            seedDatabase();
-        }
-    }, [firestore, toast, isSeeding, isLoadingMovimenti, user]);
-
-
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
