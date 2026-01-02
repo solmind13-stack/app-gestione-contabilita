@@ -9,7 +9,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useUser, useFirestore, useAuth, useCollection, useDoc } from '@/firebase';
-import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp, getAuth, createUserWithEmailAndPassword } from 'firebase/firestore';
+import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import type { AppUser, AppSettings, CategoryData, UserRole } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +149,21 @@ const UserManagementCard = () => {
         }
 
         try {
+            // Check if user with email already exists in Firestore users collection
+            const usersRef = collection(firestore, 'users');
+            const q = query(usersRef, where("email", "==", data.email));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                 toast({ 
+                    variant: 'destructive', 
+                    title: 'Email già in uso', 
+                    description: 'Un utente con questa email esiste già nel database.' 
+                });
+                return Promise.reject(new Error("Email già in uso nel DB"));
+            }
+            
+            // Create user in Auth
             const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             const newUser = userCredential.user;
             
@@ -176,8 +192,8 @@ const UserManagementCard = () => {
              if (e.code === 'auth/email-already-in-use') {
                  toast({ 
                     variant: 'destructive', 
-                    title: 'Email già in uso', 
-                    description: 'Questa email è già registrata. Per risolvere, elimina l\'utente dalla sezione "Authentication" della Console Firebase e riprova.' 
+                    title: 'Email già in uso nel sistema di autenticazione', 
+                    description: 'L\'utente esiste nel sistema di autenticazione ma non ha un profilo. Per risolvere, elimina l\'utente dalla sezione "Authentication" della Console Firebase e riprova.' 
                 });
             } else if (e.code === 'auth/weak-password') {
                  toast({ variant: 'destructive', title: 'Password Debole', description: 'La password deve essere di almeno 6 caratteri.' });
