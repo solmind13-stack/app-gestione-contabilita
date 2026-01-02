@@ -164,3 +164,18 @@ export type DeadlineSuggestion = {
     amount: number;
     originalMovementDescription: string;
 };
+
+export type CategoryData = {
+  [key: string]: string[];
+};
+
+export type AppSettings = {
+  id: string;
+  accounts: string[];
+  paymentMethods: string[];
+  operators: string[];
+  categories: CategoryData;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

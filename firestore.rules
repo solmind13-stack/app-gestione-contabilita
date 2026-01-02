@@ -42,6 +42,12 @@ service cloud.firestore {
           allow read, write: if isSignedIn() && isOwner(userId);
       }
     }
+    
+    // ========== COLLECTION: settings ==========
+    match /settings/{docId} {
+      // Only admins can read or write the application settings.
+      allow read, write: if isAdmin();
+    }
 
     // ========== FINANCIAL DATA COLLECTIONS ==========
     match /movements/{docId} {
@@ -122,3 +128,4 @@ service cloud.firestore {
     }
   }
 }
+

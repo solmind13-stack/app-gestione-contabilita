@@ -1,16 +1,16 @@
 // src/app/(app)/impostazioni/page.tsx
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PlusCircle, Trash2, Loader2, Pencil } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where } from 'firebase/firestore';
-import type { AppUser } from '@/lib/types';
+import { useUser, useFirestore, useDoc } from '@/firebase';
+import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
+import type { AppUser, AppSettings, CategoryData } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { EditUserDialog } from '@/components/impostazioni/edit-user-dialog';
@@ -18,17 +18,8 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { CATEGORIE as initialCategories, METODI_PAGAMENTO } from '@/lib/constants';
 import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog';
-
-
-// Mock data based on the user's image
-const initialData = {
-  accounts: ['LNC-BAPR', 'STG-BAPR'],
-  operatori: ['Nuccio Senior', 'Nuccio Junior', 'Mario Rossi']
-};
-
-type CategoryData = typeof initialCategories;
+import { Skeleton } from '@/components/ui/skeleton';
 
 type ItemToDelete = {
     type: 'category' | 'subcategory' | 'account' | 'paymentMethod' | 'operator';
@@ -37,25 +28,31 @@ type ItemToDelete = {
 }
 
 // Generic component for managing a simple list (accounts, payment methods)
-const SettingsListManager = ({ title, items, setItems, itemType }: { title: string, items: string[], setItems: (items: string[]) => void, itemType: 'account' | 'paymentMethod' | 'operator' }) => {
+const SettingsListManager = ({ title, items, itemType, onUpdate, isLoading }: { title: string, items: string[], itemType: keyof AppSettings, onUpdate: (type: keyof AppSettings, value: any, action: 'add' | 'remove') => Promise<void>, isLoading: boolean }) => {
   const [newItem, setNewItem] = useState('');
-  const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (newItem && !items.includes(newItem)) {
-      setItems([...items, newItem].sort());
+      setIsAdding(true);
+      await onUpdate(itemType, newItem, 'add');
       setNewItem('');
+      setIsAdding(false);
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!itemToDelete) return;
-    setItems(items.filter(item => item !== itemToDelete.name));
+    setIsDeleting(itemToDelete);
+    await onUpdate(itemType, itemToDelete, 'remove');
     setItemToDelete(null);
+    setIsDeleting(null);
   };
   
   const openDeleteDialog = (item: string) => {
-    setItemToDelete({ type: itemType, name: item });
+    setItemToDelete(item);
   }
 
   return (
@@ -65,12 +62,14 @@ const SettingsListManager = ({ title, items, setItems, itemType }: { title: stri
             <AlertDialogHeader>
                 <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Questa azione non può essere annullata. Verrà eliminato permanentemente <span className="font-bold">{itemToDelete?.name}</span>.
+                    Questa azione non può essere annullata. Verrà eliminato permanentemente <span className="font-bold">{itemToDelete}</span>.
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel>Annulla</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction>
+                <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                    {isDeleting ? <Loader2 className="animate-spin" /> : 'Elimina'}
+                </AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
@@ -80,16 +79,24 @@ const SettingsListManager = ({ title, items, setItems, itemType }: { title: stri
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-2">
-          {items.map(item => (
-            <div key={item} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-              <span>{item}</span>
-              <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(item)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
+        {isLoading ? (
+            <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
             </div>
-          ))}
-        </div>
+        ) : (
+            <div className="space-y-2">
+            {items.map(item => (
+                <div key={item} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                <span>{item}</span>
+                <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(item)} disabled={!!isDeleting}>
+                    {isDeleting === item ? <Loader2 className="animate-spin h-4 w-4" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                </Button>
+                </div>
+            ))}
+            </div>
+        )}
         <Separator className="my-4" />
         <div className="flex gap-2">
           <Input 
@@ -97,9 +104,11 @@ const SettingsListManager = ({ title, items, setItems, itemType }: { title: stri
             onChange={(e) => setNewItem(e.target.value)}
             placeholder={`Nuovo ${title.slice(0, -1).toLowerCase()}...`}
             onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+            disabled={isAdding || isLoading}
           />
-          <Button onClick={handleAddItem}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
+          <Button onClick={handleAddItem} disabled={isAdding || isLoading || !newItem}>
+            {isAdding ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+             Aggiungi
           </Button>
         </div>
       </CardContent>
@@ -121,7 +130,7 @@ const UserManagementCard = () => {
         return query(collection(firestore, 'users'));
     }, [firestore]);
 
-    const { data: users, isLoading, error } = useCollection<AppUser>(usersQuery);
+    const { data: users, isLoading, error } = useDoc<AppUser>(usersQuery);
 
     const handleOpenEditDialog = (user: AppUser) => {
         setEditingUser(user);
@@ -137,13 +146,9 @@ const UserManagementCard = () => {
             return Promise.reject("Prerequisiti falliti");
         }
         
-        // This is a temporary auth instance for user creation.
-        // It's a workaround because we can't easily access the main auth instance here
-        // without more complex (and error-prone) prop drilling or context extensions.
         const { getAuth } = await import('firebase/auth');
         const auth = getAuth();
 
-        // 1. Check if user already exists in Auth
         const q = query(collection(firestore, "users"), where("email", "==", data.email));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
@@ -152,12 +157,9 @@ const UserManagementCard = () => {
         }
 
         try {
-            // 2. We are creating a temporary user. This is NOT ideal.
-            // In a real scenario, this would be handled by a backend function for security.
             const tempUserCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             const newUser = tempUserCredential.user;
 
-            // 3. Create user profile in Firestore.
             const userDocRef = doc(firestore, 'users', newUser.uid);
             const newUserProfile: AppUser = {
                 uid: newUser.uid,
@@ -173,10 +175,6 @@ const UserManagementCard = () => {
 
             toast({ title: 'Utente Creato', description: `${data.displayName} è stato aggiunto.` });
             
-            // This part is tricky. We created the user with a temporary auth instance.
-            // To be fully clean, we would need to sign out this temp user and sign back in the admin.
-            // For this app's purpose, we'll assume the onAuthStateChanged handles it,
-            // but this highlights the complexity of client-side multi-user management.
              return Promise.resolve();
 
         } catch (e: any) {
@@ -215,7 +213,6 @@ const UserManagementCard = () => {
     const handleDeleteUser = async () => {
         if (!firestore || !deletingUser) return;
 
-        // Prevent admin from deleting themselves
         if (currentUser?.uid === deletingUser.uid) {
             toast({ variant: "destructive", title: "Azione non permessa", description: "Non puoi eliminare il tuo stesso account amministratore." });
             setDeletingUser(null);
@@ -225,8 +222,6 @@ const UserManagementCard = () => {
         try {
             const userDocRef = doc(firestore, 'users', deletingUser.uid);
             await deleteDoc(userDocRef);
-            // Note: This only deletes the Firestore record, not the Firebase Auth user.
-            // A production app would use a Cloud Function to handle the full deletion.
             toast({ title: 'Utente Eliminato', description: `Il profilo di ${deletingUser.displayName} è stato eliminato dal database.` });
         } catch(e) {
             console.error('Error deleting user:', e);
@@ -303,7 +298,7 @@ const UserManagementCard = () => {
                                 </TableCell>
                             </TableRow>
                         ) : users && users.length > 0 ? (
-                            users.map((user) => (
+                            users.map((user: AppUser) => (
                                 <TableRow key={user.uid}>
                                     <TableCell className="font-medium">{user.email}</TableCell>
                                     <TableCell>{user.displayName}</TableCell>
@@ -341,57 +336,131 @@ const UserManagementCard = () => {
 
 export default function ImpostazioniPage() {
   const { user } = useUser();
-  const [accounts, setAccounts] = useState(initialData.accounts);
-  const [paymentMethods, setPaymentMethods] = useState(METODI_PAGAMENTO);
-  const [operatori, setOperatori] = useState(initialData.operatori);
-  const [categories, setCategories] = useState<CategoryData>(initialCategories);
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
+  const firestore = useFirestore();
   const { toast } = useToast();
 
-  const handleSaveCategory = (type: 'category' | 'subcategory', name: string, parent?: string) => {
-    if (type === 'category') {
-        if (categories[name]) {
-            toast({ variant: 'destructive', title: 'Categoria Esistente', description: `La categoria "${name}" esiste già.` });
-            return;
+  const settingsDocRef = useMemo(() => {
+    if (!firestore) return null;
+    return doc(firestore, 'settings', 'appConfiguration');
+  }, [firestore]);
+
+  const { data: settingsData, isLoading: isLoadingSettings, error } = useDoc<AppSettings>(settingsDocRef);
+  
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
+
+  useEffect(() => {
+    // One-time check to create the settings document if it doesn't exist
+    const initializeSettings = async () => {
+        if (!settingsDocRef || settingsData !== null || error) return;
+        
+        try {
+            await setDoc(settingsDocRef, {
+                accounts: ['LNC-BAPR', 'STG-BAPR'],
+                paymentMethods: ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'],
+                operators: ['Nuccio Senior', 'Nuccio Junior', 'Mario Rossi'],
+                categories: {
+                    'Immobiliare': ['Affitti', 'Depositi Cauzionali', 'Recupero Spese', 'Immobili'],
+                    'Energia': ['Quote CEF', 'Pratiche Contributo', 'Incentivi GSE', 'Vendita Energia'],
+                    'Fornitori': ['Materiali', 'Lavori/Manutenzione', 'Impianti', 'Servizi'],
+                    'Gestione Immobili': ['Spese Condominiali', 'Manutenzione', 'Ristrutturazione', 'Utenze'],
+                    'Gestione Generale': ['Spese Bancarie', 'Commercialista', 'Telefonia', 'Altre Spese', 'Gestione'],
+                    'Tasse': ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali'],
+                    'Finanziamenti': ['Rate Mutuo', 'Rate Prestito', 'Rimborso'],
+                    'Movimenti Interni': ['Giroconto', 'Trasferimento'],
+                    'Da categorizzare': ['Da categorizzare']
+                },
+                createdAt: serverTimestamp(),
+            });
+             toast({ title: "Configurazione Inizializzata", description: "Le impostazioni predefinite sono state create." });
+        } catch (e) {
+             console.error("Failed to initialize settings:", e);
+             toast({ variant: 'destructive', title: 'Errore Inizializzazione', description: 'Impossibile creare le impostazioni iniziali.' });
         }
-        setCategories(prev => ({...prev, [name]: [] }));
-        toast({ title: 'Categoria Aggiunta', description: `La categoria "${name}" è stata creata.` });
-    } else if (type === 'subcategory' && parent) {
-         if (categories[parent as keyof typeof categories]?.includes(name)) {
-            toast({ variant: 'destructive', title: 'Sottocategoria Esistente', description: `"${name}" esiste già in "${parent}".` });
-            return;
-        }
-        setCategories(prev => ({
-            ...prev,
-            [parent]: [...prev[parent as keyof typeof prev], name].sort()
-        }));
-        toast({ title: 'Sottocategoria Aggiunta', description: `"${name}" è stata aggiunta a "${parent}".` });
+    };
+    if (user?.role === 'admin') {
+      initializeSettings();
+    }
+  }, [settingsDocRef, settingsData, error, user?.role, toast]);
+
+
+  const handleUpdateList = async (type: keyof AppSettings, value: any, action: 'add' | 'remove') => {
+    if (!settingsDocRef) return;
+    try {
+        await updateDoc(settingsDocRef, {
+            [type]: action === 'add' ? arrayUnion(value) : arrayRemove(value)
+        });
+        toast({ title: 'Impostazioni Aggiornate', description: `La lista "${type}" è stata modificata.` });
+    } catch (e) {
+        console.error(`Error updating ${type}:`, e);
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile aggiornare le impostazioni. Controlla i permessi.' });
     }
   }
 
-  const handleDeleteCategoryItem = () => {
-    if (!itemToDelete) return;
+  const handleSaveCategory = async (type: 'category' | 'subcategory', name: string, parent?: string) => {
+     if (!settingsDocRef) return;
+     try {
+         if (type === 'category') {
+            await updateDoc(settingsDocRef, {
+                [`categories.${name}`]: []
+            });
+            toast({ title: 'Categoria Aggiunta', description: `La categoria "${name}" è stata creata.` });
+        } else if (type === 'subcategory' && parent) {
+            await updateDoc(settingsDocref, {
+                [`categories.${parent}`]: arrayUnion(name)
+            });
+            toast({ title: 'Sottocategoria Aggiunta', description: `"${name}" è stata aggiunta a "${parent}".` });
+        }
+     } catch (e) {
+        console.error("Error saving category/subcategory", e);
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare la categoria.' });
+     }
+  };
 
+  const handleDeleteCategoryItem = async () => {
+    if (!itemToDelete || !settingsDocRef) return;
     const { type, name, parent } = itemToDelete;
 
-    if (type === 'category') {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { [name]: _, ...rest } = categories;
-        setCategories(rest);
-        toast({ title: 'Categoria Eliminata', description: `La categoria "${name}" e le sue sottocategorie sono state eliminate.` });
-    } else if (type === 'subcategory' && parent) {
-        setCategories(prev => ({
-            ...prev,
-            [parent]: prev[parent as keyof typeof prev].filter(sub => sub !== name)
-        }));
-        toast({ title: 'Sottocategoria Eliminata', description: `La sottocategoria "${name}" è stata eliminata da "${parent}".` });
+    try {
+        if (type === 'category') {
+             const newCategories = { ...settingsData?.categories };
+             delete newCategories[name];
+             await updateDoc(settingsDocRef, { categories: newCategories });
+            toast({ title: 'Categoria Eliminata', description: `La categoria "${name}" e le sue sottocategorie sono state eliminate.` });
+        } else if (type === 'subcategory' && parent) {
+            await updateDoc(settingsDocRef, {
+                [`categories.${parent}`]: arrayRemove(name)
+            });
+            toast({ title: 'Sottocategoria Eliminata', description: `La sottocategoria "${name}" è stata eliminata da "${parent}".` });
+        }
+    } catch (e) {
+        console.error("Error deleting category item", e);
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare l\'elemento.' });
+    } finally {
+        setItemToDelete(null);
     }
-    setItemToDelete(null);
   };
   
   const openDeleteDialog = (type: 'category' | 'subcategory', name: string, parent?: string) => {
     setItemToDelete({ type, name, parent });
+  }
+
+  const categories = settingsData?.categories || {};
+  const accounts = settingsData?.accounts || [];
+  const paymentMethods = settingsData?.paymentMethods || [];
+  const operators = settingsData?.operators || [];
+
+  if (user?.role !== 'admin') {
+     return (
+        <div className="space-y-8">
+            <div>
+                <h1 className="text-3xl font-bold">Impostazioni</h1>
+                <p className="text-muted-foreground">
+                Questa sezione è riservata agli amministratori.
+                </p>
+            </div>
+        </div>
+     )
   }
 
   return (
@@ -427,15 +496,15 @@ export default function ImpostazioniPage() {
         </p>
       </div>
 
-       {user?.role === 'admin' && <UserManagementCard />}
+       <UserManagementCard />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-8">
-          <SettingsListManager title="Conti" items={accounts} setItems={setAccounts} itemType="account" />
-          <SettingsListManager title="Metodi di Pagamento" items={paymentMethods} setItems={setPaymentMethods} itemType="paymentMethod" />
+          <SettingsListManager title="Conti" items={accounts} itemType="accounts" onUpdate={handleUpdateList} isLoading={isLoadingSettings} />
+          <SettingsListManager title="Metodi di Pagamento" items={paymentMethods} itemType="paymentMethods" onUpdate={handleUpdateList} isLoading={isLoadingSettings} />
         </div>
         <div className="space-y-8">
-          <SettingsListManager title="Operatori" items={operatori} setItems={setOperatori} itemType="operator" />
+          <SettingsListManager title="Operatori" items={operators} itemType="operators" onUpdate={handleUpdateList} isLoading={isLoadingSettings} />
           <Card>
             <CardHeader className='flex-row items-center justify-between'>
               <div>
@@ -444,38 +513,42 @@ export default function ImpostazioniPage() {
                   Gestisci le categorie per i movimenti e i suggerimenti AI.
                 </CardDescription>
               </div>
-              <Button onClick={() => setIsCategoryDialogOpen(true)}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
-              </Button>
+               {isLoadingSettings ? <Skeleton className="h-10 w-28" /> : (
+                 <Button onClick={() => setIsCategoryDialogOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Aggiungi
+                 </Button>
+               )}
             </CardHeader>
             <CardContent>
-              <Accordion type="single" collapsible className="w-full">
-                {Object.entries(categories).map(([category, subcategories]) => (
-                  <AccordionItem value={category} key={category}>
-                    <div className="flex items-center w-full group">
-                          <AccordionTrigger className="flex-1 hover:no-underline">
-                            <span className="font-semibold text-left">{category}</span>
-                          </AccordionTrigger>
-                          <Button variant="ghost" size="icon" className="mr-2 shrink-0 opacity-50 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                      </div>
-                    <AccordionContent>
-                      <div className="space-y-2 pl-4">
-                        {subcategories.map(sub => (
-                          <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50 group">
-                            <span>{sub}</span>
-                            <Button variant="ghost" size="icon" className="opacity-50 group-hover:opacity-100" onClick={() => openDeleteDialog('subcategory', sub, category)}>
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                          </div>
-                        ))}
-                          {subcategories.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">Nessuna sottocategoria.</p>}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                {isLoadingSettings ? <Skeleton className="h-40 w-full" /> : (
+                  <Accordion type="single" collapsible className="w-full">
+                    {Object.entries(categories).map(([category, subcategories]) => (
+                    <AccordionItem value={category} key={category}>
+                        <div className="flex items-center w-full group">
+                            <AccordionTrigger className="flex-1 hover:no-underline">
+                                <span className="font-semibold text-left">{category}</span>
+                            </AccordionTrigger>
+                            <Button variant="ghost" size="icon" className="mr-2 shrink-0 opacity-50 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); openDeleteDialog('category', category); }}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                        </div>
+                        <AccordionContent>
+                        <div className="space-y-2 pl-4">
+                            {subcategories.map(sub => (
+                            <div key={sub} className="flex items-center justify-between p-2 rounded-md bg-muted/50 group">
+                                <span>{sub}</span>
+                                <Button variant="ghost" size="icon" className="opacity-50 group-hover:opacity-100" onClick={() => openDeleteDialog('subcategory', sub, category)}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            </div>
+                            ))}
+                            {subcategories.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">Nessuna sottocategoria.</p>}
+                        </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                    ))}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -483,3 +556,4 @@ export default function ImpostazioniPage() {
     </div>
   );
 }
+
