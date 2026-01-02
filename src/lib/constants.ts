@@ -1,4 +1,4 @@
-export const YEARS = ['Tutti', 2025, 2024, 2023];
+export const YEARS = [2025, 2024, 2023];
 export const COMPANIES = [
   { value: 'Tutte', label: 'Tutte' },
   { value: 'LNC', label: 'LNC' },

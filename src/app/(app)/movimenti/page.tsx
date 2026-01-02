@@ -88,7 +88,7 @@ export default function MovimentiPage() {
         setIsClient(true);
         // Set default year on client side to prevent hydration mismatch
         if (!selectedYear) {
-            setSelectedYear(YEARS[1].toString());
+            setSelectedYear(new Date().getFullYear().toString());
         }
     }, []);
 
@@ -241,7 +241,7 @@ export default function MovimentiPage() {
         
         // Filtering logic
         let filtered = data
-            .filter(m => !selectedYear || selectedYear === 'Tutti' || m.anno === Number(selectedYear))
+            .filter(m => !selectedYear || m.anno === Number(selectedYear))
             .filter(m => selectedCategory === 'Tutti' || m.categoria === selectedCategory)
             .filter(m => selectedSubCategory === 'Tutti' || m.sottocategoria === selectedSubCategory)
             .filter(m => selectedOperator === 'Tutti' || m.operatore === selectedOperator)
