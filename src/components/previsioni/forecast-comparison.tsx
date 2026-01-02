@@ -73,7 +73,7 @@ export function ForecastComparison({
 
   const { chartData, totals, categoryTotals } = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => i);
-    const yearsToProcess = [mainYear, comparisonYear];
+    const yearsToProcess = [mainYear, comparisonYear].filter(Boolean) as number[];
     
     const categoryIncomeTotals: { [year: number]: { [key: string]: number } } = {};
     const categoryExpenseTotals: { [year: number]: { [key: string]: number } } = {};
@@ -88,8 +88,10 @@ export function ForecastComparison({
         const monthData: any = { month: monthShort };
 
         yearsToProcess.forEach(year => {
-            monthData[`entrate${year}`] = 0;
-            monthData[`uscite${year}`] = 0;
+            monthData[`entrateConsuntivo${year}`] = 0;
+            monthData[`usciteConsuntivo${year}`] = 0;
+            monthData[`entratePrevisto${year}`] = 0;
+            monthData[`uscitePrevisto${year}`] = 0;
 
             // Data from movements (historical)
             movements.forEach(mov => {
@@ -98,46 +100,51 @@ export function ForecastComparison({
                     if (company === 'Tutte' || mov.societa === company) {
                         const income = mov.entrata || 0;
                         const expense = mov.uscita || 0;
-                        monthData[`entrate${year}`] += income;
-                        monthData[`uscite${year}`] += expense;
+                        monthData[`entrateConsuntivo${year}`] += income;
+                        monthData[`usciteConsuntivo${year}`] += expense;
                         if(income > 0) categoryIncomeTotals[year][mov.categoria] = (categoryIncomeTotals[year][mov.categoria] || 0) + income;
                         if(expense > 0) categoryExpenseTotals[year][mov.categoria] = (categoryExpenseTotals[year][mov.categoria] || 0) + expense;
                     }
                 }
             });
 
-            // Data from forecasts (future for mainYear)
-            const today = new Date();
-            if (year === mainYear && (year > today.getFullYear() || (year === today.getFullYear() && monthIndex >= today.getMonth()))) {
-                incomeForecasts.forEach(forecast => {
-                    const forecastDate = new Date(forecast.dataPrevista);
-                    if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
-                        if (company === 'Tutte' || forecast.societa === company) {
-                            const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
-                            monthData[`entrate${year}`] += weightedIncome;
-                            if(weightedIncome > 0) categoryIncomeTotals[year][forecast.categoria] = (categoryIncomeTotals[year][forecast.categoria] || 0) + weightedIncome;
-                        }
+            // Data from forecasts
+            incomeForecasts.forEach(forecast => {
+                const forecastDate = new Date(forecast.dataPrevista);
+                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
+                    if (company === 'Tutte' || forecast.societa === company) {
+                        const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
+                        monthData[`entratePrevisto${year}`] += weightedIncome;
+                         if(weightedIncome > 0 && !(new Date(forecast.dataPrevista) < new Date() && forecast.stato === 'Incassato')) {
+                            // Also add to category totals for forecasts
+                             categoryIncomeTotals[year][forecast.categoria] = (categoryIncomeTotals[year][forecast.categoria] || 0) + weightedIncome;
+                         }
                     }
-                });
+                }
+            });
 
-                expenseForecasts.forEach(forecast => {
-                    const forecastDate = new Date(forecast.dataScadenza);
-                    if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
-                        if (company === 'Tutte' || forecast.societa === company) {
-                            const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
-                            monthData[`uscite${year}`] += weightedExpense;
-                            if(weightedExpense > 0) categoryExpenseTotals[year][forecast.categoria] = (categoryExpenseTotals[year][forecast.categoria] || 0) + weightedExpense;
+            expenseForecasts.forEach(forecast => {
+                const forecastDate = new Date(forecast.dataScadenza);
+                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
+                    if (company === 'Tutte' || forecast.societa === company) {
+                        const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
+                        monthData[`uscitePrevisto${year}`] += weightedExpense;
+                        if(weightedExpense > 0 && !(new Date(forecast.dataScadenza) < new Date() && forecast.stato === 'Pagato')){
+                           // Also add to category totals for forecasts
+                           categoryExpenseTotals[year][forecast.categoria] = (categoryExpenseTotals[year][forecast.categoria] || 0) + weightedExpense;
                         }
                     }
-                });
-            }
+                }
+            });
         });
         return monthData;
     });
     
     const calculatedTotals = yearsToProcess.reduce((acc, year) => {
-        acc[`entrate${year}`] = data.reduce((sum, month) => sum + (month[`entrate${year}`] || 0), 0);
-        acc[`uscite${year}`] = data.reduce((sum, month) => sum + (month[`uscite${year}`] || 0), 0);
+        acc[`entrateConsuntivo${year}`] = data.reduce((sum, month) => sum + (month[`entrateConsuntivo${year}`] || 0), 0);
+        acc[`usciteConsuntivo${year}`] = data.reduce((sum, month) => sum + (month[`usciteConsuntivo${year}`] || 0), 0);
+        acc[`entratePrevisto${year}`] = data.reduce((sum, month) => sum + (month[`entratePrevisto${year}`] || 0), 0);
+        acc[`uscitePrevisto${year}`] = data.reduce((sum, month) => sum + (month[`uscitePrevisto${year}`] || 0), 0);
         return acc;
     }, {} as { [key: string]: number });
 
@@ -182,27 +189,27 @@ export function ForecastComparison({
     <div className="space-y-6">
        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
           <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate ${mainYear}`}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate Cons. ${mainYear}`}</CardTitle></CardHeader>
             <CardContent>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`entrate${mainYear}`] || 0)}</p>}
+              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`entrateConsuntivo${mainYear}`] || 0)}</p>}
             </CardContent>
           </Card>
            <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite ${mainYear}`}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite Cons. ${mainYear}`}</CardTitle></CardHeader>
             <CardContent>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`uscite${mainYear}`] || 0)}</p>}
+              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`usciteConsuntivo${mainYear}`] || 0)}</p>}
             </CardContent>
           </Card>
            <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate ${comparisonYear}`}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate Prev. ${mainYear}`}</CardTitle></CardHeader>
             <CardContent>
-               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-muted-foreground">{formatCurrency(totals[`entrate${comparisonYear}`] || 0)}</p>}
+               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-blue-600">{formatCurrency(totals[`entratePrevisto${mainYear}`] || 0)}</p>}
             </CardContent>
           </Card>
            <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite ${comparisonYear}`}</CardTitle></CardHeader>
+            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite Prev. ${mainYear}`}</CardTitle></CardHeader>
             <CardContent>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-muted-foreground">{formatCurrency(totals[`uscite${comparisonYear}`] || 0)}</p>}
+              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-orange-600">{formatCurrency(totals[`uscitePrevisto${mainYear}`] || 0)}</p>}
             </CardContent>
           </Card>
       </div>
@@ -210,9 +217,9 @@ export function ForecastComparison({
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Andamento Mensile</CardTitle>
-          <CardDescription>{`Confronto entrate e uscite per l'anno ${mainYear}`}</CardDescription>
+          <CardDescription>{`Confronto entrate e uscite (consuntivo e previsto) per l'anno ${mainYear}`}</CardDescription>
         </CardHeader>
-        <CardContent className="h-[200px]">
+        <CardContent className="h-[250px]">
         {isLoading ? (
             <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
@@ -231,8 +238,10 @@ export function ForecastComparison({
                       formatter={(value: number) => formatCurrency(value)}
                   />
                   <Legend wrapperStyle={{fontSize: "12px"}} />
-                  <Bar dataKey={`entrate${mainYear}`} name={`Entrate ${mainYear}`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey={`uscite${mainYear}`} name={`Uscite ${mainYear}`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`entrateConsuntivo${mainYear}`} name={`Entrate Cons. ${mainYear}`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`usciteConsuntivo${mainYear}`} name={`Uscite Cons. ${mainYear}`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`entratePrevisto${mainYear}`} name={`Entrate Prev. ${mainYear}`} fill="hsla(var(--chart-2), 0.5)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`uscitePrevisto${mainYear}`} name={`Uscite Prev. ${mainYear}`} fill="hsla(var(--chart-4), 0.5)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
         )}
@@ -242,7 +251,7 @@ export function ForecastComparison({
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
             <CardHeader>
-                <CardTitle className="text-lg">Composizione Entrate {mainYear}</CardTitle>
+                <CardTitle className="text-lg">Composizione Entrate {mainYear} (Consuntivo + Previsto)</CardTitle>
             </CardHeader>
             <CardContent className="h-[200px]">
                  {isLoading ? (
@@ -277,7 +286,7 @@ export function ForecastComparison({
         </Card>
         <Card>
             <CardHeader>
-                <CardTitle className="text-lg">Composizione Uscite {mainYear}</CardTitle>
+                <CardTitle className="text-lg">Composizione Uscite {mainYear} (Consuntivo + Previsto)</CardTitle>
             </CardHeader>
             <CardContent className="h-[200px]">
                  {isLoading ? (
