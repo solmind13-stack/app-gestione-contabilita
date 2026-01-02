@@ -37,6 +37,9 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import type { Scadenza, AppUser } from '@/lib/types';
 import { CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import { Calendar } from '../ui/calendar';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -79,7 +82,6 @@ export function AddDeadlineDialog({
     resolver: zodResolver(FormSchema),
   });
   
-  const watchedDataPagamento = form.watch('dataPagamento');
   const watchedImportoPrevisto = form.watch('importoPrevisto');
   const watchedImportoPagato = form.watch('importoPagato');
 
@@ -114,21 +116,26 @@ export function AddDeadlineDialog({
       }
     }
   }, [isOpen, isEditMode, deadlineToEdit, defaultCompany, currentUser, form]);
-
+  
   useEffect(() => {
-    if (watchedDataPagamento) {
-        form.setValue('stato', 'Pagato');
-        if (form.getValues('importoPagato') === 0 && watchedImportoPrevisto > 0) {
-            form.setValue('importoPagato', watchedImportoPrevisto);
+    const importoPagato = watchedImportoPagato || 0;
+    const importoPrevisto = watchedImportoPrevisto || 0;
+
+    if (importoPagato > 0) {
+        if (importoPagato >= importoPrevisto) {
+            form.setValue('stato', 'Pagato');
+            if (!form.getValues('dataPagamento')) {
+                form.setValue('dataPagamento', format(new Date(), 'yyyy-MM-dd'));
+            }
+        } else {
+            form.setValue('stato', 'Parziale');
         }
     } else {
-        if (watchedImportoPagato && watchedImportoPagato > 0 && watchedImportoPrevisto > watchedImportoPagato) {
-             form.setValue('stato', 'Parziale');
-        } else {
-            form.setValue('stato', 'Da pagare');
-        }
+        form.setValue('stato', 'Da pagare');
+        form.setValue('dataPagamento', null);
     }
-  }, [watchedDataPagamento, watchedImportoPagato, watchedImportoPrevisto, form]);
+  }, [watchedImportoPagato, watchedImportoPrevisto, form]);
+
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
@@ -167,7 +174,7 @@ export function AddDeadlineDialog({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Società</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={currentUser?.role === 'company'}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={currentUser?.role === 'company' || currentUser?.role === 'company-editor'}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona società" />
@@ -186,11 +193,9 @@ export function AddDeadlineDialog({
                     control={form.control}
                     name="dataScadenza"
                     render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="flex flex-col">
                         <FormLabel>Data Scadenza</FormLabel>
-                        <FormControl>
-                            <Input type="date" {...field} />
-                        </FormControl>
+                        <Input type="date" {...field} />
                         <FormMessage />
                         </FormItem>
                     )}
@@ -291,7 +296,7 @@ export function AddDeadlineDialog({
                       <FormItem>
                       <FormLabel>Stato</FormLabel>
                       <FormControl>
-                        <Input {...field} readOnly className="bg-muted" />
+                        <Input {...field} readOnly className="bg-muted font-bold" />
                       </FormControl>
                       <FormMessage />
                       </FormItem>
@@ -301,16 +306,10 @@ export function AddDeadlineDialog({
                     control={form.control}
                     name="dataPagamento"
                     render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="flex flex-col">
                         <FormLabel>Data Pagamento</FormLabel>
-                        <FormControl>
-                            <Input 
-                                type="date"
-                                value={field.value ?? ""}
-                                onChange={field.onChange}
-                            />
-                        </FormControl>
-                         <FormMessage />
+                        <Input type="date" {...field} value={field.value ?? ""} />
+                        <FormMessage />
                         </FormItem>
                     )}
                 />

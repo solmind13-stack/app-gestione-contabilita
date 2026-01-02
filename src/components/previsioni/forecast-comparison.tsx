@@ -112,7 +112,7 @@ export function ForecastComparison({
             
             // Add paid deadlines to consuntivo
             deadlines.forEach(scad => {
-                if (scad.stato === 'Pagato' && scad.dataPagamento) {
+                if ((scad.stato === 'Pagato' || scad.stato === 'Parziale') && scad.dataPagamento) {
                     const paymentDate = new Date(scad.dataPagamento);
                     if (paymentDate.getFullYear() === year && paymentDate.getMonth() === monthIndex) {
                         if (company === 'Tutte' || scad.societa === company) {
@@ -154,16 +154,16 @@ export function ForecastComparison({
                 }
             });
             
-            // Add unpaid deadlines to previsto
+            // Add unpaid/partial deadlines to previsto
             deadlines.forEach(scad => {
                  const scadenzaDate = new Date(scad.dataScadenza);
                  if (scadenzaDate.getFullYear() === year && scadenzaDate.getMonth() === monthIndex) {
                     if (scad.stato !== 'Pagato') {
                          if (company === 'Tutte' || scad.societa === company) {
-                            const weightedExpense = (scad.importoPrevisto - scad.importoPagato) * 1.0; // 100% probability for deadlines
-                            monthData[`uscitePrevisto${year}`] += weightedExpense;
-                            if(weightedExpense > 0) {
-                                categoryExpenseTotals[year][scad.categoria] = (categoryExpenseTotals[year][scad.categoria] || 0) + weightedExpense;
+                            const remainingAmount = (scad.importoPrevisto - scad.importoPagato);
+                            monthData[`uscitePrevisto${year}`] += remainingAmount;
+                            if(remainingAmount > 0) {
+                                categoryExpenseTotals[year][scad.categoria] = (categoryExpenseTotals[year][scad.categoria] || 0) + remainingAmount;
                             }
                          }
                     }
@@ -483,7 +483,7 @@ export function ForecastComparison({
       </div>
 
        <div className="grid grid-cols-1 gap-6">
-         <CashflowChart data={allData} deadlines={deadlines} />
+         <CashflowChart data={allData} />
       </div>
     </div>
   );

@@ -72,7 +72,7 @@ export default function ScadenzePage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     // Filters
-    const [selectedYear, setSelectedYear] = useState<string | null>(null);
+    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
     const [selectedStatus, setSelectedStatus] = useState<string>('Tutti');
     const [selectedRecurrence, setSelectedRecurrence] = useState<string>('Tutti');
@@ -80,9 +80,6 @@ export default function ScadenzePage() {
 
     useEffect(() => {
         setIsClient(true);
-        if (!selectedYear) {
-            setSelectedYear(new Date().getFullYear().toString());
-        }
     }, []);
 
     const { user, isUserLoading } = useUser();
@@ -422,7 +419,7 @@ export default function ScadenzePage() {
         {isClient && <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
-                <Select value={selectedYear || ''} onValueChange={(value) => setSelectedYear(value)}>
+                <Select value={selectedYear} onValueChange={(value) => setSelectedYear(value)}>
                     <SelectTrigger className="w-[120px]">
                         <SelectValue placeholder="Anno" />
                     </SelectTrigger>

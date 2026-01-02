@@ -64,7 +64,7 @@ export default function DashboardPage() {
     // 1. Liquidità Attuale
     const liquiditaMovimenti = safeMovimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
     const scadenzePagateImporto = safeScadenze
-        .filter(s => s.stato === 'Pagato' && s.dataPagamento)
+        .filter(s => s.stato === 'Pagato' || s.stato === 'Parziale')
         .reduce((acc, s) => acc + s.importoPagato, 0);
     const liquidita = liquiditaMovimenti - scadenzePagateImporto;
 
