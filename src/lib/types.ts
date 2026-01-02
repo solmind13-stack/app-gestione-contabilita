@@ -64,6 +64,11 @@ export type Riepilogo = {
 
 export type UserRole = 'admin' | 'editor' | 'company' | 'company-editor';
 
+export type NotificationPreferences = {
+    notifyOnNewMovement?: boolean;
+    notifyOnDeadline?: boolean;
+}
+
 export type AppUser = {
     uid: string;
     firstName: string;
@@ -75,6 +80,7 @@ export type AppUser = {
     company?: 'LNC' | 'STG';
     creationDate?: string;
     lastLogin?: string;
+    notificationPreferences?: NotificationPreferences;
 };
 
 export type Scadenza = {

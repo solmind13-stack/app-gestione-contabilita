@@ -6,7 +6,7 @@ import { FirebaseApp } from 'firebase/app';
 import { Firestore, doc, getDoc } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, onAuthStateChanged } from 'firebase/auth'; // Renamed to avoid conflict
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
-import type { AppUser, UserRole } from '@/lib/types';
+import type { AppUser, UserRole, NotificationPreferences } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
 // Internal state for user authentication, now including the app user profile
@@ -92,6 +92,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                 photoURL: firebaseUser.photoURL,
                 role: userData.role as UserRole,
                 company: userData.company as 'LNC' | 'STG' | undefined,
+                notificationPreferences: userData.notificationPreferences || { notifyOnNewMovement: false, notifyOnDeadline: false },
               };
                setUserAuthState({ user: appUser, isUserLoading: false, userError: null });
             } else {

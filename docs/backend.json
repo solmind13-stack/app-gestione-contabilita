@@ -459,6 +459,20 @@
           "type": "string",
           "description": "The timestamp when the user was created.",
           "format": "date-time"
+        },
+        "notificationPreferences": {
+          "type": "object",
+          "description": "User's notification settings.",
+          "properties": {
+            "notifyOnNewMovement": {
+              "type": "boolean",
+              "description": "Send email on new movement creation."
+            },
+            "notifyOnDeadline": {
+              "type": "boolean",
+              "description": "Send email for upcoming deadlines."
+            }
+          }
         }
       },
       "required": [
