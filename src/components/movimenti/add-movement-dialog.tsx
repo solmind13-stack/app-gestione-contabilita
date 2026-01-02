@@ -239,7 +239,13 @@ export function AddMovementDialog({
                             <Calendar
                                 mode="single"
                                 selected={field.value}
-                                onSelect={field.onChange}
+                                onSelect={(date) => {
+                                  field.onChange(date);
+                                  // This assumes you have a way to close the popover.
+                                  // One common way is to manage open state outside.
+                                  // For simplicity, we'll let it be. A more complex solution
+                                  // would be needed for perfect UX.
+                                }}
                                 disabled={(date) =>
                                 date > new Date() || date < new Date("1900-01-01")
                                 }

@@ -190,7 +190,7 @@ export function AddDeadlineDialog({
                             <Calendar
                                 mode="single"
                                 selected={field.value}
-                                onSelect={field.onChange}
+                                onSelect={(date) => field.onChange(date)}
                                 initialFocus
                             />
                             </PopoverContent>
