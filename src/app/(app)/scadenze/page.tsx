@@ -81,7 +81,7 @@ export default function ScadenzePage() {
     useEffect(() => {
         setIsClient(true);
         if (!selectedYear) {
-            setSelectedYear(YEARS[1].toString());
+            setSelectedYear(new Date().getFullYear().toString());
         }
     }, []);
 
@@ -213,7 +213,7 @@ export default function ScadenzePage() {
         const recurrences = [...new Set(data.map(item => item.ricorrenza))].sort();
         
         let filtered = data
-            .filter(s => !selectedYear || selectedYear === 'Tutti' || s.anno === Number(selectedYear))
+            .filter(s => !selectedYear || s.anno === Number(selectedYear))
             .filter(s => selectedCategory === 'Tutti' || s.categoria === selectedCategory)
             .filter(s => selectedStatus === 'Tutti' || s.stato === selectedStatus)
             .filter(s => selectedRecurrence === 'Tutti' || s.ricorrenza === selectedRecurrence)
