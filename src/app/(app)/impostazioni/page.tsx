@@ -8,9 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useUser, useFirestore, useDoc, useAuth } from '@/firebase';
+import { useUser, useFirestore, useDoc, useAuth, useCollection } from '@/firebase';
 import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
-import type { AppUser, AppSettings, CategoryData } from '@/lib/types';
+import type { AppUser, AppSettings, CategoryData, UserRole } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { EditUserDialog } from '@/components/impostazioni/edit-user-dialog';
@@ -20,7 +20,6 @@ import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useCollection } from '@/firebase/firestore/use-collection';
 
 type ItemToDelete = {
     type: 'category' | 'subcategory' | 'account' | 'paymentMethod' | 'operator';
@@ -143,7 +142,7 @@ const UserManagementCard = () => {
         setDeletingUser(user);
     }
     
-     const handleAddUser = async (data: any) => {
+    const handleAddUser = async (data: any) => {
         if (!firestore || !auth || !currentUser) {
             toast({ variant: 'destructive', title: 'Errore', description: 'Utente non autenticato o database non disponibile.' });
             return Promise.reject(new Error("Prerequisiti falliti"));
@@ -156,18 +155,24 @@ const UserManagementCard = () => {
 
             // Step 2: Create the user profile document in Firestore
             const userDocRef = doc(firestore, 'users', newUser.uid);
-            const newUserProfile: Omit<AppUser, 'uid' | 'email' | 'photoURL' | 'displayName'> = {
+            
+            const newUserProfile: Omit<AppUser, 'uid' | 'email' | 'photoURL'> = {
                 firstName: data.firstName,
                 lastName: data.lastName,
-                role: data.role,
-                company: (data.role === 'company' || data.role === 'company-editor') ? data.company : undefined,
+                displayName: `${data.firstName} ${data.lastName}`,
+                role: data.role as UserRole,
                 creationDate: new Date().toISOString(),
                 lastLogin: new Date().toISOString(),
             };
+
+            // Conditionally add company if the role requires it
+            if (data.role === 'company' || data.role === 'company-editor') {
+                newUserProfile.company = data.company;
+            }
             
             await setDoc(userDocRef, {
                 ...newUserProfile,
-                displayName: `${data.firstName} ${data.lastName}`,
+                uid: newUser.uid,
                 email: newUser.email,
             });
 
@@ -190,7 +195,6 @@ const UserManagementCard = () => {
             return Promise.reject(e);
         }
     };
-
 
     const handleUpdateUser = async (updatedUser: AppUser) => {
         if (!firestore || !updatedUser.uid) {
@@ -224,12 +228,14 @@ const UserManagementCard = () => {
         }
 
         try {
+            // Note: This only deletes the Firestore profile, not the Auth user.
+            // The Auth user must be deleted from the Firebase console for full removal.
             const userDocRef = doc(firestore, 'users', deletingUser.uid);
             await deleteDoc(userDocRef);
-            toast({ title: 'Utente Eliminato', description: `Il profilo di ${deletingUser.displayName} è stato eliminato dal database.` });
+            toast({ title: 'Profilo Utente Eliminato', description: `Il profilo di ${deletingUser.displayName} è stato eliminato dal database.` });
         } catch(e) {
-            console.error('Error deleting user:', e);
-            toast({ variant: 'destructive', title: 'Errore Eliminazione', description: 'Impossibile eliminare l\'utente. Controlla i permessi.' });
+            console.error('Error deleting user profile:', e);
+            toast({ variant: 'destructive', title: 'Errore Eliminazione', description: 'Impossibile eliminare il profilo utente. Controlla i permessi.' });
         } finally {
             setDeletingUser(null);
         }
@@ -254,7 +260,7 @@ const UserManagementCard = () => {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Sei sicuro?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Questa azione non può essere annullata. Verrà eliminato permanentemente il profilo utente di <span className="font-bold">{deletingUser?.displayName}</span> dal database. Per rimuovere completamente l'accesso, dovrai eliminare l'utente anche dalla console di Firebase Authentication.
+                        Questa azione eliminerà il profilo utente di <span className="font-bold">{deletingUser?.displayName}</span> dal database. Per rimuovere completamente l'accesso, dovrai eliminare l'utente anche dalla console di Firebase Authentication.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
