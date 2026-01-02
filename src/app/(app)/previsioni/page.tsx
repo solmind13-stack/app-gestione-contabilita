@@ -53,21 +53,28 @@ export default function PrevisioniPage() {
     if (!mainYear) {
       const currentYear = new Date().getFullYear();
       setMainYear(currentYear);
-      setComparisonYear(currentYear - 1);
+      if (availableYears.includes(currentYear - 1)) {
+        setComparisonYear(currentYear - 1);
+      }
     }
     if (user?.role === 'company' && user.company) {
       setSelectedCompany(user.company);
     } else if (user?.role === 'company-editor' && user.company) {
         setSelectedCompany(user.company);
     }
-  }, [user, mainYear]);
+  }, [user, mainYear, availableYears]);
 
   const handleMainYearChange = (yearValue: string) => {
     const year = Number(yearValue);
     setMainYear(year);
     // If the comparison year is now the same or greater, adjust it
     if (comparisonYear !== null && year <= comparisonYear) {
-      setComparisonYear(year - 1);
+      const newComparisonYear = year - 1;
+      if (availableYears.includes(newComparisonYear)) {
+        setComparisonYear(newComparisonYear);
+      } else {
+        setComparisonYear(null);
+      }
     }
   };
 
@@ -170,7 +177,7 @@ export default function PrevisioniPage() {
   }), [movimenti, previsioniEntrate, previsioniUscite]);
 
 
-  if (!isClient || !mainYear || !comparisonYear) {
+  if (!isClient || !mainYear) {
     return null; 
   }
 
@@ -204,9 +211,9 @@ export default function PrevisioniPage() {
               </SelectContent>
             </Select>
              <span className="text-muted-foreground font-medium">vs</span>
-            <Select value={String(comparisonYear)} onValueChange={(v) => setComparisonYear(Number(v))}>
+            <Select value={comparisonYear ? String(comparisonYear) : ''} onValueChange={(v) => setComparisonYear(Number(v))}>
                 <SelectTrigger className="w-full md:w-[120px]">
-                    <SelectValue placeholder="Anno" />
+                    <SelectValue placeholder="Confronto" />
                 </SelectTrigger>
                 <SelectContent>
                     {availableYears.filter(y => y < mainYear).map(year => <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>)}
@@ -225,7 +232,7 @@ export default function PrevisioniPage() {
           <TabsTrigger value="agente-ai">Agente AI</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard">
-          <ForecastComparison 
+          {comparisonYear && <ForecastComparison 
             mainYear={mainYear} 
             comparisonYear={comparisonYear}
             company={selectedCompany}
@@ -233,7 +240,7 @@ export default function PrevisioniPage() {
             incomeForecasts={previsioniEntrate || []}
             expenseForecasts={previsioniUscite || []}
             isLoading={isLoading}
-          />
+          />}
         </TabsContent>
         <TabsContent value="cashflow">
             <CashflowDetail 

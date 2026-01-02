@@ -1,4 +1,5 @@
-export const YEARS = [2025, 2024, 2023];
+export const YEARS = Array.from({ length: 11 }, (_, i) => new Date().getFullYear() + 5 - i); // from current year + 5 to 10 years back
+
 export const COMPANIES = [
   { value: 'Tutte', label: 'Tutte' },
   { value: 'LNC', label: 'LNC' },
