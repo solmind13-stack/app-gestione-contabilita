@@ -7,6 +7,7 @@ import {
   DocumentData,
   FirestoreError,
   DocumentSnapshot,
+  Query,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -39,7 +40,7 @@ export interface UseDocResult<T> {
  * @returns {UseDocResult<T>} Object with data, isLoading, error.
  */
 export function useDoc<T = any>(
-  docRef: DocumentReference<DocumentData> | null | undefined,
+  docRef: DocumentReference<DocumentData> | Query<DocumentData> | null | undefined,
 ): UseDocResult<T> {
   type StateDataType = WithId<T> | null;
 
@@ -53,6 +54,16 @@ export function useDoc<T = any>(
       setIsLoading(false);
       setError(null);
       return;
+    }
+
+    // Safety check: Ensure we are not passing a Query to useDoc
+    if (docRef.type === 'query') {
+        const err = new Error("Invalid argument: useDoc received a query object. Use useCollection for queries.");
+        console.error(err);
+        setError(err);
+        setData(null);
+        setIsLoading(false);
+        return;
     }
 
     setIsLoading(true);

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useUser, useFirestore, useDoc } from '@/firebase';
+import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
 import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 import type { AppUser, AppSettings, CategoryData } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -130,7 +130,7 @@ const UserManagementCard = () => {
         return query(collection(firestore, 'users'));
     }, [firestore]);
 
-    const { data: users, isLoading, error } = useDoc<AppUser>(usersQuery);
+    const { data: users, isLoading, error } = useCollection<AppUser>(usersQuery);
 
     const handleOpenEditDialog = (user: AppUser) => {
         setEditingUser(user);
@@ -406,7 +406,7 @@ export default function ImpostazioniPage() {
             });
             toast({ title: 'Categoria Aggiunta', description: `La categoria "${name}" è stata creata.` });
         } else if (type === 'subcategory' && parent) {
-            await updateDoc(settingsDocref, {
+            await updateDoc(settingsDocRef, {
                 [`categories.${parent}`]: arrayUnion(name)
             });
             toast({ title: 'Sottocategoria Aggiunta', description: `"${name}" è stata aggiunta a "${parent}".` });
@@ -556,4 +556,3 @@ export default function ImpostazioniPage() {
     </div>
   );
 }
-
