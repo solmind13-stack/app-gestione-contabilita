@@ -43,7 +43,17 @@ const generateFinancialInsightsFlow = ai.defineFlow(
     outputSchema: FinancialInsightsOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    try {
+      const {output} = await prompt(input);
+      return output!;
+    } catch (error) {
+      console.error('Error in generateFinancialInsightsFlow:', error);
+      // Return a controlled error response instead of letting the flow crash.
+      return {
+        summary: 'Mi dispiace, ma al momento non riesco a generare gli insight. Ciò potrebbe essere dovuto a un volume elevato di domande o al superamento dei limiti di utilizzo del piano gratuito. Riprova tra qualche istante.',
+        attentionItems: [],
+        suggestionItems: [],
+      };
+    }
   }
 );
