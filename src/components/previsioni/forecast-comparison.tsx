@@ -111,7 +111,7 @@ export function ForecastComparison({
             });
             
             // Add paid deadlines to consuntivo
-            deadlines.forEach(scad => {
+            (deadlines || []).forEach(scad => {
                 if ((scad.stato === 'Pagato' || scad.stato === 'Parziale') && scad.dataPagamento) {
                     const paymentDate = new Date(scad.dataPagamento);
                     if (paymentDate.getFullYear() === year && paymentDate.getMonth() === monthIndex) {
@@ -155,7 +155,7 @@ export function ForecastComparison({
             });
             
             // Add unpaid/partial deadlines to previsto
-            deadlines.forEach(scad => {
+            (deadlines || []).forEach(scad => {
                  const scadenzaDate = new Date(scad.dataScadenza);
                  if (scadenzaDate.getFullYear() === year && scadenzaDate.getMonth() === monthIndex) {
                     if (scad.stato !== 'Pagato') {
