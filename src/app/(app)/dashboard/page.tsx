@@ -52,32 +52,35 @@ export default function DashboardPage() {
   }), [movimenti, previsioniEntrate, previsioniUscite, scadenze]);
 
   const kpiData = useMemo((): Kpi[] => {
-    const liquidita = (movimenti || []).reduce((acc, mov) => acc + mov.entrata - mov.uscita, 0);
+    const liquidita = (movimenti || []).reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
 
     const oggi = new Date();
-    const trentaGiorni = new Date();
+    oggi.setHours(0, 0, 0, 0); // Start of today
+    
+    const trentaGiorni = new Date(oggi);
     trentaGiorni.setDate(oggi.getDate() + 30);
-    const setteGiorni = new Date();
+
+    const setteGiorni = new Date(oggi);
     setteGiorni.setDate(oggi.getDate() + 7);
 
     const scadenze30gg = (scadenze || []).filter(s => {
         const dataScadenza = new Date(s.dataScadenza);
         return dataScadenza >= oggi && dataScadenza <= trentaGiorni && s.stato !== 'Pagato';
     });
-    const importoScadenze30gg = scadenze30gg.reduce((acc, s) => acc + s.importoPrevisto - s.importoPagato, 0);
+    const importoScadenze30gg = scadenze30gg.reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
     const scadenze7ggCount = scadenze30gg.filter(s => new Date(s.dataScadenza) <= setteGiorni).length;
 
     const previsioniEntrateMese = (previsioniEntrate || []).filter(p => {
         const dataPrevista = new Date(p.dataPrevista);
         return dataPrevista.getMonth() === oggi.getMonth() && dataPrevista.getFullYear() === oggi.getFullYear();
-    }).reduce((acc, p) => acc + (p.importoLordo * p.probabilita), 0);
+    }).reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
     
     const previsioniUsciteMese = (previsioniUscite || []).filter(p => {
         const dataScadenza = new Date(p.dataScadenza);
         return dataScadenza.getMonth() === oggi.getMonth() && dataScadenza.getFullYear() === oggi.getFullYear();
-    }).reduce((acc, p) => acc + (p.importoLordo * p.probabilita), 0);
+    }).reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
 
-    const cashFlowPrevisto = liquidita + previsioniEntrateMese - previsioniUsciteMese;
+    const cashFlowPrevisto = liquidita + previsioniEntrateMese - previsioniUsciteMese - importoScadenze30gg;
 
     return [
       {
