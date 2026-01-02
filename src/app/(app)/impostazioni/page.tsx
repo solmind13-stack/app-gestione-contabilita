@@ -166,13 +166,13 @@ const UserManagementCard = () => {
                 email: newUser.email,
                 firstName: data.firstName,
                 lastName: data.lastName,
+                displayName: `${data.firstName} ${data.lastName}`,
                 role: data.role,
                 company: (data.role === 'company' || data.role === 'company-editor') ? data.company : undefined,
                 creationDate: new Date().toISOString(),
                 lastLogin: new Date().toISOString(),
             };
-            newUserProfile.displayName = `${data.firstName} ${data.lastName}`;
-
+            
 
             await writeBatch(firestore).set(userDocRef, newUserProfile).commit();
 
