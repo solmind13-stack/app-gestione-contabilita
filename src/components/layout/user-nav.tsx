@@ -17,9 +17,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
-import { LogOut, User, Settings } from "lucide-react";
+import { LogOut, User, Settings, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "../ui/badge";
 
 export function UserNav() {
   const router = useRouter();
@@ -56,6 +57,7 @@ export function UserNav() {
   const displayEmail = user?.email || 'Nessuna email';
   const displayAvatar = user?.photoURL;
   const displayInitials = getInitials(displayName);
+  const displayRole = user?.role;
 
   return (
     <DropdownMenu>
@@ -77,12 +79,22 @@ export function UserNav() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+         {displayRole && (
+          <>
+            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              <span>Ruolo:</span>
+              <Badge variant="secondary" className="capitalize">{displayRole}</Badge>
+            </div>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuGroup>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push('/impostazioni')}>
             <User className="mr-2 h-4 w-4" />
             <span>Profilo</span>
           </DropdownMenuItem>
-          <DropdownMenuItem>
+           <DropdownMenuItem onClick={() => router.push('/impostazioni')}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Impostazioni</span>
           </DropdownMenuItem>
