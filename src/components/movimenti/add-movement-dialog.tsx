@@ -31,9 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Loader2, Wand2 } from 'lucide-react';
+import { Loader2, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
@@ -44,7 +42,7 @@ import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
-  data: z.date({ required_error: 'Seleziona una data' }),
+  data: z.string().min(1, 'Seleziona una data'),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importo: z.coerce.number().refine(val => val !== 0, 'L\'importo non può essere zero'),
   tipo: z.enum(['entrata', 'uscita']),
@@ -81,8 +79,7 @@ export function AddMovementDialog({
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-
+  
   const isEditMode = !!movementToEdit;
 
   const form = useForm<FormValues>({
@@ -94,7 +91,7 @@ export function AddMovementDialog({
       if (isEditMode && movementToEdit) {
         form.reset({
           societa: movementToEdit.societa,
-          data: new Date(movementToEdit.data),
+          data: format(new Date(movementToEdit.data), 'yyyy-MM-dd'),
           descrizione: movementToEdit.descrizione,
           importo: movementToEdit.entrata > 0 ? movementToEdit.entrata : movementToEdit.uscita,
           tipo: movementToEdit.entrata > 0 ? 'entrata' : 'uscita',
@@ -109,7 +106,7 @@ export function AddMovementDialog({
       } else {
         form.reset({
           societa: defaultCompany,
-          data: new Date(),
+          data: format(new Date(), 'yyyy-MM-dd'),
           descrizione: '',
           importo: 0,
           tipo: 'uscita',
@@ -129,8 +126,8 @@ export function AddMovementDialog({
     setIsSubmitting(true);
     const dataToSave: Omit<Movimento, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
         societa: data.societa,
-        data: format(data.data, 'yyyy-MM-dd'),
-        anno: data.data.getFullYear(),
+        data: data.data,
+        anno: new Date(data.data).getFullYear(),
         descrizione: data.descrizione,
         categoria: data.categoria,
         sottocategoria: data.sottocategoria,
@@ -215,42 +212,11 @@ export function AddMovementDialog({
                     control={form.control}
                     name="data"
                     render={({ field }) => (
-                        <FormItem className="flex flex-col">
+                        <FormItem>
                         <FormLabel>Data Movimento</FormLabel>
-                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                            <PopoverTrigger asChild>
-                            <FormControl>
-                                <Button
-                                variant={"outline"}
-                                className={cn(
-                                    "pl-3 text-left font-normal",
-                                    !field.value && "text-muted-foreground"
-                                )}
-                                >
-                                {field.value ? (
-                                    format(field.value, "PPP", { locale: it })
-                                ) : (
-                                    <span>Scegli una data</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                            </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={(date) => {
-                                    field.onChange(date);
-                                    setIsCalendarOpen(false);
-                                }}
-                                disabled={(date) =>
-                                date > new Date() || date < new Date("1900-01-01")
-                                }
-                                initialFocus
-                            />
-                            </PopoverContent>
-                        </Popover>
+                        <FormControl>
+                            <Input type="date" {...field} />
+                        </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}

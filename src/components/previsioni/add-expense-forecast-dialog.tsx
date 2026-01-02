@@ -31,9 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -42,7 +40,7 @@ import { CATEGORIE_USCITE, CERTEZZA_LIVELLI, STATI_USCITE, RICORRENZE_USCITE, IV
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
-  dataScadenza: z.date({ required_error: 'Seleziona una data' }),
+  dataScadenza: z.string().min(1, 'Seleziona una data'),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importoLordo: z.coerce.number().positive('L\'importo deve essere positivo'),
   importoEffettivo: z.coerce.number().min(0).optional(),
@@ -80,7 +78,6 @@ export function AddExpenseForecastDialog({
 }: AddExpenseForecastDialogProps) {
   const isEditMode = !!forecastToEdit;
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -91,7 +88,7 @@ export function AddExpenseForecastDialog({
       if (isEditMode && forecastToEdit) {
         form.reset({
           societa: forecastToEdit.societa,
-          dataScadenza: new Date(forecastToEdit.dataScadenza),
+          dataScadenza: format(new Date(forecastToEdit.dataScadenza), 'yyyy-MM-dd'),
           descrizione: forecastToEdit.descrizione,
           importoLordo: forecastToEdit.importoLordo,
           importoEffettivo: forecastToEdit.importoEffettivo || 0,
@@ -106,10 +103,9 @@ export function AddExpenseForecastDialog({
           note: forecastToEdit.note || '',
         });
       } else {
-        const today = new Date();
         form.reset({
           societa: defaultCompany || 'LNC',
-          dataScadenza: today,
+          dataScadenza: format(new Date(), 'yyyy-MM-dd'),
           descrizione: '',
           importoLordo: 0,
           importoEffettivo: 0,
@@ -131,9 +127,9 @@ export function AddExpenseForecastDialog({
     setIsSubmitting(true);
     const commonData = {
         ...data,
-        mese: format(data.dataScadenza, 'MMMM', {locale: it}),
-        dataScadenza: format(data.dataScadenza, 'yyyy-MM-dd'),
-        anno: data.dataScadenza.getFullYear(),
+        mese: format(new Date(data.dataScadenza), 'MMMM', {locale: it}),
+        dataScadenza: data.dataScadenza,
+        anno: new Date(data.dataScadenza).getFullYear(),
         sottocategoria: data.sottocategoria || '',
         importoEffettivo: data.importoEffettivo || 0,
     };
@@ -181,14 +177,13 @@ export function AddExpenseForecastDialog({
                     </FormItem>
                 )} />
                 <FormField control={form.control} name="dataScadenza" render={({ field }) => (
-                    <FormItem className="flex flex-col"><FormLabel>Data Scadenza</FormLabel>
-                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                        <PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP", { locale: it }) : <span>Scegli una data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={(date) => { field.onChange(date); setIsCalendarOpen(false); }} initialFocus />
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage /></FormItem>
+                    <FormItem>
+                        <FormLabel>Data Scadenza</FormLabel>
+                        <FormControl>
+                            <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
                 )} />
             </div>
 

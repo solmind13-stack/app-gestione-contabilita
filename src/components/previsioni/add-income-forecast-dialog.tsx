@@ -31,9 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -42,7 +40,7 @@ import { CATEGORIE_ENTRATE, CERTEZZA_LIVELLI, STATI_ENTRATE, IVA_PERCENTAGES } f
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
-  dataPrevista: z.date({ required_error: 'Seleziona una data' }),
+  dataPrevista: z.string().min(1, 'Seleziona una data'),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importoLordo: z.coerce.number().positive('L\'importo deve essere positivo'),
   importoEffettivo: z.coerce.number().min(0).optional(),
@@ -78,7 +76,6 @@ export function AddIncomeForecastDialog({
 }: AddIncomeForecastDialogProps) {
   const isEditMode = !!forecastToEdit;
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -89,7 +86,7 @@ export function AddIncomeForecastDialog({
       if (isEditMode && forecastToEdit) {
         form.reset({
           societa: forecastToEdit.societa,
-          dataPrevista: new Date(forecastToEdit.dataPrevista),
+          dataPrevista: format(new Date(forecastToEdit.dataPrevista), 'yyyy-MM-dd'),
           descrizione: forecastToEdit.descrizione,
           importoLordo: forecastToEdit.importoLordo,
           importoEffettivo: forecastToEdit.importoEffettivo || 0,
@@ -102,10 +99,9 @@ export function AddIncomeForecastDialog({
           note: forecastToEdit.note || '',
         });
       } else {
-        const today = new Date();
         form.reset({
           societa: defaultCompany || 'LNC',
-          dataPrevista: today,
+          dataPrevista: format(new Date(), 'yyyy-MM-dd'),
           descrizione: '',
           importoLordo: 0,
           importoEffettivo: 0,
@@ -125,9 +121,9 @@ export function AddIncomeForecastDialog({
     setIsSubmitting(true);
     const commonData = {
         ...data,
-        mese: format(data.dataPrevista, 'MMMM', {locale: it}),
-        dataPrevista: format(data.dataPrevista, 'yyyy-MM-dd'),
-        anno: data.dataPrevista.getFullYear(),
+        mese: format(new Date(data.dataPrevista), 'MMMM', {locale: it}),
+        dataPrevista: data.dataPrevista,
+        anno: new Date(data.dataPrevista).getFullYear(),
         importoEffettivo: data.importoEffettivo || 0,
     };
 
@@ -174,14 +170,13 @@ export function AddIncomeForecastDialog({
                     </FormItem>
                 )} />
                 <FormField control={form.control} name="dataPrevista" render={({ field }) => (
-                    <FormItem className="flex flex-col"><FormLabel>Data Prevista</FormLabel>
-                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                        <PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP", { locale: it }) : <span>Scegli una data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={(date) => { field.onChange(date); setIsCalendarOpen(false); }} initialFocus />
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage /></FormItem>
+                    <FormItem>
+                        <FormLabel>Data Prevista</FormLabel>
+                        <FormControl>
+                            <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
                 )} />
             </div>
 

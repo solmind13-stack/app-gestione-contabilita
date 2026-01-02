@@ -31,9 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -42,7 +40,7 @@ import { CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants'
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
-  dataScadenza: z.date({ required_error: 'Seleziona una data' }),
+  dataScadenza: z.string().min(1, 'Seleziona una data'),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importoPrevisto: z.coerce.number().positive('L\'importo deve essere positivo'),
   importoPagato: z.coerce.number().min(0).optional(),
@@ -75,7 +73,6 @@ export function AddDeadlineDialog({
 }: AddDeadlineDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = !!deadlineToEdit;
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -86,7 +83,7 @@ export function AddDeadlineDialog({
       if (isEditMode && deadlineToEdit) {
         form.reset({
           societa: deadlineToEdit.societa,
-          dataScadenza: new Date(deadlineToEdit.dataScadenza),
+          dataScadenza: format(new Date(deadlineToEdit.dataScadenza), 'yyyy-MM-dd'),
           descrizione: deadlineToEdit.descrizione,
           importoPrevisto: deadlineToEdit.importoPrevisto,
           importoPagato: deadlineToEdit.importoPagato,
@@ -98,7 +95,7 @@ export function AddDeadlineDialog({
       } else {
         form.reset({
           societa: defaultCompany,
-          dataScadenza: new Date(),
+          dataScadenza: format(new Date(), 'yyyy-MM-dd'),
           descrizione: '',
           importoPrevisto: 0,
           importoPagato: 0,
@@ -115,8 +112,8 @@ export function AddDeadlineDialog({
     setIsSubmitting(true);
     const commonData = {
         ...data,
-        dataScadenza: format(data.dataScadenza, 'yyyy-MM-dd'),
-        anno: data.dataScadenza.getFullYear(),
+        dataScadenza: data.dataScadenza,
+        anno: new Date(data.dataScadenza).getFullYear(),
         importoPagato: data.importoPagato || 0,
     };
 
@@ -166,39 +163,11 @@ export function AddDeadlineDialog({
                     control={form.control}
                     name="dataScadenza"
                     render={({ field }) => (
-                        <FormItem className="flex flex-col">
+                        <FormItem>
                         <FormLabel>Data Scadenza</FormLabel>
-                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                            <PopoverTrigger asChild>
-                            <FormControl>
-                                <Button
-                                variant={"outline"}
-                                className={cn(
-                                    "pl-3 text-left font-normal",
-                                    !field.value && "text-muted-foreground"
-                                )}
-                                >
-                                {field.value ? (
-                                    format(field.value, "PPP", { locale: it })
-                                ) : (
-                                    <span>Scegli una data</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                            </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={(date) => {
-                                    field.onChange(date);
-                                    setIsCalendarOpen(false);
-                                }}
-                                initialFocus
-                            />
-                            </PopoverContent>
-                        </Popover>
+                        <FormControl>
+                            <Input type="date" {...field} />
+                        </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}
