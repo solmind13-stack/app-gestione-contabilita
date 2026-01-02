@@ -80,7 +80,6 @@ export function AddMovementDialog({
 }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const { toast } = useToast();
 
   const isEditMode = !!movementToEdit;
@@ -180,7 +179,7 @@ export function AddMovementDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Modifica Movimento' : 'Aggiungi Nuovo Movimento'}</DialogTitle>
           <DialogDescription>
@@ -217,7 +216,7 @@ export function AddMovementDialog({
                     render={({ field }) => (
                         <FormItem className="flex flex-col">
                         <FormLabel>Data Movimento</FormLabel>
-                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                        <Popover>
                             <PopoverTrigger asChild>
                             <FormControl>
                                 <Button
@@ -240,10 +239,7 @@ export function AddMovementDialog({
                             <Calendar
                                 mode="single"
                                 selected={field.value}
-                                onSelect={(date) => {
-                                  field.onChange(date);
-                                  setIsCalendarOpen(false);
-                                }}
+                                onSelect={field.onChange}
                                 disabled={(date) =>
                                 date > new Date() || date < new Date("1900-01-01")
                                 }
