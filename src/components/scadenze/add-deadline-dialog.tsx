@@ -75,6 +75,7 @@ export function AddDeadlineDialog({
 }: AddDeadlineDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = !!deadlineToEdit;
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -167,7 +168,7 @@ export function AddDeadlineDialog({
                     render={({ field }) => (
                         <FormItem className="flex flex-col">
                         <FormLabel>Data Scadenza</FormLabel>
-                        <Popover>
+                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                             <PopoverTrigger asChild>
                             <FormControl>
                                 <Button
@@ -190,7 +191,10 @@ export function AddDeadlineDialog({
                             <Calendar
                                 mode="single"
                                 selected={field.value}
-                                onSelect={field.onChange}
+                                onSelect={(date) => {
+                                    field.onChange(date);
+                                    setIsCalendarOpen(false);
+                                }}
                                 initialFocus
                             />
                             </PopoverContent>

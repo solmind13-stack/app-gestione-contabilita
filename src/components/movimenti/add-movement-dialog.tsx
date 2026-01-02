@@ -81,6 +81,7 @@ export function AddMovementDialog({
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const isEditMode = !!movementToEdit;
 
@@ -216,7 +217,7 @@ export function AddMovementDialog({
                     render={({ field }) => (
                         <FormItem className="flex flex-col">
                         <FormLabel>Data Movimento</FormLabel>
-                        <Popover>
+                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                             <PopoverTrigger asChild>
                             <FormControl>
                                 <Button
@@ -239,7 +240,10 @@ export function AddMovementDialog({
                             <Calendar
                                 mode="single"
                                 selected={field.value}
-                                onSelect={field.onChange}
+                                onSelect={(date) => {
+                                    field.onChange(date);
+                                    setIsCalendarOpen(false);
+                                }}
                                 disabled={(date) =>
                                 date > new Date() || date < new Date("1900-01-01")
                                 }
