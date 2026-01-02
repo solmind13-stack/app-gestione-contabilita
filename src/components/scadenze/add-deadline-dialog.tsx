@@ -57,7 +57,7 @@ type FormValues = z.infer<typeof FormSchema>;
 interface AddDeadlineDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onAddDeadline: (deadline: Omit<Scadenza, 'id'>) => Promise<void>;
+  onAddDeadline: (deadline: Omit<Scadenza, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditDeadline: (deadline: Scadenza) => Promise<void>;
   deadlineToEdit?: Scadenza | null;
   defaultCompany?: 'LNC' | 'STG';
@@ -120,10 +120,9 @@ export function AddDeadlineDialog({
     };
 
     if (isEditMode && deadlineToEdit) {
-      await onEditDeadline({ ...commonData, id: deadlineToEdit.id });
+      await onEditDeadline({ ...commonData, id: deadlineToEdit.id, createdBy: deadlineToEdit.createdBy });
     } else {
-      const { ...newDeadlineData } = commonData;
-      await onAddDeadline(newDeadlineData);
+      await onAddDeadline(commonData);
     }
     setIsSubmitting(false);
     setIsOpen(false);

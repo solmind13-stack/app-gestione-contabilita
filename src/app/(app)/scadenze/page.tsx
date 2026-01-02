@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference } from 'firebase/firestore';
+import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference, deleteDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -40,6 +40,9 @@ import type { Scadenza, AppUser } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { YEARS, CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+
 
 const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
     if (!firestore || !user) return null;
@@ -66,6 +69,9 @@ export default function ScadenzePage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
     const [isSeeding, setIsSeeding] = useState(false);
+    const [deadlineToDelete, setDeadlineToDelete] = useState<Scadenza | null>(null);
+    const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     // Filters
     const [selectedYear, setSelectedYear] = useState<string | null>(null);
@@ -129,7 +135,7 @@ export default function ScadenzePage() {
         }
     }, [user]);
 
-    const handleAddDeadline = async (newDeadlineData: Omit<Scadenza, 'id'>) => {
+    const handleAddDeadline = async (newDeadlineData: Omit<Scadenza, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>) => {
         if (!user || !firestore) {
             toast({ variant: 'destructive', title: 'Errore', description: 'Utente non autenticato o database non disponibile.' });
             return;
@@ -158,6 +164,7 @@ export default function ScadenzePage() {
             const { id, ...dataToUpdate } = updatedDeadline;
             await updateDoc(docRef, {
                 ...dataToUpdate,
+                createdBy: updatedDeadline.createdBy || user.uid,
                 updatedAt: new Date().toISOString(),
             });
             toast({ title: "Scadenza Aggiornata", description: "La scadenza è stata modificata." });
@@ -166,10 +173,61 @@ export default function ScadenzePage() {
             toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare la scadenza. Riprova.' });
         }
     };
+    
+    const handleDeleteDeadline = async () => {
+        if (!deadlineToDelete || !firestore) return;
+        try {
+            await deleteDoc(doc(firestore, 'deadlines', deadlineToDelete.id));
+            toast({ title: "Scadenza Eliminata", description: "La scadenza è stata eliminata con successo." });
+        } catch (error) {
+            console.error("Error deleting deadline: ", error);
+            toast({ variant: 'destructive', title: 'Errore Eliminazione', description: 'Impossibile eliminare la scadenza. Controlla i permessi.' });
+        } finally {
+            setDeadlineToDelete(null);
+        }
+    };
+    
+    const handleBulkDelete = async () => {
+        if (!firestore || selectedIds.length === 0 || user?.role !== 'admin') {
+            toast({ variant: 'destructive', title: 'Azione non permessa', description: 'Nessun elemento selezionato o permessi non sufficienti.' });
+            return;
+        }
+        try {
+            const batch = writeBatch(firestore);
+            selectedIds.forEach(id => {
+                const docRef = doc(firestore, 'deadlines', id);
+                batch.delete(docRef);
+            });
+            await batch.commit();
+            toast({ title: "Scadenze Eliminate", description: `${selectedIds.length} scadenze sono state eliminate.` });
+            setSelectedIds([]); // Clear selection
+        } catch (error) {
+            console.error("Error bulk deleting deadlines:", error);
+            toast({ variant: 'destructive', title: 'Errore Eliminazione Multipla', description: 'Impossibile eliminare le scadenze selezionate.' });
+        } finally {
+            setIsBulkDeleteAlertOpen(false);
+        }
+    };
 
     const handleOpenDialog = (deadline?: Scadenza) => {
         setEditingDeadline(deadline || null);
         setIsDialogOpen(true);
+    };
+    
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds(filteredScadenze.map(s => s.id));
+        } else {
+            setSelectedIds([]);
+        }
+    };
+
+    const handleSelectRow = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedIds(prev => [...prev, id]);
+        } else {
+            setSelectedIds(prev => prev.filter(rowId => rowId !== id));
+        }
     };
 
     const { 
@@ -248,6 +306,13 @@ export default function ScadenzePage() {
         if (selectedCompany === 'Tutte') return 'Scadenze';
         return `Scadenze - ${selectedCompany}`;
     };
+    
+    const canDelete = (scadenza: Scadenza) => {
+        if (!user) return false;
+        if (user.role === 'admin') return true;
+        // Allow user to delete if they are the creator
+        return user.uid === scadenza.createdBy;
+    }
 
   return (
     <div className="flex flex-col gap-6">
@@ -260,6 +325,35 @@ export default function ScadenzePage() {
         defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
         currentUser={user!}
       />
+      
+      <AlertDialog open={!!deadlineToDelete} onOpenChange={(open) => !open && setDeadlineToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Questa azione non può essere annullata. La scadenza &quot;{deadlineToDelete?.descrizione}&quot; del {deadlineToDelete && formatDate(deadlineToDelete.dataScadenza)} per un importo di {deadlineToDelete && formatCurrency(deadlineToDelete.importoPrevisto)} sarà eliminata permanentemente.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteDeadline} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog open={isBulkDeleteAlertOpen} onOpenChange={setIsBulkDeleteAlertOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Questa azione non può essere annullata. Verranno eliminate permanentemente {selectedIds.length} scadenze.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90">Elimina Tutti</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
 
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -318,6 +412,12 @@ export default function ScadenzePage() {
                 </TabsList>
             )}
             <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
+                 {user?.role === 'admin' && selectedIds.length > 0 && (
+                     <Button variant="destructive" onClick={() => setIsBulkDeleteAlertOpen(true)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Elimina ({selectedIds.length})
+                    </Button>
+                )}
                 <div className="relative flex-grow">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -411,6 +511,15 @@ export default function ScadenzePage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            {user?.role === 'admin' && (
+                                <TableHead padding="checkbox">
+                                    <Checkbox
+                                        checked={selectedIds.length > 0 && selectedIds.length === filteredScadenze.length}
+                                        onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+                                        aria-label="Seleziona tutte le righe"
+                                    />
+                                </TableHead>
+                            )}
                             <TableHead>Società</TableHead>
                             <TableHead>Anno</TableHead>
                             <TableHead>
@@ -432,57 +541,77 @@ export default function ScadenzePage() {
                     <TableBody>
                         {(isLoadingScadenze || isUserLoading || isSeeding) ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="h-24 text-center">
+                                <TableCell colSpan={12} className="h-24 text-center">
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                                 </TableCell>
                             </TableRow>
                         ) : error ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="h-24 text-center text-red-500">
+                                <TableCell colSpan={12} className="h-24 text-center text-red-500">
                                     Errore nel caricamento: {error.message}
                                 </TableCell>
                             </TableRow>
                         ) : filteredScadenze.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
+                                <TableCell colSpan={12} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
                             </TableRow>
                         ) : (
-                            filteredScadenze.map((scadenza) => (
-                            <TableRow key={scadenza.id} className={cn(new Date(scadenza.dataScadenza) < new Date() && scadenza.stato !== 'Pagato' && 'bg-red-50 dark:bg-red-900/20')}>
-                                <TableCell>
-                                    <Badge variant={scadenza.societa === 'LNC' ? 'default' : 'secondary'}>{scadenza.societa}</Badge>
-                                </TableCell>
-                                <TableCell>{scadenza.anno}</TableCell>
-                                <TableCell className="whitespace-nowrap">{formatDate(scadenza.dataScadenza)}</TableCell>
-                                <TableCell>{scadenza.descrizione}</TableCell>
-                                <TableCell>
-                                    <Badge variant="outline">{scadenza.categoria}</Badge>
-                                </TableCell>
-                                <TableCell className="text-right font-medium">{formatCurrency(scadenza.importoPrevisto)}</TableCell>
-                                <TableCell className="text-right font-medium">{scadenza.importoPagato > 0 ? formatCurrency(scadenza.importoPagato) : '-'}</TableCell>
-                                <TableCell className="text-center">
-                                    <Badge
-                                      className={cn({
-                                        "bg-green-600 hover:bg-green-700 text-white": scadenza.stato === 'Pagato',
-                                        "bg-red-600 hover:bg-red-700 text-white": scadenza.stato === 'Da pagare',
-                                        "bg-yellow-500 hover:bg-yellow-600 text-white": scadenza.stato === 'Parziale',
-                                      })}
-                                    >{scadenza.stato}</Badge>
-                                </TableCell>
-                                <TableCell>{scadenza.ricorrenza}</TableCell>
-                                <TableCell>{scadenza.note}</TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(scadenza)}>
-                                        <Pencil className="h-4 w-4" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        )))}
+                            filteredScadenze.map((scadenza) => {
+                                const isSelected = selectedIds.includes(scadenza.id);
+                                return (
+                                    <TableRow key={scadenza.id} data-state={isSelected ? "selected" : ""} className={cn(new Date(scadenza.dataScadenza) < new Date() && scadenza.stato !== 'Pagato' && 'bg-red-50 dark:bg-red-900/20')}>
+                                        {user?.role === 'admin' && (
+                                            <TableCell padding="checkbox">
+                                                <Checkbox
+                                                    checked={isSelected}
+                                                    onCheckedChange={(checked) => handleSelectRow(scadenza.id, checked as boolean)}
+                                                    aria-label="Seleziona riga"
+                                                />
+                                            </TableCell>
+                                        )}
+                                        <TableCell>
+                                            <Badge variant={scadenza.societa === 'LNC' ? 'default' : 'secondary'}>{scadenza.societa}</Badge>
+                                        </TableCell>
+                                        <TableCell>{scadenza.anno}</TableCell>
+                                        <TableCell className="whitespace-nowrap">{formatDate(scadenza.dataScadenza)}</TableCell>
+                                        <TableCell>{scadenza.descrizione}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">{scadenza.categoria}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">{formatCurrency(scadenza.importoPrevisto)}</TableCell>
+                                        <TableCell className="text-right font-medium">{scadenza.importoPagato > 0 ? formatCurrency(scadenza.importoPagato) : '-'}</TableCell>
+                                        <TableCell className="text-center">
+                                            <Badge
+                                            className={cn({
+                                                "bg-green-600 hover:bg-green-700 text-white": scadenza.stato === 'Pagato',
+                                                "bg-red-600 hover:bg-red-700 text-white": scadenza.stato === 'Da pagare',
+                                                "bg-yellow-500 hover:bg-yellow-600 text-white": scadenza.stato === 'Parziale',
+                                            })}
+                                            >{scadenza.stato}</Badge>
+                                        </TableCell>
+                                        <TableCell>{scadenza.ricorrenza}</TableCell>
+                                        <TableCell>{scadenza.note}</TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end">
+                                                <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(scadenza)}>
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                                {canDelete(scadenza) && (
+                                                    <Button variant="ghost" size="icon" onClick={() => setDeadlineToDelete(scadenza)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })
+                        )}
                     </TableBody>
                     {filteredScadenze.length > 0 && (
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={5} className="font-bold">TOTALI</TableCell>
+                                <TableCell colSpan={user?.role === 'admin' ? 6 : 5} className="font-bold">TOTALI</TableCell>
                                 <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
                                 <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePagato)}</TableCell>
                                 <TableCell colSpan={4}></TableCell>
