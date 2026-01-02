@@ -150,57 +150,43 @@ const UserManagementCard = () => {
         }
 
         try {
-            // This is a workaround to check if the user exists in Firebase Auth
-            // since the Admin SDK is not available on the client. We try to create it,
-            // and if it fails with 'auth/email-already-in-use', we know we might need to
-            // just create the Firestore document.
+            // Step 1: Create the user in Firebase Authentication
             const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             const newUser = userCredential.user;
 
+            // Step 2: Create the user profile document in Firestore
             const userDocRef = doc(firestore, 'users', newUser.uid);
-            const newUserProfile: Omit<AppUser, 'uid'> = {
-                email: newUser.email!,
+            const newUserProfile: Omit<AppUser, 'uid' | 'email' | 'photoURL' | 'displayName'> = {
                 firstName: data.firstName,
                 lastName: data.lastName,
-                displayName: `${data.firstName} ${data.lastName}`,
                 role: data.role,
                 company: (data.role === 'company' || data.role === 'company-editor') ? data.company : undefined,
                 creationDate: new Date().toISOString(),
                 lastLogin: new Date().toISOString(),
             };
             
-            await setDoc(userDocRef, newUserProfile);
-            toast({ title: 'Utente Creato', description: `${newUserProfile.displayName} è stato aggiunto.` });
+            await setDoc(userDocRef, {
+                ...newUserProfile,
+                displayName: `${data.firstName} ${data.lastName}`,
+                email: newUser.email,
+            });
+
+            toast({ title: 'Utente Creato', description: `${data.firstName} ${data.lastName} è stato aggiunto.` });
 
         } catch (e: any) {
-            if (e.code === 'auth/email-already-in-use') {
-                // The user exists in Auth, but maybe not in Firestore. Let's try to create just the Firestore doc.
-                toast({ title: 'Utente già esistente in Auth', description: 'Provo a creare solo il profilo nel database...' });
-                const q = query(collection(firestore, "users"), where("email", "==", data.email));
-                const querySnapshot = await getDocs(q);
-
-                if (!querySnapshot.empty) {
-                    toast({ variant: 'destructive', title: 'Profilo già esistente', description: 'Un profilo utente con questa email esiste già nel database.' });
-                    return Promise.reject(new Error("Profilo esistente"));
-                }
-                
-                // At this point, we need a UID, but we can't get it without the user logging in.
-                // This indicates a desync that must be resolved manually in the Firebase console for now.
-                // We'll show a more informative error.
+             if (e.code === 'auth/email-already-in-use') {
                  toast({ 
                     variant: 'destructive', 
-                    title: 'Sincronizzazione Richiesta', 
-                    description: 'L\'utente esiste nel sistema di autenticazione ma non ha un profilo. Per risolvere, elimina l\'utente dalla sezione "Authentication" della Console Firebase e riprova.' 
+                    title: 'Email già in uso', 
+                    description: 'Questa email è già registrata nel sistema di autenticazione. Per risolvere, elimina l\'utente dalla sezione "Authentication" della Console Firebase e riprova.' 
                 });
-                return Promise.reject(new Error("Utente Auth senza profilo DB"));
-
-
             } else if (e.code === 'auth/weak-password') {
                  toast({ variant: 'destructive', title: 'Password Debole', description: 'La password deve essere di almeno 6 caratteri.' });
             } else {
                  console.error('Error creating user:', e);
                  toast({ variant: 'destructive', title: 'Errore Creazione Utente', description: 'Impossibile creare il nuovo utente. Controlla la console per i dettagli.' });
             }
+            // Propagate the error to be caught by the dialog's submit handler
             return Promise.reject(e);
         }
     };
@@ -268,12 +254,12 @@ const UserManagementCard = () => {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Sei sicuro?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Questa azione non può essere annullata. Verrà eliminato permanentemente il profilo utente di <span className="font-bold">{deletingUser?.displayName}</span> dal database. L'utente non potrà più accedere.
+                        Questa azione non può essere annullata. Verrà eliminato permanentemente il profilo utente di <span className="font-bold">{deletingUser?.displayName}</span> dal database. Per rimuovere completamente l'accesso, dovrai eliminare l'utente anche dalla console di Firebase Authentication.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Annulla</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction>
+                    <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive hover:bg-destructive/90">Elimina Profilo</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
@@ -459,7 +445,7 @@ export default function ImpostazioniPage() {
     }
   };
   
-  const openDeleteDialog = (type: 'category' | 'subcategory' | 'operator', name: string, parent?: string) => {
+  const openDeleteDialog = (type: ItemToDelete['type'], name: string, parent?: string) => {
     setItemToDelete({ type, name, parent });
   }
 
