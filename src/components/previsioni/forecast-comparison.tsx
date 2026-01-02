@@ -71,7 +71,7 @@ export function ForecastComparison({
   isLoading,
 }: ForecastComparisonProps) {
 
-  const { chartData, totals, categoryTotals } = useMemo(() => {
+  const { chartData, totals, categoryTotals, comparisonChartData } = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => i);
     const yearsToProcess = [mainYear, comparisonYear].filter(Boolean) as number[];
     
@@ -171,7 +171,14 @@ export function ForecastComparison({
         categoryTotals: {
             income: combinedIncomeTotals,
             expense: combinedExpenseTotals,
-        }
+        },
+        comparisonChartData: data.map(month => ({
+            month: month.month,
+            [`entrate${mainYear}`]: month[`entrateConsuntivo${mainYear}`],
+            [`uscite${mainYear}`]: month[`usciteConsuntivo${mainYear}`],
+            [`entrate${comparisonYear}`]: month[`entrateConsuntivo${comparisonYear}`],
+            [`uscite${comparisonYear}`]: month[`usciteConsuntivo${comparisonYear}`],
+        }))
     };
 
   }, [mainYear, comparisonYear, company, movements, incomeForecasts, expenseForecasts]);
@@ -242,6 +249,40 @@ export function ForecastComparison({
                   <Bar dataKey={`usciteConsuntivo${mainYear}`} name={`Uscite Cons. ${mainYear}`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
                   <Bar dataKey={`entratePrevisto${mainYear}`} name={`Entrate Prev. ${mainYear}`} fill="hsla(var(--chart-2), 0.5)" radius={[4, 4, 0, 0]} />
                   <Bar dataKey={`uscitePrevisto${mainYear}`} name={`Uscite Prev. ${mainYear}`} fill="hsla(var(--chart-4), 0.5)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+        )}
+        </CardContent>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Confronto Consuntivo Anni</CardTitle>
+          <CardDescription>{`Confronto dei movimenti reali tra ${mainYear} e ${comparisonYear}`}</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[250px]">
+        {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
+            </div>
+        ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={comparisonChartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
+                  <Tooltip
+                      contentStyle={{
+                          background: 'hsl(var(--background))',
+                          borderColor: 'hsl(var(--border))',
+                      }}
+                      formatter={(value: number) => formatCurrency(value)}
+                  />
+                  <Legend wrapperStyle={{fontSize: "12px"}} />
+                  <Bar dataKey={`entrate${mainYear}`} name={`Entrate ${mainYear}`} fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`uscite${mainYear}`} name={`Uscite ${mainYear}`} fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`entrate${comparisonYear}`} name={`Entrate ${comparisonYear}`} fill="hsla(var(--chart-1), 0.5)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={`uscite${comparisonYear}`} name={`Uscite ${comparisonYear}`} fill="hsla(var(--chart-3), 0.5)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
         )}
