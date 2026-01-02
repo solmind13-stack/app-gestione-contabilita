@@ -161,19 +161,22 @@ const UserManagementCard = () => {
             const newUser = tempUserCredential.user;
 
             const userDocRef = doc(firestore, 'users', newUser.uid);
-            const newUserProfile: AppUser = {
+            const newUserProfile: Omit<AppUser, 'displayName'> & { displayName?: string } = {
                 uid: newUser.uid,
                 email: newUser.email,
-                displayName: data.displayName,
+                firstName: data.firstName,
+                lastName: data.lastName,
                 role: data.role,
                 company: (data.role === 'company' || data.role === 'company-editor') ? data.company : undefined,
                 creationDate: new Date().toISOString(),
                 lastLogin: new Date().toISOString(),
             };
+            newUserProfile.displayName = `${data.firstName} ${data.lastName}`;
+
 
             await writeBatch(firestore).set(userDocRef, newUserProfile).commit();
 
-            toast({ title: 'Utente Creato', description: `${data.displayName} è stato aggiunto.` });
+            toast({ title: 'Utente Creato', description: `${newUserProfile.displayName} è stato aggiunto.` });
             
              return Promise.resolve();
 
@@ -198,7 +201,9 @@ const UserManagementCard = () => {
         try {
             const userDocRef = doc(firestore, 'users', updatedUser.uid);
             await updateDoc(userDocRef, {
-                displayName: updatedUser.displayName,
+                firstName: updatedUser.firstName,
+                lastName: updatedUser.lastName,
+                displayName: `${updatedUser.firstName} ${updatedUser.lastName}`,
                 role: updatedUser.role,
                 company: updatedUser.company,
             });

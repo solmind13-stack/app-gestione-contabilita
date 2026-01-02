@@ -86,7 +86,9 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               const appUser: AppUser = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
-                displayName: userData.displayName,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                displayName: userData.displayName || `${userData.firstName} ${userData.lastName}`,
                 photoURL: firebaseUser.photoURL,
                 role: userData.role as UserRole,
                 company: userData.company as 'LNC' | 'STG' | undefined,

@@ -34,7 +34,8 @@ import { Loader2 } from 'lucide-react';
 import type { AppUser, UserRole } from '@/lib/types';
 
 const FormSchema = z.object({
-  displayName: z.string().min(3, 'Il nome è obbligatorio'),
+  firstName: z.string().min(2, 'Il nome è obbligatorio'),
+  lastName: z.string().min(2, 'Il cognome è obbligatorio'),
   email: z.string().email('Email non valida'),
   password: z.string().min(6, 'La password deve essere di almeno 6 caratteri'),
   role: z.enum(['admin', 'editor', 'company', 'company-editor'], { required_error: 'Il ruolo è obbligatorio' }),
@@ -67,7 +68,8 @@ export function AddUserDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
-        displayName: '',
+        firstName: '',
+        lastName: '',
         email: '',
         password: '',
         role: 'company',
@@ -103,19 +105,34 @@ export function AddUserDialog({
         <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             
-             <FormField
-                control={form.control}
-                name="displayName"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>Nome Visualizzato</FormLabel>
-                    <FormControl>
-                        <Input {...field} placeholder="Mario Rossi" />
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
-                )}
-            />
+             <div className="grid grid-cols-2 gap-4">
+                 <FormField
+                    control={form.control}
+                    name="firstName"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Nome</FormLabel>
+                        <FormControl>
+                            <Input {...field} placeholder="Mario" />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                 <FormField
+                    control={form.control}
+                    name="lastName"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Cognome</FormLabel>
+                        <FormControl>
+                            <Input {...field} placeholder="Rossi" />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            </div>
 
             <FormField
                 control={form.control}

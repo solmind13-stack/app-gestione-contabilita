@@ -34,7 +34,8 @@ import { Loader2 } from 'lucide-react';
 import type { AppUser, UserRole } from '@/lib/types';
 
 const FormSchema = z.object({
-  displayName: z.string().min(3, 'Il nome è obbligatorio'),
+  firstName: z.string().min(2, 'Il nome è obbligatorio'),
+  lastName: z.string().min(2, 'Il cognome è obbligatorio'),
   role: z.enum(['admin', 'editor', 'company', 'company-editor'], { required_error: 'Il ruolo è obbligatorio' }),
   company: z.enum(['LNC', 'STG']).optional(),
 }).refine(data => {
@@ -71,7 +72,8 @@ export function EditUserDialog({
   useEffect(() => {
     if (user) {
       form.reset({
-        displayName: user.displayName || '',
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
         role: user.role,
         company: user.company,
       });
@@ -86,7 +88,9 @@ export function EditUserDialog({
     
     const updatedUserData: AppUser = {
         ...user,
-        displayName: data.displayName,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        displayName: `${data.firstName} ${data.lastName}`,
         role: data.role as UserRole,
         company: (data.role === 'company' || data.role === 'company-editor') ? data.company : undefined,
     }
@@ -108,19 +112,34 @@ export function EditUserDialog({
             <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 
-                 <FormField
-                    control={form.control}
-                    name="displayName"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Nome Visualizzato</FormLabel>
-                        <FormControl>
-                            <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
+                 <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                        control={form.control}
+                        name="firstName"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Nome</FormLabel>
+                            <FormControl>
+                                <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                     <FormField
+                        control={form.control}
+                        name="lastName"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Cognome</FormLabel>
+                            <FormControl>
+                                <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                </div>
 
                 <FormField
                     control={form.control}

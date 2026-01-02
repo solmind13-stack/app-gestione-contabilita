@@ -66,7 +66,9 @@ export type UserRole = 'admin' | 'editor' | 'company' | 'company-editor';
 
 export type AppUser = {
     uid: string;
-    displayName: string | null;
+    firstName: string;
+    lastName: string;
+    displayName: string;
     email: string | null;
     photoURL?: string | null;
     role: UserRole;
@@ -178,4 +180,3 @@ export type AppSettings = {
   createdAt?: string;
   updatedAt?: string;
 }
-
