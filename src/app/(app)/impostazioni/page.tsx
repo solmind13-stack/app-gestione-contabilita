@@ -189,8 +189,8 @@ const UserManagementCard = () => {
              if (e.code === 'auth/email-already-in-use') {
                  toast({ 
                     variant: 'destructive', 
-                    title: 'Email già in uso nel sistema di autenticazione', 
-                    description: 'L\'utente esiste nel sistema di autenticazione ma non ha un profilo. Per risolvere, elimina l\'utente dalla sezione "Authentication" della Console Firebase e riprova.' 
+                    title: 'Email già in uso', 
+                    description: 'Questa email è già registrata. Per risolvere, elimina l\'utente dalla sezione "Authentication" della Console Firebase e riprova.' 
                 });
             } else if (e.code === 'auth/weak-password') {
                  toast({ variant: 'destructive', title: 'Password Debole', description: 'La password deve essere di almeno 6 caratteri.' });
@@ -220,7 +220,7 @@ const UserManagementCard = () => {
             if (updatedUser.role === 'company' || updatedUser.role === 'company-editor') {
                 dataToUpdate.company = updatedUser.company;
             } else {
-                dataToUpdate.company = undefined;
+                delete (dataToUpdate as any).company; // Remove the company field if not applicable
             }
 
             await updateDoc(userDocRef, dataToUpdate);
@@ -364,19 +364,20 @@ export default function ImpostazioniPage() {
   const { toast } = useToast();
 
   const settingsDocRef = useMemo(() => {
-    if (!firestore) return null;
+    // Only attempt to create the ref if the user is an admin
+    if (!firestore || user?.role !== 'admin') return null;
     return doc(firestore, 'settings', 'appConfiguration');
-  }, [firestore]);
+  }, [firestore, user]);
 
-  const { data: settingsData, isLoading: isLoadingSettings, error } = useDoc<AppSettings>(settingsDocRef);
+  const { data: settingsData, isLoading: isLoadingSettings, error: settingsError } = useDoc<AppSettings>(settingsDocRef);
   
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<ItemToDelete | null>(null);
 
   useEffect(() => {
-    // One-time check to create the settings document if it doesn't exist
+    // One-time check to create the settings document if it doesn't exist and user is admin
     const initializeSettings = async () => {
-        if (!settingsDocRef || settingsData !== null || error) return;
+        if (!settingsDocRef || settingsData !== null || settingsError) return;
         
         try {
             await setDoc(settingsDocRef, {
@@ -405,7 +406,7 @@ export default function ImpostazioniPage() {
     if (user?.role === 'admin') {
       initializeSettings();
     }
-  }, [settingsDocRef, settingsData, error, user?.role, toast]);
+  }, [settingsDocRef, settingsData, settingsError, user?.role, toast]);
 
 
   const handleUpdateList = async (type: keyof AppSettings, value: any, action: 'add' | 'remove') => {
