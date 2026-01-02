@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
 import { YEARS, COMPANIES } from '@/lib/constants';
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser } from '@/lib/types';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza } from '@/lib/types';
 import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
 import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
@@ -83,13 +83,15 @@ export default function PrevisioniPage() {
   const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'incomeForecasts'), [firestore, user, selectedCompany]);
   const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'expenseForecasts'), [firestore, user, selectedCompany]);
   const movimentiQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'movements'), [firestore, user, selectedCompany]);
+  const scadenzeQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'deadlines'), [firestore, user, selectedCompany]);
   
   // Data fetching hooks
   const { data: movimenti, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
   const { data: previsioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
   const { data: previsioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
+  const { data: scadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
   
-  const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses;
+  const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze;
   
   // CRUD Handlers for Forecasts
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
@@ -159,13 +161,15 @@ export default function PrevisioniPage() {
     }
   };
 
-   const handleDeleteExpenseForecast = async (forecastId: string) => {
+   const handleDeleteExpenseForecast = async (forecastId: string, type: 'previsione' | 'scadenza') => {
     if (!firestore) return;
+    const collectionName = type === 'previsione' ? 'expenseForecasts' : 'deadlines';
+    const toastTitle = type === 'previsione' ? 'Previsione Eliminata' : 'Scadenza Eliminata';
     try {
-        await deleteDoc(doc(firestore, 'expenseForecasts', forecastId));
-        toast({ title: 'Previsione Eliminata', description: 'La previsione di uscita è stata eliminata.' });
+        await deleteDoc(doc(firestore, collectionName, forecastId));
+        toast({ title: toastTitle, description: `L'elemento è stato eliminato.` });
     } catch (e) {
-        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare la previsione.' });
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare l\'elemento.' });
         console.error(e);
     }
   };
@@ -174,7 +178,29 @@ export default function PrevisioniPage() {
     movements: movimenti || [],
     incomeForecasts: previsioniEntrate || [],
     expenseForecasts: previsioniUscite || [],
-  }), [movimenti, previsioniEntrate, previsioniUscite]);
+    deadlines: scadenze || [],
+  }), [movimenti, previsioniEntrate, previsioniUscite, scadenze]);
+
+  const combinedExpenseData = useMemo(() => {
+    const fromForecasts = (previsioniUscite || []).map(f => ({ ...f, type: 'previsione' as const }));
+    
+    const fromDeadlines = (scadenze || [])
+        .filter(s => s.stato !== 'Pagato')
+        .map(s => ({
+            id: s.id,
+            type: 'scadenza' as const,
+            societa: s.societa,
+            anno: s.anno,
+            descrizione: s.descrizione,
+            dataScadenza: s.dataScadenza,
+            importoLordo: s.importoPrevisto - s.importoPagato,
+            probabilita: 1.0, // Deadlines are certain
+            stato: s.stato,
+            categoria: s.categoria
+        }));
+
+    return [...fromForecasts, ...fromDeadlines];
+  }, [previsioniUscite, scadenze]);
 
 
   if (!isClient || !mainYear) {
@@ -264,9 +290,9 @@ export default function PrevisioniPage() {
         </TabsContent>
         <TabsContent value="uscite">
           <ExpenseForecasts
-              data={previsioniUscite || []}
+              data={combinedExpenseData}
               year={mainYear}
-              isLoading={isLoadingExpenses}
+              isLoading={isLoadingExpenses || isLoadingScadenze}
               onAdd={handleAddExpenseForecast}
               onEdit={handleEditExpenseForecast}
               onDelete={handleDeleteExpenseForecast}
