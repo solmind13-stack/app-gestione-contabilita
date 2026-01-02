@@ -13,7 +13,7 @@ import {
   ChartContainer,
   ChartTooltipContent,
 } from "@/components/ui/chart"
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { formatCurrency } from "@/lib/utils";
 
 const chartConfig = {
@@ -32,6 +32,7 @@ interface OverviewChartProps {
     movements: Movimento[];
     incomeForecasts: PrevisioneEntrata[];
     expenseForecasts: PrevisioneUscita[];
+    deadlines: Scadenza[];
   }
 }
 
@@ -86,7 +87,7 @@ export function OverviewChart({ data }: OverviewChartProps) {
     <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
       <CardHeader>
         <CardTitle>Andamento Entrate/Uscite</CardTitle>
-        <CardDescription>Ultimi 12 mesi (dati storici e previsionali)</CardDescription>
+        <CardDescription>Dati per l'anno in corso (storici e previsionali ponderati)</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-[250px] w-full">

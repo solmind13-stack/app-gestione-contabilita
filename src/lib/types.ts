@@ -71,8 +71,8 @@ export type NotificationPreferences = {
 
 export type AppUser = {
     uid: string;
-    firstName: string;
-    lastName: string;
+    firstName?: string;
+    lastName?: string;
     displayName: string;
     email: string;
     photoURL?: string | null;

@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 
 const chartConfig = {
@@ -20,6 +20,7 @@ interface CashflowChartProps {
     movements: Movimento[];
     incomeForecasts: PrevisioneEntrata[];
     expenseForecasts: PrevisioneUscita[];
+    deadlines: Scadenza[];
   };
 }
 
