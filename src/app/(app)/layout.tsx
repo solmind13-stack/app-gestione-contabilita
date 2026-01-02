@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import DashboardLoading from './dashboard/loading';
 import { FilterProvider } from '@/context/filter-context';
+import { ThemeProvider } from '@/components/theme-provider';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
@@ -34,19 +35,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // or the actual page content based on the user loading state.
   // This ensures the main layout structure is consistent between server and client.
   return (
-    <FilterProvider>
-      <SidebarProvider>
-          <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
-              <AppSidebar />
-              <div className="flex flex-col flex-1">
-                  <AppHeader />
-                  <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-                      {isUserLoading ? <DashboardLoading /> : children}
-                  </main>
-              </div>
-              <FloatingChatButton />
-          </div>
-      </SidebarProvider>
-    </FilterProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <FilterProvider>
+        <SidebarProvider>
+            <div className={cn("min-h-screen w-full bg-background text-foreground flex")}>
+                <AppSidebar />
+                <div className="flex flex-col flex-1">
+                    <AppHeader />
+                    <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+                        {isUserLoading ? <DashboardLoading /> : children}
+                    </main>
+                </div>
+                <FloatingChatButton />
+            </div>
+        </SidebarProvider>
+      </FilterProvider>
+    </ThemeProvider>
   );
 }

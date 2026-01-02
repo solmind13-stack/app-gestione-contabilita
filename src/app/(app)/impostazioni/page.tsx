@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useUser, useFirestore, useAuth, useCollection, useDoc } from '@/firebase';
-import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
+import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp, getAuth, createUserWithEmailAndPassword } from 'firebase/firestore';
 import type { AppUser, AppSettings, CategoryData, UserRole } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,6 @@ import { EditUserDialog } from '@/components/impostazioni/edit-user-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -149,20 +148,9 @@ const UserManagementCard = () => {
         }
 
         try {
-            // Check if user with this email already exists in Firestore users collection
-            const usersRef = collection(firestore, 'users');
-            const q = query(usersRef, where("email", "==", data.email));
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                toast({ variant: 'destructive', title: 'Utente già Esistente', description: 'Un utente con questa email esiste già nel database.' });
-                return Promise.reject(new Error("Utente già presente nel DB"));
-            }
-
-            // Step 1: Create the user in Firebase Authentication
             const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             const newUser = userCredential.user;
-
-            // Step 2: Create the user profile document in Firestore
+            
             const userDocRef = doc(firestore, 'users', newUser.uid);
             
             const newUserProfile: Partial<AppUser> = {
@@ -176,7 +164,6 @@ const UserManagementCard = () => {
                 lastLogin: new Date().toISOString(),
             };
 
-            // Conditionally add company if the role requires it
             if (data.role === 'company' || data.role === 'company-editor') {
                 newUserProfile.company = data.company;
             }
@@ -198,7 +185,6 @@ const UserManagementCard = () => {
                  console.error('Error creating user:', e);
                  toast({ variant: 'destructive', title: 'Errore Creazione Utente', description: 'Impossibile creare il nuovo utente. Controlla la console per i dettagli.' });
             }
-            // Propagate the error to be caught by the dialog's submit handler
             return Promise.reject(e);
         }
     };
@@ -470,16 +456,11 @@ export default function ImpostazioniPage() {
     setItemToDelete({ type, name, parent });
   }
 
-  const categories = settingsData?.categories || {};
-  const accounts = settingsData?.accounts || [];
-  const paymentMethods = settingsData?.paymentMethods || [];
-  const operators = settingsData?.operators || [];
-
   if (user?.role !== 'admin') {
      return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-bold">Impostazioni</h1>
+                <h1 className="text-3xl font-bold">Amministrazione</h1>
                 <p className="text-muted-foreground">
                 Questa sezione è riservata agli amministratori.
                 </p>
@@ -487,6 +468,11 @@ export default function ImpostazioniPage() {
         </div>
      )
   }
+
+  const categories = settingsData?.categories || {};
+  const accounts = settingsData?.accounts || [];
+  const paymentMethods = settingsData?.paymentMethods || [];
+  const operators = settingsData?.operators || [];
 
   return (
     <div className="space-y-8">
@@ -515,9 +501,9 @@ export default function ImpostazioniPage() {
         </AlertDialog>
 
       <div>
-        <h1 className="text-3xl font-bold">Impostazioni</h1>
+        <h1 className="text-3xl font-bold">Amministrazione</h1>
         <p className="text-muted-foreground">
-          Gestisci le opzioni e le personalizzazioni della tua applicazione.
+          Gestisci le opzioni globali e le personalizzazioni della tua applicazione.
         </p>
       </div>
 

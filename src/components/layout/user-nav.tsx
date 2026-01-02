@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
-import { LogOut, User, Settings, ShieldCheck } from "lucide-react";
+import { LogOut, User, Settings, ShieldCheck, Palette } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "../ui/badge";
@@ -95,10 +95,14 @@ export function UserNav() {
             <User className="mr-2 h-4 w-4" />
             <span>Profilo</span>
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push('/impostazioni/preferenze')}>
+            <Palette className="mr-2 h-4 w-4" />
+            <span>Preferenze</span>
+          </DropdownMenuItem>
            {user?.role === 'admin' && (
             <DropdownMenuItem onClick={() => router.push('/impostazioni')}>
                 <Settings className="mr-2 h-4 w-4" />
-                <span>Impostazioni</span>
+                <span>Amministrazione</span>
             </DropdownMenuItem>
            )}
         </DropdownMenuGroup>
