@@ -41,6 +41,7 @@ import { CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants'
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
   dataScadenza: z.string().min(1, 'Seleziona una data'),
+  dataPagamento: z.string().nullable().optional(),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importoPrevisto: z.coerce.number().positive('L\'importo deve essere positivo'),
   importoPagato: z.coerce.number().min(0).optional(),
@@ -77,6 +78,10 @@ export function AddDeadlineDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
   });
+  
+  const watchedDataPagamento = form.watch('dataPagamento');
+  const watchedImportoPrevisto = form.watch('importoPrevisto');
+  const watchedImportoPagato = form.watch('importoPagato');
 
   useEffect(() => {
     if (isOpen) {
@@ -84,6 +89,7 @@ export function AddDeadlineDialog({
         form.reset({
           societa: deadlineToEdit.societa,
           dataScadenza: format(new Date(deadlineToEdit.dataScadenza), 'yyyy-MM-dd'),
+          dataPagamento: deadlineToEdit.dataPagamento ? format(new Date(deadlineToEdit.dataPagamento), 'yyyy-MM-dd') : null,
           descrizione: deadlineToEdit.descrizione,
           importoPrevisto: deadlineToEdit.importoPrevisto,
           importoPagato: deadlineToEdit.importoPagato,
@@ -96,6 +102,7 @@ export function AddDeadlineDialog({
         form.reset({
           societa: defaultCompany,
           dataScadenza: format(new Date(), 'yyyy-MM-dd'),
+          dataPagamento: null,
           descrizione: '',
           importoPrevisto: 0,
           importoPagato: 0,
@@ -108,19 +115,35 @@ export function AddDeadlineDialog({
     }
   }, [isOpen, isEditMode, deadlineToEdit, defaultCompany, currentUser, form]);
 
+  useEffect(() => {
+    if (watchedDataPagamento) {
+        form.setValue('stato', 'Pagato');
+        if (form.getValues('importoPagato') === 0 && watchedImportoPrevisto > 0) {
+            form.setValue('importoPagato', watchedImportoPrevisto);
+        }
+    } else {
+        if (watchedImportoPagato && watchedImportoPagato > 0 && watchedImportoPrevisto > watchedImportoPagato) {
+             form.setValue('stato', 'Parziale');
+        } else {
+            form.setValue('stato', 'Da pagare');
+        }
+    }
+  }, [watchedDataPagamento, watchedImportoPagato, watchedImportoPrevisto, form]);
+
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
-    const commonData = {
+    const finalData = {
         ...data,
         dataScadenza: data.dataScadenza,
+        dataPagamento: data.dataPagamento || null,
         anno: new Date(data.dataScadenza).getFullYear(),
         importoPagato: data.importoPagato || 0,
     };
 
     if (isEditMode && deadlineToEdit) {
-      await onEditDeadline({ ...commonData, id: deadlineToEdit.id, createdBy: deadlineToEdit.createdBy });
+      await onEditDeadline({ ...finalData, id: deadlineToEdit.id, createdBy: deadlineToEdit.createdBy });
     } else {
-      await onAddDeadline(commonData);
+      await onAddDeadline(finalData);
     }
     setIsSubmitting(false);
     setIsOpen(false);
@@ -202,21 +225,19 @@ export function AddDeadlineDialog({
                         </FormItem>
                     )}
                 />
-                {isEditMode && (
-                  <FormField
-                      control={form.control}
-                      name="importoPagato"
-                      render={({ field }) => (
-                          <FormItem>
-                          <FormLabel>Importo Pagato (€)</FormLabel>
-                          <FormControl>
-                              <Input type="number" step="0.01" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                          </FormItem>
-                      )}
-                  />
-                )}
+                 <FormField
+                    control={form.control}
+                    name="importoPagato"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Importo Pagato (€)</FormLabel>
+                        <FormControl>
+                            <Input type="number" step="0.01" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -262,28 +283,38 @@ export function AddDeadlineDialog({
                 />
             </div>
             
-            {isEditMode && (
-              <FormField
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
                   control={form.control}
                   name="stato"
                   render={({ field }) => (
                       <FormItem>
                       <FormLabel>Stato</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                          <SelectTrigger>
-                              <SelectValue />
-                          </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                          {STATI_SCADENZE.map(stato => <SelectItem key={stato} value={stato}>{stato}</SelectItem>)}
-                          </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Input {...field} readOnly className="bg-muted" />
+                      </FormControl>
                       <FormMessage />
                       </FormItem>
                   )}
               />
-            )}
+               <FormField
+                    control={form.control}
+                    name="dataPagamento"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Data Pagamento</FormLabel>
+                        <FormControl>
+                            <Input 
+                                type="date"
+                                value={field.value ?? ""}
+                                onChange={field.onChange}
+                            />
+                        </FormControl>
+                         <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            </div>
 
             <FormField
               control={form.control}

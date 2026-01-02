@@ -62,9 +62,14 @@ export default function DashboardPage() {
     const trentaGiorni = addDays(oggi, 30);
 
     // 1. Liquidità Attuale
-    const liquidita = safeMovimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    const liquiditaMovimenti = safeMovimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    const scadenzePagateImporto = safeScadenze
+        .filter(s => s.stato === 'Pagato' && s.dataPagamento)
+        .reduce((acc, s) => acc + s.importoPagato, 0);
+    const liquidita = liquiditaMovimenti - scadenzePagateImporto;
 
-    // 2. Scadenze nei prossimi 30 giorni
+
+    // 2. Scadenze nei prossimi 30 giorni (non pagate)
     const scadenzeNei30gg = safeScadenze.filter(s => {
         const dataScadenza = new Date(s.dataScadenza);
         return isWithinInterval(dataScadenza, { start: oggi, end: trentaGiorni }) && s.stato !== 'Pagato';

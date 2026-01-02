@@ -88,6 +88,7 @@ export type Scadenza = {
   societa: 'LNC' | 'STG';
   anno: number;
   dataScadenza: string;
+  dataPagamento?: string | null; // New field for payment date
   descrizione: string;
   categoria: string;
   importoPrevisto: number;

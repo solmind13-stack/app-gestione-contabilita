@@ -4,7 +4,7 @@
 import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -18,6 +18,7 @@ interface ForecastComparisonProps {
   movements: Movimento[];
   incomeForecasts: PrevisioneEntrata[];
   expenseForecasts: PrevisioneUscita[];
+  deadlines: Scadenza[];
   isLoading: boolean;
 }
 
@@ -68,6 +69,7 @@ export function ForecastComparison({
   movements,
   incomeForecasts,
   expenseForecasts,
+  deadlines,
   isLoading,
 }: ForecastComparisonProps) {
 
@@ -107,6 +109,21 @@ export function ForecastComparison({
                     }
                 }
             });
+            
+            // Add paid deadlines to consuntivo
+            deadlines.forEach(scad => {
+                if (scad.stato === 'Pagato' && scad.dataPagamento) {
+                    const paymentDate = new Date(scad.dataPagamento);
+                    if (paymentDate.getFullYear() === year && paymentDate.getMonth() === monthIndex) {
+                        if (company === 'Tutte' || scad.societa === company) {
+                            const expense = scad.importoPagato || 0;
+                            monthData[`usciteConsuntivo${year}`] += expense;
+                            if (expense > 0) categoryExpenseTotals[year][scad.categoria] = (categoryExpenseTotals[year][scad.categoria] || 0) + expense;
+                        }
+                    }
+                }
+            });
+
 
             // Data from forecasts
             incomeForecasts.forEach(forecast => {
@@ -135,6 +152,22 @@ export function ForecastComparison({
                         }
                     }
                 }
+            });
+            
+            // Add unpaid deadlines to previsto
+            deadlines.forEach(scad => {
+                 const scadenzaDate = new Date(scad.dataScadenza);
+                 if (scadenzaDate.getFullYear() === year && scadenzaDate.getMonth() === monthIndex) {
+                    if (scad.stato !== 'Pagato') {
+                         if (company === 'Tutte' || scad.societa === company) {
+                            const weightedExpense = (scad.importoPrevisto - scad.importoPagato) * 1.0; // 100% probability for deadlines
+                            monthData[`uscitePrevisto${year}`] += weightedExpense;
+                            if(weightedExpense > 0) {
+                                categoryExpenseTotals[year][scad.categoria] = (categoryExpenseTotals[year][scad.categoria] || 0) + weightedExpense;
+                            }
+                         }
+                    }
+                 }
             });
         });
         return monthData;
@@ -181,7 +214,7 @@ export function ForecastComparison({
         }))
     };
 
-  }, [mainYear, comparisonYear, company, movements, incomeForecasts, expenseForecasts]);
+  }, [mainYear, comparisonYear, company, movements, incomeForecasts, expenseForecasts, deadlines]);
   
   const pieIncomeData = useMemo(() => categoryTotals.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.income]);
   const pieExpenseData = useMemo(() => categoryTotals.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.expense]);
@@ -190,7 +223,8 @@ export function ForecastComparison({
     movements,
     incomeForecasts,
     expenseForecasts,
-  }), [movements, incomeForecasts, expenseForecasts]);
+    deadlines,
+  }), [movements, incomeForecasts, expenseForecasts, deadlines]);
 
   return (
     <div className="space-y-6">
@@ -449,7 +483,7 @@ export function ForecastComparison({
       </div>
 
        <div className="grid grid-cols-1 gap-6">
-         <CashflowChart data={allData} />
+         <CashflowChart data={allData} deadlines={deadlines} />
       </div>
     </div>
   );

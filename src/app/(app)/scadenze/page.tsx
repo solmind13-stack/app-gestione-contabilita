@@ -213,7 +213,7 @@ export default function ScadenzePage() {
         const recurrences = [...new Set(data.map(item => item.ricorrenza))].sort();
         
         let filtered = data
-            .filter(s => !selectedYear || s.anno === Number(selectedYear))
+            .filter(s => selectedYear === null || s.anno === Number(selectedYear))
             .filter(s => selectedCategory === 'Tutti' || s.categoria === selectedCategory)
             .filter(s => selectedStatus === 'Tutti' || s.stato === selectedStatus)
             .filter(s => selectedRecurrence === 'Tutti' || s.ricorrenza === selectedRecurrence)
@@ -487,13 +487,13 @@ export default function ScadenzePage() {
                                 </TableHead>
                             )}
                             <TableHead>Società</TableHead>
-                            <TableHead>Anno</TableHead>
                             <TableHead>
                                 <Button variant="ghost" size="sm" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>
                                     Data Scadenza
                                     {sortOrder === 'desc' ? <ArrowDown className="ml-2 h-4 w-4" /> : <ArrowUp className="ml-2 h-4 w-4" />}
                                 </Button>
                             </TableHead>
+                            <TableHead>Data Pagamento</TableHead>
                             <TableHead>Descrizione</TableHead>
                             <TableHead>Categoria</TableHead>
                             <TableHead className="text-right">Importo Previsto</TableHead>
@@ -538,8 +538,8 @@ export default function ScadenzePage() {
                                         <TableCell>
                                             <Badge variant={scadenza.societa === 'LNC' ? 'default' : 'secondary'}>{scadenza.societa}</Badge>
                                         </TableCell>
-                                        <TableCell>{scadenza.anno}</TableCell>
                                         <TableCell className="whitespace-nowrap">{formatDate(scadenza.dataScadenza)}</TableCell>
+                                        <TableCell className="whitespace-nowrap">{scadenza.dataPagamento ? formatDate(scadenza.dataPagamento) : '-'}</TableCell>
                                         <TableCell>{scadenza.descrizione}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline">{scadenza.categoria}</Badge>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
+import { addMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 
 const chartConfig = {
   saldo: {
@@ -26,45 +27,67 @@ interface CashflowChartProps {
 
 export function CashflowChart({ data }: CashflowChartProps) {
   const chartData = useMemo(() => {
-    const { movements, incomeForecasts, expenseForecasts } = data;
-    const year = new Date().getFullYear();
-
-    // Calculate starting balance from all movements before the current year
-    let saldo = movements
-      .filter(m => new Date(m.data).getFullYear() < year)
-      .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    const { movements, incomeForecasts, expenseForecasts, deadlines } = data;
+    const today = new Date();
     
+    // Calculate starting balance from all historical data before this month
+    const startOfCurrentMonth = startOfMonth(today);
+    let saldo = movements
+      .filter(m => new Date(m.data) < startOfCurrentMonth)
+      .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+      
+    // Subtract paid deadlines from before this month
+    saldo -= deadlines
+        .filter(s => s.stato === 'Pagato' && s.dataPagamento && new Date(s.dataPagamento) < startOfCurrentMonth)
+        .reduce((acc, s) => acc + s.importoPagato, 0);
+
     const monthsData = Array.from({ length: 12 }, (_, i) => {
-        const monthName = new Date(year, i).toLocaleString('it-IT', { month: 'short' });
+        const targetMonthDate = addMonths(startOfCurrentMonth, i);
+        const monthStart = startOfMonth(targetMonthDate);
+        const monthEnd = endOfMonth(targetMonthDate);
+        const monthName = new Date(monthStart).toLocaleString('it-IT', { month: 'short' });
+
         let inflows = 0;
         let outflows = 0;
-        const today = new Date();
-        const isPastMonth = year < today.getFullYear() || (year === today.getFullYear() && i < today.getMonth());
-
-        if (isPastMonth) {
-            // Use historical data from movements
-             movements.forEach(mov => {
+        
+        // Use historical data for the current month up to today
+        if (i === 0) {
+            movements.forEach(mov => {
                 const movDate = new Date(mov.data);
-                if (movDate.getFullYear() === year && movDate.getMonth() === i) {
+                if (isWithinInterval(movDate, { start: monthStart, end: today })) {
                     inflows += mov.entrata || 0;
                     outflows += mov.uscita || 0;
                 }
             });
-        } else {
-             // Use forecast data
-            incomeForecasts.forEach(f => {
-                const forecastDate = new Date(f.dataPrevista);
-                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === i) {
-                    inflows += f.importoLordo * f.probabilita;
-                }
-            });
-            expenseForecasts.forEach(f => {
-                const forecastDate = new Date(f.dataScadenza);
-                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === i) {
-                    outflows += f.importoLordo * f.probabilita;
+            deadlines.forEach(s => {
+                if(s.stato === 'Pagato' && s.dataPagamento && isWithinInterval(new Date(s.dataPagamento), { start: monthStart, end: today })) {
+                    outflows += s.importoPagato;
                 }
             });
         }
+        
+        // Add forecasts for the future part of the current month and all future months
+        incomeForecasts.forEach(f => {
+            const forecastDate = new Date(f.dataPrevista);
+             if (isWithinInterval(forecastDate, { start: (i === 0 ? today : monthStart), end: monthEnd })) {
+                inflows += f.importoLordo * f.probabilita;
+            }
+        });
+        
+        expenseForecasts.forEach(f => {
+            const forecastDate = new Date(f.dataScadenza);
+             if (isWithinInterval(forecastDate, { start: (i === 0 ? today : monthStart), end: monthEnd })) {
+                outflows += f.importoLordo * f.probabilita;
+            }
+        });
+        
+        deadlines.forEach(s => {
+            const deadlineDate = new Date(s.dataScadenza);
+            if (s.stato !== 'Pagato' && isWithinInterval(deadlineDate, { start: (i === 0 ? today : monthStart), end: monthEnd })) {
+                outflows += (s.importoPrevisto - s.importoPagato);
+            }
+        })
+
 
         saldo = saldo + inflows - outflows;
         return {
@@ -79,9 +102,9 @@ export function CashflowChart({ data }: CashflowChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Andamento del Flusso di Cassa</CardTitle>
+        <CardTitle>Andamento del Flusso di Cassa (12 Mesi)</CardTitle>
         <CardDescription>
-          Proiezione del saldo di cassa per l'anno in corso basata su dati storici e previsionali.
+          Proiezione del saldo di cassa per i prossimi 12 mesi basata su dati storici e previsionali.
         </CardDescription>
       </CardHeader>
       <CardContent>

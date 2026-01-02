@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -17,18 +17,25 @@ interface CashflowDetailProps {
         movements: Movimento[];
         incomeForecasts: PrevisioneEntrata[];
         expenseForecasts: PrevisioneUscita[];
+        deadlines: Scadenza[];
     };
     isLoading: boolean;
 }
 
 export function CashflowDetail({ year, company, allData, isLoading }: CashflowDetailProps) {
     const { monthlyData, startingBalance } = useMemo(() => {
-        const { movements, incomeForecasts, expenseForecasts } = allData;
+        const { movements, incomeForecasts, expenseForecasts, deadlines } = allData;
 
         // 1. Calculate Starting Balance from all movements before the selected year
         let initialBalance = movements
             .filter(m => new Date(m.data).getFullYear() < year && (company === 'Tutte' || m.societa === company))
             .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+        
+        // Subtract paid deadlines from before this year as well
+        initialBalance -= deadlines
+            .filter(s => s.stato === 'Pagato' && s.dataPagamento && new Date(s.dataPagamento).getFullYear() < year && (company === 'Tutte' || s.societa === company))
+            .reduce((acc, s) => acc + s.importoPagato, 0);
+
 
         const data = Array.from({ length: 12 }, (_, i) => {
             const monthName = new Date(year, i).toLocaleString('it-IT', { month: 'long' });
@@ -47,6 +54,16 @@ export function CashflowDetail({ year, company, allData, isLoading }: CashflowDe
                         outflows += mov.uscita || 0;
                     }
                 });
+                // Add historical paid deadlines
+                deadlines.forEach(scad => {
+                    if (scad.stato === 'Pagato' && scad.dataPagamento) {
+                        const paymentDate = new Date(scad.dataPagamento);
+                        if(paymentDate.getFullYear() === year && paymentDate.getMonth() === i && (company === 'Tutte' || scad.societa === company)) {
+                            outflows += scad.importoPagato;
+                        }
+                    }
+                });
+
             } else {
                  // Use forecast data
                 incomeForecasts.forEach(f => {
@@ -61,6 +78,15 @@ export function CashflowDetail({ year, company, allData, isLoading }: CashflowDe
                         outflows += f.importoLordo * f.probabilita;
                     }
                 });
+                // Add unpaid deadlines
+                deadlines.forEach(scad => {
+                    const deadlineDate = new Date(scad.dataScadenza);
+                    if (deadlineDate.getFullYear() === year && deadlineDate.getMonth() === i && scad.stato !== 'Pagato') {
+                        if (company === 'Tutte' || scad.societa === company) {
+                            outflows += (scad.importoPrevisto - scad.importoPagato);
+                        }
+                    }
+                })
             }
 
             const closingBalance = initialBalance + inflows - outflows;
