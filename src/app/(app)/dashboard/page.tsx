@@ -1,9 +1,10 @@
 // src/app/(app)/dashboard/page.tsx
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
+import { endOfMonth, startOfMonth, addDays, isWithinInterval } from 'date-fns';
 
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { OverviewChart } from "@/components/dashboard/overview-chart";
@@ -13,8 +14,6 @@ import DashboardLoading from './loading';
 
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, Kpi } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
-import { Wallet, AlertTriangle, ArrowUp, TrendingUp } from 'lucide-react';
-
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
     if (!firestore || !user) return null;
@@ -57,44 +56,39 @@ export default function DashboardPage() {
     const safePrevisioniEntrate = previsioniEntrate || [];
     const safePrevisioniUscite = previsioniUscite || [];
 
+    const oggi = new Date();
+    const inizioMese = startOfMonth(oggi);
+    const fineMese = endOfMonth(oggi);
+    const trentaGiorni = addDays(oggi, 30);
+
     // 1. Liquidità Attuale
     const liquidita = safeMovimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
 
-    // 2. Scadenze
-    const oggi = new Date();
-    oggi.setHours(0, 0, 0, 0);
-    const trentaGiorni = new Date(oggi);
-    trentaGiorni.setDate(oggi.getDate() + 30);
-    const setteGiorni = new Date(oggi);
-    setteGiorni.setDate(oggi.getDate() + 7);
-
+    // 2. Scadenze nei prossimi 30 giorni
     const scadenzeNei30gg = safeScadenze.filter(s => {
         const dataScadenza = new Date(s.dataScadenza);
-        return dataScadenza >= oggi && dataScadenza <= trentaGiorni && s.stato !== 'Pagato';
+        return isWithinInterval(dataScadenza, { start: oggi, end: trentaGiorni }) && s.stato !== 'Pagato';
     });
     
     const importoScadenze30gg = scadenzeNei30gg.reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
-    const scadenze7ggCount = scadenzeNei30gg.filter(s => new Date(s.dataScadenza) <= setteGiorni).length;
+    const scadenze7ggCount = scadenzeNei30gg.filter(s => new Date(s.dataScadenza) <= addDays(oggi, 7)).length;
 
     // 3. Previsioni Entrate e Uscite per il mese corrente
-    const currentMonth = oggi.getMonth();
-    const currentYear = oggi.getFullYear();
-    
     const previsioniEntrateMese = safePrevisioniEntrate
       .filter(p => {
         const dataPrevista = new Date(p.dataPrevista);
-        return dataPrevista.getMonth() === currentMonth && dataPrevista.getFullYear() === currentYear;
+        return isWithinInterval(dataPrevista, { start: inizioMese, end: fineMese });
       })
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
 
     const previsioniUsciteMese = safePrevisioniUscite
       .filter(p => {
         const dataScadenza = new Date(p.dataScadenza);
-        return dataScadenza.getMonth() === currentMonth && dataScadenza.getFullYear() === currentYear;
+        return isWithinInterval(dataScadenza, { start: inizioMese, end: fineMese });
       })
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
       
-    // 4. Cash Flow Previsto
+    // 4. Cash Flow Previsto a fine mese
     const cashFlowPrevisto = liquidita + previsioniEntrateMese - previsioniUsciteMese - importoScadenze30gg;
 
     return [
@@ -128,7 +122,6 @@ export default function DashboardPage() {
         textColor: 'text-indigo-800 dark:text-indigo-200'
       }
     ];
-
   }, [movimenti, scadenze, previsioniEntrate, previsioniUscite]);
 
 
@@ -148,7 +141,7 @@ export default function DashboardPage() {
           <OverviewChart data={allData} />
         </div>
         <div className="lg:col-span-1">
-          <AiInsights />
+          <AiInsights allData={allData} company={user?.company || 'Tutte'} />
         </div>
       </div>
        <div className="grid grid-cols-1 gap-6">
