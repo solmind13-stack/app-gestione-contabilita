@@ -14,17 +14,11 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
 
 const profileFormSchema = z.object({
   firstName: z.string().min(2, 'Il nome è obbligatorio.'),
   lastName: z.string().min(2, 'Il cognome è obbligatorio.'),
   email: z.string().email(),
-  notificationPreferences: z.object({
-    notifyOnNewMovement: z.boolean().default(false),
-    notifyOnDeadline: z.boolean().default(false),
-  }).optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -41,10 +35,6 @@ export default function ProfiloPage() {
       firstName: '',
       lastName: '',
       email: '',
-      notificationPreferences: {
-        notifyOnNewMovement: false,
-        notifyOnDeadline: false,
-      }
     },
   });
 
@@ -54,10 +44,6 @@ export default function ProfiloPage() {
         firstName: user.firstName || '',
         lastName: user.lastName || '',
         email: user.email || '',
-        notificationPreferences: user.notificationPreferences || {
-            notifyOnNewMovement: false,
-            notifyOnDeadline: false,
-        }
       });
     }
   }, [user, form]);
@@ -79,7 +65,6 @@ export default function ProfiloPage() {
         firstName: data.firstName,
         lastName: data.lastName,
         displayName: `${data.firstName} ${data.lastName}`,
-        notificationPreferences: data.notificationPreferences,
       });
       toast({
         title: 'Profilo Aggiornato',
@@ -122,7 +107,7 @@ export default function ProfiloPage() {
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">Mio Profilo</h1>
       <p className="text-muted-foreground mb-8">
-        Visualizza e aggiorna le tue informazioni personali e le preferenze.
+        Visualizza e aggiorna le tue informazioni personali.
       </p>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <div className="space-y-8">
@@ -178,71 +163,19 @@ export default function ProfiloPage() {
                   />
                </div>
             </CardContent>
+             <CardFooter>
+                 <Button type="submit" disabled={isSaving || !form.formState.isDirty}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvataggio...
+                    </>
+                  ) : (
+                    'Salva Modifiche'
+                  )}
+                </Button>
+            </CardFooter>
           </Card>
-
-          <Card>
-            <CardHeader>
-                <CardTitle>Preferenze di Notifica</CardTitle>
-                <CardDescription>
-                    Scegli quali notifiche ricevere via email. La funzionalità di invio è in sviluppo.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <FormField
-                    control={form.control}
-                    name="notificationPreferences.notifyOnNewMovement"
-                    render={({ field }) => (
-                        <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                            <div className="space-y-0.5">
-                                <FormLabel className="text-base">Nuovi Movimenti</FormLabel>
-                                <p className="text-sm text-muted-foreground">
-                                   Ricevi un'email quando viene aggiunto un nuovo movimento.
-                                </p>
-                            </div>
-                            <FormControl>
-                                <Switch
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                />
-                            </FormControl>
-                        </FormItem>
-                    )}
-                />
-                 <FormField
-                    control={form.control}
-                    name="notificationPreferences.notifyOnDeadline"
-                    render={({ field }) => (
-                        <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                            <div className="space-y-0.5">
-                                <FormLabel className="text-base">Scadenze Imminenti</FormLabel>
-                                 <p className="text-sm text-muted-foreground">
-                                    Ricevi un promemoria per le scadenze in avvicinamento.
-                                </p>
-                            </div>
-                            <FormControl>
-                                <Switch
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                />
-                            </FormControl>
-                        </FormItem>
-                    )}
-                />
-            </CardContent>
-          </Card>
-          
-          <div className="flex justify-start">
-            <Button type="submit" disabled={isSaving || !form.formState.isDirty}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Salvataggio...
-                </>
-              ) : (
-                'Salva Modifiche'
-              )}
-            </Button>
-          </div>
         </div>
       </form>
     </div>
