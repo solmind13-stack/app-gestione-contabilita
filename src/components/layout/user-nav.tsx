@@ -1,3 +1,4 @@
+// src/components/layout/user-nav.tsx
 "use client";
 
 import {
@@ -90,14 +91,16 @@ export function UserNav() {
           </>
         )}
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push('/impostazioni')}>
+          <DropdownMenuItem onClick={() => router.push('/profilo')}>
             <User className="mr-2 h-4 w-4" />
             <span>Profilo</span>
           </DropdownMenuItem>
-           <DropdownMenuItem onClick={() => router.push('/impostazioni')}>
-            <Settings className="mr-2 h-4 w-4" />
-            <span>Impostazioni</span>
-          </DropdownMenuItem>
+           {user?.role === 'admin' && (
+            <DropdownMenuItem onClick={() => router.push('/impostazioni')}>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Impostazioni</span>
+            </DropdownMenuItem>
+           )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
