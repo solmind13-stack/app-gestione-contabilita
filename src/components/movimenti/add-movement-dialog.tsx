@@ -80,6 +80,7 @@ export function AddMovementDialog({
 }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const { toast } = useToast();
 
   const isEditMode = !!movementToEdit;
@@ -216,7 +217,7 @@ export function AddMovementDialog({
                     render={({ field }) => (
                         <FormItem className="flex flex-col">
                         <FormLabel>Data Movimento</FormLabel>
-                        <Popover>
+                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                             <PopoverTrigger asChild>
                             <FormControl>
                                 <Button
@@ -241,10 +242,7 @@ export function AddMovementDialog({
                                 selected={field.value}
                                 onSelect={(date) => {
                                   field.onChange(date);
-                                  // This assumes you have a way to close the popover.
-                                  // One common way is to manage open state outside.
-                                  // For simplicity, we'll let it be. A more complex solution
-                                  // would be needed for perfect UX.
+                                  setIsCalendarOpen(false);
                                 }}
                                 disabled={(date) =>
                                 date > new Date() || date < new Date("1900-01-01")
