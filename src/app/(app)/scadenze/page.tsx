@@ -53,7 +53,7 @@ const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' |
             return query(q, where('societa', '==', company));
         }
     } else if (user.role === 'company' || user.role === 'company-editor') {
-        if (!user.company) return null;
+        if (!user.company) return null; // Should not happen if user is set up correctly
         return query(q, where('societa', '==', user.company));
     }
 
@@ -192,6 +192,9 @@ export default function ScadenzePage() {
             setSelectedIds(prev => prev.filter(rowId => rowId !== id));
         }
     };
+    
+    const oggi = new Date();
+    oggi.setHours(0, 0, 0, 0);
 
     const { 
         filteredScadenze,
@@ -222,8 +225,6 @@ export default function ScadenzePage() {
                 return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
             });
 
-        const oggi = new Date();
-        oggi.setHours(0, 0, 0, 0);
         const setteGiorni = new Date(oggi);
         setteGiorni.setDate(oggi.getDate() + 7);
 
@@ -263,7 +264,7 @@ export default function ScadenzePage() {
                 conteggio: scadenzeOverdue.length
             }
         };
-    }, [scadenze, searchTerm, sortOrder, selectedYear, selectedCategory, selectedStatus, selectedRecurrence]);
+    }, [scadenze, searchTerm, sortOrder, selectedYear, selectedCategory, selectedStatus, selectedRecurrence, oggi]);
 
     const getPageTitle = () => {
         if (selectedCompany === 'Tutte') return 'Scadenze';
