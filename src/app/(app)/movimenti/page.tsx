@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc } from 'firebase/firestore';
+import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction } from 'firebase/firestore';
 
 import {
   Card,
@@ -33,7 +33,7 @@ import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Movimento, Riepilogo, AppUser } from '@/lib/types';
+import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
@@ -69,8 +69,15 @@ export default function MovimentiPage() {
     const firestore = useFirestore();
     
     const movimentiQuery = useMemo(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const deadlinesQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
+    const expenseForecastsQuery = useMemo(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
+    const incomeForecastsQuery = useMemo(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
+    
 
     const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
+    const { data: deadlines } = useCollection<Scadenza>(deadlinesQuery);
+    const { data: expenseForecasts } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
+    const { data: incomeForecasts } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
 
     const [isSeeding, setIsSeeding] = useState(false);
     const [movementToDelete, setMovementToDelete] = useState<Movimento | null>(null);
@@ -113,20 +120,66 @@ export default function MovimentiPage() {
         setIsAddDialogOpen(true);
     }
     
-    const handleAddMovement = async (newMovementData: Omit<Movimento, 'id' | 'createdBy' | 'createdAt' | 'updatedAt' | 'inseritoDa'>) => {
+    const handleAddMovement = async (newMovementData: Omit<Movimento, 'id'>, linkedItemId?: string) => {
         if (!user || !firestore) return;
+        
         try {
-            await addDoc(collection(firestore, 'movements'), {
-                ...newMovementData,
-                createdBy: user.uid,
-                inseritoDa: user.displayName,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+            await runTransaction(firestore, async (transaction) => {
+                // 1. Create the new movement
+                const newMovementRef = doc(collection(firestore, "movements"));
+                const movementPayload: Omit<Movimento, 'id'> = {
+                    ...newMovementData,
+                    createdBy: user.uid,
+                    inseritoDa: user.displayName,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    linkedTo: linkedItemId,
+                };
+                transaction.set(newMovementRef, movementPayload);
+
+                // 2. If a link is provided, update the linked document
+                if (linkedItemId) {
+                    const [collectionName, docId] = linkedItemId.split('/');
+                    if (!collectionName || !docId) throw new Error("Invalid linked item ID format.");
+
+                    const linkedDocRef = doc(firestore, collectionName, docId);
+                    const linkedDoc = await transaction.get(linkedDocRef);
+
+                    if (!linkedDoc.exists()) {
+                        throw new Error("Documento collegato non trovato!");
+                    }
+
+                    if (collectionName === 'deadlines' || collectionName === 'expenseForecasts') {
+                        const data = linkedDoc.data() as Scadenza | PrevisioneUscita;
+                        const movementAmount = newMovementData.uscita;
+                        const newPaidAmount = (data.importoPagato || 0) + movementAmount;
+                        const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : 'Parziale';
+                        
+                        transaction.update(linkedDocRef, {
+                            importoPagato: newPaidAmount,
+                            stato: newStatus,
+                            dataPagamento: newMovementData.data
+                        });
+                    } else if (collectionName === 'incomeForecasts') {
+                        const data = linkedDoc.data() as PrevisioneEntrata;
+                        const movementAmount = newMovementData.entrata;
+                        const newReceivedAmount = (data.importoEffettivo || 0) + movementAmount;
+                        const newStatus = newReceivedAmount >= data.importoLordo ? 'Incassato' : 'Parziale';
+
+                        transaction.update(linkedDocRef, {
+                            importoEffettivo: newReceivedAmount,
+                            stato: newStatus,
+                            dataIncasso: newMovementData.data
+                        });
+                    }
+                }
             });
-            toast({ title: "Movimento Aggiunto", description: "Il nuovo movimento è stato salvato." });
+            
+            toast({ title: "Operazione Completata", description: "Il movimento è stato salvato e i dati collegati sono stati aggiornati." });
+
         } catch (error) {
-            console.error("Error adding movement: ", error);
-            toast({ variant: 'destructive', title: 'Errore Salvataggio', description: 'Impossibile salvare il movimento. Controlla i permessi.' });
+            console.error("Error in transaction: ", error);
+            toast({ variant: 'destructive', title: 'Errore Transazione', description: `Impossibile completare l'operazione. ${error}` });
         }
     };
 
@@ -314,6 +367,9 @@ export default function MovimentiPage() {
             movementToEdit={editingMovement}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : user?.company}
             currentUser={user!}
+            deadlines={deadlines || []}
+            expenseForecasts={expenseForecasts || []}
+            incomeForecasts={incomeForecasts || []}
         />
         <ImportMovementsDialog
             isOpen={isImportDialogOpen}

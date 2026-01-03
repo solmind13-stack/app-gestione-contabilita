@@ -41,6 +41,7 @@ import { CATEGORIE_USCITE, CERTEZZA_LIVELLI, STATI_USCITE, RICORRENZE_USCITE, IV
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
   dataScadenza: z.string().min(1, 'Seleziona una data'),
+  dataPagamento: z.string().nullable().optional(),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importoLordo: z.coerce.number().positive('L\'importo deve essere positivo'),
   importoEffettivo: z.coerce.number().min(0).optional(),
@@ -89,6 +90,7 @@ export function AddExpenseForecastDialog({
         form.reset({
           societa: forecastToEdit.societa,
           dataScadenza: format(new Date(forecastToEdit.dataScadenza), 'yyyy-MM-dd'),
+          dataPagamento: forecastToEdit.dataPagamento ? format(new Date(forecastToEdit.dataPagamento), 'yyyy-MM-dd') : null,
           descrizione: forecastToEdit.descrizione,
           importoLordo: forecastToEdit.importoLordo,
           importoEffettivo: forecastToEdit.importoEffettivo || 0,
@@ -106,6 +108,7 @@ export function AddExpenseForecastDialog({
         form.reset({
           societa: defaultCompany || 'LNC',
           dataScadenza: format(new Date(), 'yyyy-MM-dd'),
+          dataPagamento: null,
           descrizione: '',
           importoLordo: 0,
           importoEffettivo: 0,
@@ -129,6 +132,7 @@ export function AddExpenseForecastDialog({
         ...data,
         mese: format(new Date(data.dataScadenza), 'MMMM', {locale: it}),
         dataScadenza: data.dataScadenza,
+        dataPagamento: data.dataPagamento || null,
         anno: new Date(data.dataScadenza).getFullYear(),
         sottocategoria: data.sottocategoria || '',
         importoEffettivo: data.importoEffettivo || 0,
@@ -221,9 +225,22 @@ export function AddExpenseForecastDialog({
                 )} />
             </div>
              
-            {isEditMode && <FormField control={form.control} name="stato" render={({ field }) => (
-                <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI_USCITE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
-            )} />}
+            {isEditMode && 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField control={form.control} name="stato" render={({ field }) => (
+                  <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI_USCITE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+              )} />
+               <FormField control={form.control} name="dataPagamento" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Data Pagamento</FormLabel>
+                        <FormControl>
+                            <Input type="date" {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+            </div>
+            }
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="ricorrenza" render={({ field }) => (

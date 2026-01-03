@@ -1,7 +1,7 @@
 // src/components/movimenti/add-movement-dialog.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -36,7 +36,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { useToast } from '@/hooks/use-toast';
-import type { Movimento, AppUser } from '@/lib/types';
+import type { Movimento, AppUser, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { it } from 'date-fns/locale';
 import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
 
@@ -53,6 +53,7 @@ const FormSchema = z.object({
   operatore: z.string().optional(),
   metodoPag: z.string().optional(),
   note: z.string().optional(),
+  linkedTo: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof FormSchema>;
@@ -60,11 +61,14 @@ type FormValues = z.infer<typeof FormSchema>;
 interface AddMovementDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onAddMovement: (movement: Omit<Movimento, 'id'>) => Promise<void>;
+  onAddMovement: (movement: Omit<Movimento, 'id'>, linkedItemId?: string) => Promise<void>;
   onEditMovement: (movement: Movimento) => Promise<void>;
   movementToEdit?: Movimento | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
+  deadlines: Scadenza[];
+  expenseForecasts: PrevisioneUscita[];
+  incomeForecasts: PrevisioneEntrata[];
 }
 
 export function AddMovementDialog({
@@ -75,6 +79,9 @@ export function AddMovementDialog({
   movementToEdit,
   defaultCompany,
   currentUser,
+  deadlines,
+  expenseForecasts,
+  incomeForecasts
 }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -102,6 +109,7 @@ export function AddMovementDialog({
           operatore: movementToEdit.operatore || '',
           metodoPag: movementToEdit.metodoPag || '',
           note: movementToEdit.note || '',
+          linkedTo: movementToEdit.linkedTo || '',
         });
       } else {
         form.reset({
@@ -117,14 +125,62 @@ export function AddMovementDialog({
           operatore: '',
           metodoPag: '',
           note: '',
+          linkedTo: '',
         });
       }
     }
   }, [isOpen, isEditMode, movementToEdit, defaultCompany, currentUser, form]);
 
+  const watchedTipo = form.watch('tipo');
+
+  const linkableItems = useMemo((): LinkableItem[] => {
+    let items: LinkableItem[] = [];
+    
+    if (watchedTipo === 'uscita') {
+        const openDeadlines = (deadlines || [])
+            .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato')
+            .map(d => ({
+                id: d.id,
+                type: 'deadlines' as const,
+                description: d.descrizione,
+                date: d.dataScadenza,
+                amount: d.importoPrevisto - d.importoPagato,
+                societa: d.societa
+            }));
+
+        const openExpenseForecasts = (expenseForecasts || [])
+            .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato')
+            .map(f => ({
+                id: f.id,
+                type: 'expenseForecasts' as const,
+                description: f.descrizione,
+                date: f.dataScadenza,
+                amount: f.importoLordo - (f.importoEffettivo || 0),
+                societa: f.societa
+            }));
+            
+        items = [...openDeadlines, ...openExpenseForecasts];
+    } else { // entrata
+        items = (incomeForecasts || [])
+            .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato')
+            .map(f => ({
+                id: f.id,
+                type: 'incomeForecasts' as const,
+                description: f.descrizione,
+                date: f.dataPrevista,
+                amount: f.importoLordo - (f.importoEffettivo || 0),
+                societa: f.societa
+            }));
+    }
+
+    return items.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  }, [watchedTipo, deadlines, expenseForecasts, incomeForecasts]);
+
+
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
-    const dataToSave: Omit<Movimento, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
+    const dataToSave: Omit<Movimento, 'id'> = {
         societa: data.societa,
         data: data.data,
         anno: new Date(data.data).getFullYear(),
@@ -138,13 +194,12 @@ export function AddMovementDialog({
         operatore: data.operatore || '',
         metodoPag: data.metodoPag || '',
         note: data.note || '',
-        // 'inseritoDa' and 'createdBy' will be set in the parent component
     };
 
     if (isEditMode && movementToEdit) {
-        await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy });
+        await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy, linkedTo: data.linkedTo });
     } else {
-        await onAddMovement(dataToSave);
+        await onAddMovement(dataToSave, data.linkedTo);
     }
     setIsSubmitting(false);
     setIsOpen(false);
@@ -159,12 +214,10 @@ export function AddMovementDialog({
     setIsCategorizing(true);
     try {
       const result = await categorizeTransaction({ description });
-      if (result) {
-        form.setValue('categoria', result.category, { shouldValidate: true });
-        form.setValue('sottocategoria', result.subcategory, { shouldValidate: true });
-        form.setValue('iva', result.ivaPercentage, { shouldValidate: true });
-        toast({ title: 'Categorizzazione AI completata!', description: 'Controlla i campi suggeriti.', className: 'bg-green-100 dark:bg-green-900' });
-      }
+      form.setValue('categoria', result.category, { shouldValidate: true });
+      form.setValue('sottocategoria', result.subcategory, { shouldValidate: true });
+      form.setValue('iva', result.ivaPercentage, { shouldValidate: true });
+      toast({ title: 'Categorizzazione AI completata!', description: 'Controlla i campi suggeriti.', className: 'bg-green-100 dark:bg-green-900' });
     } catch (error) {
       console.error("Error during AI categorization:", error);
       toast({ variant: 'destructive', title: 'Errore AI', description: 'Impossibile suggerire una categoria in questo momento.' });
@@ -181,7 +234,7 @@ export function AddMovementDialog({
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Modifica Movimento' : 'Aggiungi Nuovo Movimento'}</DialogTitle>
           <DialogDescription>
-             {isEditMode ? 'Modifica i dettagli della transazione.' : 'Inserisci i dettagli della transazione. Usa l\'assistente AI per una categorizzazione rapida.'}
+             {isEditMode ? 'Modifica i dettagli della transazione.' : 'Inserisci i dettagli della transazione. Puoi collegare questo movimento a una scadenza o previsione esistente.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -278,6 +331,32 @@ export function AddMovementDialog({
                     )}
                 />
             </div>
+
+             <FormField
+                control={form.control}
+                name="linkedTo"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Collega a Voce Esistente (Opzionale)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isEditMode}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Seleziona per collegare il pagamento a una previsione/scadenza..." />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="">Nessun collegamento</SelectItem>
+                            {linkableItems.map(item => (
+                                <SelectItem key={`${item.type}-${item.id}`} value={`${item.type}/${item.id}`}>
+                                    {`(${item.societa}) ${item.description} - ${format(new Date(item.date), 'dd/MM/yy')} - €${item.amount.toFixed(2)}`}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField

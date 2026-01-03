@@ -237,7 +237,7 @@ export default function ScadenzePage() {
             return dataScadenza >= oggi && dataScadenza <= setteGiorni && s.stato !== 'Pagato';
         });
 
-        const scadenzeOverdue = filtered.filter(s => new Date(s.dataScadenza) < oggi && s.stato !== 'Pagato');
+        const scadenzeOverdue = filtered.filter(s => new Date(s.dataScadenza) < oggi && s.stato !== 'Pagato' && s.stato !== 'Annullato');
 
         const totalePrevisto = filtered.reduce((acc, s) => acc + s.importoPrevisto, 0);
         const totalePagato = filtered.reduce((acc, s) => acc + s.importoPagato, 0);
@@ -522,7 +522,7 @@ export default function ScadenzePage() {
                             filteredScadenze.map((scadenza) => {
                                 const isSelected = selectedIds.includes(scadenza.id);
                                 return (
-                                    <TableRow key={scadenza.id} data-state={isSelected ? "selected" : ""} className={cn(new Date(scadenza.dataScadenza) < new Date() && scadenza.stato !== 'Pagato' && 'bg-red-50 dark:bg-red-900/20')}>
+                                    <TableRow key={scadenza.id} data-state={isSelected ? "selected" : ""} className={cn(new Date(scadenza.dataScadenza) < oggi && scadenza.stato !== 'Pagato' && scadenza.stato !== 'Annullato' && 'bg-red-50 dark:bg-red-900/20')}>
                                         {user?.role === 'admin' && (
                                             <TableCell padding="checkbox">
                                                 <Checkbox
@@ -549,6 +549,7 @@ export default function ScadenzePage() {
                                                 "bg-green-600 hover:bg-green-700 text-white": scadenza.stato === 'Pagato',
                                                 "bg-red-600 hover:bg-red-700 text-white": scadenza.stato === 'Da pagare',
                                                 "bg-yellow-500 hover:bg-yellow-600 text-white": scadenza.stato === 'Parziale',
+                                                "bg-gray-500 hover:bg-gray-600 text-white": scadenza.stato === 'Annullato',
                                             })}
                                             >{scadenza.stato}</Badge>
                                         </TableCell>

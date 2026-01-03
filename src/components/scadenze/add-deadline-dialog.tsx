@@ -50,7 +50,7 @@ const FormSchema = z.object({
   importoPagato: z.coerce.number().min(0).optional(),
   categoria: z.string().min(1, 'La categoria è obbligatoria'),
   ricorrenza: z.enum(['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale']),
-  stato: z.enum(['Pagato', 'Da pagare', 'Parziale']),
+  stato: z.enum(['Pagato', 'Da pagare', 'Parziale', 'Annullato']),
   note: z.string().optional(),
 });
 
@@ -120,6 +120,9 @@ export function AddDeadlineDialog({
   useEffect(() => {
     const importoPagato = watchedImportoPagato || 0;
     const importoPrevisto = watchedImportoPrevisto || 0;
+
+    const currentStatus = form.getValues('stato');
+    if (currentStatus === 'Annullato') return;
 
     if (importoPagato > 0) {
         if (importoPagato >= importoPrevisto) {
@@ -295,9 +298,17 @@ export function AddDeadlineDialog({
                   render={({ field }) => (
                       <FormItem>
                       <FormLabel>Stato</FormLabel>
-                      <FormControl>
-                        <Input {...field} readOnly className="bg-muted font-bold" />
-                      </FormControl>
+                       <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                            {STATI_SCADENZE.map(stato => <SelectItem key={stato} value={stato}>{stato}</SelectItem>)}
+                             <SelectItem value="Annullato">Annullato</SelectItem>
+                            </SelectContent>
+                        </Select>
                       <FormMessage />
                       </FormItem>
                   )}

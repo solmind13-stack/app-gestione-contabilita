@@ -41,6 +41,7 @@ import { CATEGORIE_ENTRATE, CERTEZZA_LIVELLI, STATI_ENTRATE, IVA_PERCENTAGES } f
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
   dataPrevista: z.string().min(1, 'Seleziona una data'),
+  dataIncasso: z.string().nullable().optional(),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importoLordo: z.coerce.number().positive('L\'importo deve essere positivo'),
   importoEffettivo: z.coerce.number().min(0).optional(),
@@ -87,6 +88,7 @@ export function AddIncomeForecastDialog({
         form.reset({
           societa: forecastToEdit.societa,
           dataPrevista: format(new Date(forecastToEdit.dataPrevista), 'yyyy-MM-dd'),
+          dataIncasso: forecastToEdit.dataIncasso ? format(new Date(forecastToEdit.dataIncasso), 'yyyy-MM-dd') : null,
           descrizione: forecastToEdit.descrizione,
           importoLordo: forecastToEdit.importoLordo,
           importoEffettivo: forecastToEdit.importoEffettivo || 0,
@@ -102,6 +104,7 @@ export function AddIncomeForecastDialog({
         form.reset({
           societa: defaultCompany || 'LNC',
           dataPrevista: format(new Date(), 'yyyy-MM-dd'),
+          dataIncasso: null,
           descrizione: '',
           importoLordo: 0,
           importoEffettivo: 0,
@@ -123,6 +126,7 @@ export function AddIncomeForecastDialog({
         ...data,
         mese: format(new Date(data.dataPrevista), 'MMMM', {locale: it}),
         dataPrevista: data.dataPrevista,
+        dataIncasso: data.dataIncasso || null,
         anno: new Date(data.dataPrevista).getFullYear(),
         importoEffettivo: data.importoEffettivo || 0,
     };
@@ -214,9 +218,22 @@ export function AddIncomeForecastDialog({
                 )} />
             </div>
              
-            {isEditMode && <FormField control={form.control} name="stato" render={({ field }) => (
-                <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI_ENTRATE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
-            )} />}
+            {isEditMode && 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField control={form.control} name="stato" render={({ field }) => (
+                  <FormItem><FormLabel>Stato</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{STATI_ENTRATE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+              )} />
+               <FormField control={form.control} name="dataIncasso" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Data Incasso</FormLabel>
+                        <FormControl>
+                            <Input type="date" {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+            </div>
+            }
 
             <FormField control={form.control} name="note" render={({ field }) => (
                 <FormItem><FormLabel>Note</FormLabel><FormControl><Textarea placeholder="Aggiungi note..." {...field} /></FormControl><FormMessage /></FormItem>

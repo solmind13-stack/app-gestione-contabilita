@@ -51,6 +51,7 @@ export type Movimento = {
     inseritoDa?: string; // Display name of user who created/edited it
     createdAt?: string;
     updatedAt?: string;
+    linkedTo?: string; // Format: 'collectionName/documentId' e.g., 'deadlines/xyz123'
 };
 
 export type Riepilogo = {
@@ -93,7 +94,7 @@ export type Scadenza = {
   categoria: string;
   importoPrevisto: number;
   importoPagato: number;
-  stato: 'Pagato' | 'Da pagare' | 'Parziale';
+  stato: 'Pagato' | 'Da pagare' | 'Parziale' | 'Annullato';
   ricorrenza: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
   note?: string;
   createdBy?: string;
@@ -114,6 +115,7 @@ export type PrevisioneEntrata = {
   anno: number;
   mese: string;
   dataPrevista: string;
+  dataIncasso?: string | null;
   descrizione: string;
   categoria: string;
   sottocategoria: string;
@@ -141,6 +143,7 @@ export type PrevisioneUscita = {
   anno: number;
   mese: string;
   dataScadenza: string;
+  dataPagamento?: string | null;
   descrizione: string;
   categoria: string;
   sottocategoria: string;
@@ -187,3 +190,13 @@ export type AppSettings = {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// Used in the AddMovementDialog to populate the dropdown for linking movements
+export type LinkableItem = {
+    id: string;
+    type: 'deadlines' | 'expenseForecasts' | 'incomeForecasts';
+    description: string;
+    date: string;
+    amount: number;
+    societa: 'LNC' | 'STG';
+};
