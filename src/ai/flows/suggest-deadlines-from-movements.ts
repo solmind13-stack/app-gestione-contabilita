@@ -81,8 +81,13 @@ const suggestDeadlinesFlow = ai.defineFlow(
     if (filteredMovements.length === 0) {
         return { suggestions: [] };
     }
-
-    const {output} = await prompt({ movements: filteredMovements });
-    return output!;
+    
+    try {
+        const {output} = await prompt({ movements: filteredMovements });
+        return output!;
+    } catch (error) {
+        console.error('Error in suggestDeadlinesFlow:', error);
+        return { suggestions: [] }; // Return empty array on error
+    }
   }
 );

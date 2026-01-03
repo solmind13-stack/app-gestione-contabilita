@@ -68,25 +68,30 @@ const importTransactionsFlow = ai.defineFlow(
     outputSchema: ImportTransactionsOutputSchema,
   },
   async (input) => {
-    const { output } = await prompt(input);
-    
-    if (!output || !output.movements) {
+    try {
+      const { output } = await prompt(input);
+      
+      if (!output || !output.movements) {
+          return { movements: [] };
+      }
+
+      // Post-process to fill in missing details and ensure consistency
+      const cleanedMovements = output.movements.map(mov => {
+          const today = new Date();
+          return {
+              ...mov,
+              societa: mov.societa || input.company,
+              anno: new Date(mov.data).getFullYear(),
+              categoria: mov.categoria || 'Da categorizzare',
+              sottocategoria: mov.sottocategoria || 'Da categorizzare',
+              iva: mov.iva === undefined ? 0.22 : mov.iva,
+          };
+      });
+
+      return { movements: cleanedMovements };
+    } catch(e) {
+        console.error("Error in importTransactionsFlow", e);
         return { movements: [] };
     }
-
-    // Post-process to fill in missing details and ensure consistency
-    const cleanedMovements = output.movements.map(mov => {
-        const today = new Date();
-        return {
-            ...mov,
-            societa: mov.societa || input.company,
-            anno: new Date(mov.data).getFullYear(),
-            categoria: mov.categoria || 'Da categorizzare',
-            sottocategoria: mov.sottocategoria || 'Da categorizzare',
-            iva: mov.iva === undefined ? 0.22 : mov.iva,
-        };
-    });
-
-    return { movements: cleanedMovements };
   }
 );
