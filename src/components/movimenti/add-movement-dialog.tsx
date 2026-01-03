@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -39,6 +39,13 @@ import { useToast } from '@/hooks/use-toast';
 import type { Movimento, AppUser, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { it } from 'date-fns/locale';
 import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
+import { suggestMovementLink } from '@/ai/flows/suggest-movement-link-flow';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
+import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '../ui/table';
+import { Badge } from '../ui/badge';
+
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -47,7 +54,7 @@ const FormSchema = z.object({
   importo: z.coerce.number().refine(val => val !== 0, 'L\'importo non può essere zero'),
   tipo: z.enum(['entrata', 'uscita']),
   categoria: z.string().min(1, 'La categoria è obbligatoria'),
-  sottocategoria: z.string().min(1, 'La sottocategoria è obbligatoria'),
+  sottocategoria: z.string(),
   iva: z.coerce.number().min(0).max(1),
   conto: z.string().optional(),
   operatore: z.string().optional(),
@@ -66,7 +73,7 @@ interface AddMovementDialogProps {
   movementToEdit?: Movimento | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
-  deadlines: Scadenza[];
+  scadenze: Scadenza[];
   expenseForecasts: PrevisioneUscita[];
   incomeForecasts: PrevisioneEntrata[];
 }
@@ -79,13 +86,17 @@ export function AddMovementDialog({
   movementToEdit,
   defaultCompany,
   currentUser,
-  deadlines,
+  scadenze,
   expenseForecasts,
   incomeForecasts
 }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const [aiSuggestions, setAiSuggestions] = useState<LinkableItem[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<string | undefined>(undefined);
+  const [showSuggestionDialog, setShowSuggestionDialog] = useState(false);
   
   const isEditMode = !!movementToEdit;
 
@@ -93,9 +104,8 @@ export function AddMovementDialog({
     resolver: zodResolver(FormSchema),
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      if (isEditMode && movementToEdit) {
+  const resetForm = useCallback(() => {
+     if (isEditMode && movementToEdit) {
         form.reset({
           societa: movementToEdit.societa,
           data: format(new Date(movementToEdit.data), 'yyyy-MM-dd'),
@@ -103,7 +113,7 @@ export function AddMovementDialog({
           importo: movementToEdit.entrata > 0 ? movementToEdit.entrata : movementToEdit.uscita,
           tipo: movementToEdit.entrata > 0 ? 'entrata' : 'uscita',
           categoria: movementToEdit.categoria,
-          sottocategoria: movementToEdit.sottocategoria,
+          sottocategoria: movementToEdit.sottocategoria || '',
           iva: movementToEdit.iva,
           conto: movementToEdit.conto || '',
           operatore: movementToEdit.operatore || '',
@@ -113,7 +123,7 @@ export function AddMovementDialog({
         });
       } else {
         form.reset({
-          societa: defaultCompany,
+          societa: defaultCompany || 'LNC',
           data: format(new Date(), 'yyyy-MM-dd'),
           descrizione: '',
           importo: 0,
@@ -128,24 +138,30 @@ export function AddMovementDialog({
           linkedTo: '',
         });
       }
+  }, [isOpen, isEditMode, movementToEdit, defaultCompany, form]);
+
+  useEffect(() => {
+    if (isOpen) {
+      resetForm();
     }
-  }, [isOpen, isEditMode, movementToEdit, defaultCompany, currentUser, form]);
+  }, [isOpen, resetForm]);
 
   const watchedTipo = form.watch('tipo');
 
-  const linkableItems = useMemo((): LinkableItem[] => {
+  const openItems = useMemo((): LinkableItem[] => {
     let items: LinkableItem[] = [];
     
     if (watchedTipo === 'uscita') {
-        const openDeadlines = (deadlines || [])
+        const openDeadlines = (scadenze || [])
             .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato')
             .map(d => ({
                 id: d.id,
-                type: 'deadlines' as const,
+                type: 'scadenze' as const,
                 description: d.descrizione,
                 date: d.dataScadenza,
                 amount: d.importoPrevisto - d.importoPagato,
-                societa: d.societa
+                societa: d.societa,
+                status: d.stato,
             }));
 
         const openExpenseForecasts = (expenseForecasts || [])
@@ -156,7 +172,8 @@ export function AddMovementDialog({
                 description: f.descrizione,
                 date: f.dataScadenza,
                 amount: f.importoLordo - (f.importoEffettivo || 0),
-                societa: f.societa
+                societa: f.societa,
+                status: f.stato,
             }));
             
         items = [...openDeadlines, ...openExpenseForecasts];
@@ -169,16 +186,17 @@ export function AddMovementDialog({
                 description: f.descrizione,
                 date: f.dataPrevista,
                 amount: f.importoLordo - (f.importoEffettivo || 0),
-                societa: f.societa
+                societa: f.societa,
+                status: f.stato,
             }));
     }
 
     return items.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  }, [watchedTipo, deadlines, expenseForecasts, incomeForecasts]);
+  }, [watchedTipo, scadenze, expenseForecasts, incomeForecasts]);
 
 
-  const onSubmit = async (data: FormValues) => {
+  const prepareAndSubmit = async (data: FormValues, linkedItemId?: string) => {
     setIsSubmitting(true);
     const dataToSave: Omit<Movimento, 'id'> = {
         societa: data.societa,
@@ -194,15 +212,66 @@ export function AddMovementDialog({
         operatore: data.operatore || '',
         metodoPag: data.metodoPag || '',
         note: data.note || '',
+        linkedTo: linkedItemId,
     };
 
     if (isEditMode && movementToEdit) {
-        await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy, linkedTo: data.linkedTo });
+        await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy });
     } else {
-        await onAddMovement(dataToSave, data.linkedTo);
+        await onAddMovement(dataToSave, linkedItemId);
     }
     setIsSubmitting(false);
     setIsOpen(false);
+  }
+
+  const onSubmit = async (data: FormValues) => {
+    // If a manual link is selected, just submit.
+    if (data.linkedTo) {
+        await prepareAndSubmit(data, data.linkedTo);
+        return;
+    }
+
+    setIsSubmitting(true);
+    try {
+        const { suggestions } = await suggestMovementLink({
+            movement: {
+                description: data.descrizione,
+                amount: data.importo,
+                type: data.tipo,
+            },
+            openItems: openItems,
+        });
+
+        if (suggestions && suggestions.length > 0) {
+            setAiSuggestions(suggestions);
+            setSelectedSuggestion(suggestions[0].id); // Pre-select the first one
+            setShowSuggestionDialog(true);
+        } else {
+            // No suggestion, just save
+            await prepareAndSubmit(data);
+        }
+    } catch (e) {
+        toast({
+            variant: "destructive",
+            title: "Errore Suggerimento AI",
+            description: "Impossibile ottenere suggerimenti. Il movimento sarà salvato senza collegamento."
+        });
+        await prepareAndSubmit(data); // Save without link on AI error
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+  
+  const handleSuggestionConfirm = async () => {
+    setShowSuggestionDialog(false);
+    const data = form.getValues();
+    await prepareAndSubmit(data, selectedSuggestion);
+  };
+  
+  const handleSuggestionDecline = async () => {
+      setShowSuggestionDialog(false);
+      const data = form.getValues();
+      await prepareAndSubmit(data); // Save without any link
   };
 
   const handleAiCategorize = useCallback(async () => {
@@ -229,6 +298,60 @@ export function AddMovementDialog({
   const selectedCategory = form.watch('categoria');
 
   return (
+    <>
+    <AlertDialog open={showSuggestionDialog} onOpenChange={setShowSuggestionDialog}>
+        <AlertDialogContent className="max-w-2xl">
+            <AlertDialogHeader>
+            <AlertDialogTitle>Suggerimento di Collegamento AI</AlertDialogTitle>
+            <AlertDialogDescription>
+                L'assistente AI ha trovato delle corrispondenze per questo movimento. Seleziona la voce corretta per collegarli o salva senza collegare.
+            </AlertDialogDescription>
+            </AlertDialogHeader>
+            
+            <Controller
+                control={form.control}
+                name="linkedTo"
+                render={({ field }) => (
+                <RadioGroup
+                    value={selectedSuggestion}
+                    onValueChange={setSelectedSuggestion}
+                    className="max-h-[400px] overflow-y-auto"
+                >
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableCell></TableCell>
+                                <TableCell>Tipo</TableCell>
+                                <TableCell>Descrizione</TableCell>
+                                <TableCell>Data</TableCell>
+                                <TableCell className="text-right">Importo</TableCell>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                        {aiSuggestions.map((s) => (
+                           <TableRow key={s.id}>
+                               <TableCell><RadioGroupItem value={s.id} id={s.id} /></TableCell>
+                               <TableCell><Badge variant="outline">{s.type === 'scadenze' ? 'Scadenza' : 'Previsione'}</Badge></TableCell>
+                               <TableCell className="font-medium">{s.description}</TableCell>
+                               <TableCell>{formatDate(s.date)}</TableCell>
+                               <TableCell className="text-right">{formatCurrency(s.amount)}</TableCell>
+                           </TableRow>
+                        ))}
+                        </TableBody>
+                    </Table>
+                </RadioGroup>
+                )}
+            />
+
+
+            <AlertDialogFooter>
+                <Button variant="outline" onClick={handleSuggestionDecline}>Salva senza Collegare</Button>
+                <Button onClick={handleSuggestionConfirm}>Conferma e Salva</Button>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+
+
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
@@ -345,8 +468,8 @@ export function AddMovementDialog({
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="">Nessun collegamento</SelectItem>
-                            {linkableItems.map(item => (
+                            <SelectItem value="none">Nessun collegamento</SelectItem>
+                            {openItems.map(item => (
                                 <SelectItem key={`${item.type}-${item.id}`} value={`${item.type}/${item.id}`}>
                                     {`(${item.societa}) ${item.description} - ${format(new Date(item.date), 'dd/MM/yy')} - €${item.amount.toFixed(2)}`}
                                 </SelectItem>
@@ -392,7 +515,8 @@ export function AddMovementDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                            {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
+                              <SelectItem value="nessuna">Nessuna</SelectItem>
+                              {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
@@ -496,5 +620,6 @@ export function AddMovementDialog({
         </Form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
