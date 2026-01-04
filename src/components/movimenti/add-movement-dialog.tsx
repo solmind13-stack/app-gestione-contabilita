@@ -34,7 +34,6 @@ import {
 import { Loader2, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { useToast } from '@/hooks/use-toast';
 import type { Movimento, AppUser, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { it } from 'date-fns/locale';
@@ -356,7 +355,7 @@ export function AddMovementDialog({
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="">Nessun collegamento</SelectItem>
+                            <SelectItem value="nessuno">Nessun collegamento</SelectItem>
                             {openItems.map(item => (
                                 <SelectItem key={`${item.type}-${item.id}`} value={`${item.type}/${item.id}`}>
                                     {`(${item.societa}) ${item.description} - ${format(new Date(item.date), 'dd/MM/yy')} - €${item.amount.toFixed(2)}`}
