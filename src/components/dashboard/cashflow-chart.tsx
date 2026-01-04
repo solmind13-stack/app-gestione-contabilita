@@ -30,16 +30,12 @@ export function CashflowChart({ data }: CashflowChartProps) {
     const { movements, incomeForecasts, expenseForecasts, deadlines } = data;
     const today = new Date();
     
-    // Calculate starting balance from all historical data before this month
+    // Calculate starting balance from all historical movements before this month
     const startOfCurrentMonth = startOfMonth(today);
     let saldo = movements
       .filter(m => new Date(m.data) < startOfCurrentMonth)
       .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
       
-    // Subtract paid deadlines from before this month
-    saldo -= deadlines
-        .filter(s => s.stato === 'Pagato' && s.dataPagamento && new Date(s.dataPagamento) < startOfCurrentMonth)
-        .reduce((acc, s) => acc + s.importoPagato, 0);
 
     const monthsData = Array.from({ length: 12 }, (_, i) => {
         const targetMonthDate = addMonths(startOfCurrentMonth, i);
@@ -57,11 +53,6 @@ export function CashflowChart({ data }: CashflowChartProps) {
                 if (isWithinInterval(movDate, { start: monthStart, end: today })) {
                     inflows += mov.entrata || 0;
                     outflows += mov.uscita || 0;
-                }
-            });
-            deadlines.forEach(s => {
-                if(s.stato === 'Pagato' && s.dataPagamento && isWithinInterval(new Date(s.dataPagamento), { start: monthStart, end: today })) {
-                    outflows += s.importoPagato;
                 }
             });
         }
