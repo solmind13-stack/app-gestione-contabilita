@@ -141,12 +141,13 @@ export default function MovimentiPage() {
                 
                 // 2. Perform all WRITES
                 const newMovementRef = doc(collection(firestore, "movements"));
-                const movementPayload: Omit<Movimento, 'id'> = {
+                const movementPayload = {
                     ...newMovementData,
                     createdBy: user.uid,
                     inseritoDa: user.displayName,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
+                    linkedTo: linkedItemId || null, // Ensure linkedTo is null, not undefined
                 };
                 transaction.set(newMovementRef, movementPayload);
 
