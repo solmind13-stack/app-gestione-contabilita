@@ -43,6 +43,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../ui/table';
+import { Badge } from '../ui/badge';
 
 
 const FormSchema = z.object({
@@ -77,7 +78,7 @@ interface AddMovementDialogProps {
 }
 
 // Function to calculate similarity score
-const calculateSimilarity = (item: LinkableItem, formValues: Partial<FormValues>): number => {
+const calculateSimilarity = (item: LinkableItem, formValues: { societa?: string, importo?: number, descrizione?: string }): number => {
     let score = 0;
     const { societa, importo, descrizione } = formValues;
 
@@ -146,7 +147,7 @@ export function AddMovementDialog({
           operatore: movementToEdit.operatore || '',
           metodoPag: movementToEdit.metodoPag || '',
           note: movementToEdit.note || '',
-          linkedTo: movementToEdit.linkedTo || '',
+          linkedTo: movementToEdit.linkedTo || 'nessuno',
         });
       } else {
         form.reset({
@@ -174,15 +175,17 @@ export function AddMovementDialog({
   }, [isOpen, resetForm]);
 
   const watchedTipo = form.watch('tipo');
-  const watchedFormValues = form.watch();
+  const watchedSocieta = form.watch('societa');
+  const watchedImporto = form.watch('importo');
+  const watchedDescrizione = form.watch('descrizione');
+
 
   const openItems = useMemo((): LinkableItem[] => {
     let items: LinkableItem[] = [];
-    const currentCompany = watchedFormValues.societa;
     
     if (watchedTipo === 'uscita') {
         const openDeadlines = (deadlines || [])
-            .filter(d => (d.stato !== 'Pagato' && d.stato !== 'Annullato') && (d.societa === currentCompany))
+            .filter(d => (d.stato !== 'Pagato' && d.stato !== 'Annullato') && (d.societa === watchedSocieta))
             .map(d => ({
                 id: d.id,
                 type: 'deadlines' as const,
@@ -193,7 +196,7 @@ export function AddMovementDialog({
             }));
 
         const openExpenseForecasts = (expenseForecasts || [])
-            .filter(f => (f.stato !== 'Pagato' && f.stato !== 'Annullato') && (f.societa === currentCompany))
+            .filter(f => (f.stato !== 'Pagato' && f.stato !== 'Annullato') && (f.societa === watchedSocieta))
             .map(f => ({
                 id: f.id,
                 type: 'expenseForecasts' as const,
@@ -206,7 +209,7 @@ export function AddMovementDialog({
         items = [...openDeadlines, ...openExpenseForecasts];
     } else { // entrata
         items = (incomeForecasts || [])
-            .filter(f => (f.stato !== 'Incassato' && f.stato !== 'Annullato') && (f.societa === currentCompany))
+            .filter(f => (f.stato !== 'Incassato' && f.stato !== 'Annullato') && (f.societa === watchedSocieta))
             .map(f => ({
                 id: f.id,
                 type: 'incomeForecasts' as const,
@@ -217,15 +220,21 @@ export function AddMovementDialog({
             }));
     }
 
+    const formValuesForSimilarity = {
+        societa: watchedSocieta,
+        importo: watchedImporto,
+        descrizione: watchedDescrizione
+    };
+
     // Calculate scores and sort
     const scoredItems = items
-        .map(item => ({ item, score: calculateSimilarity(item, watchedFormValues) }))
+        .map(item => ({ item, score: calculateSimilarity(item, formValuesForSimilarity) }))
         .filter(scored => scored.score >= 0) // Filter out items from wrong company
         .sort((a, b) => b.score - a.score);
 
     return scoredItems.map(si => si.item);
 
-  }, [watchedTipo, deadlines, expenseForecasts, incomeForecasts, watchedFormValues]);
+  }, [watchedTipo, watchedSocieta, watchedImporto, watchedDescrizione, deadlines, expenseForecasts, incomeForecasts]);
 
     // Effect to pre-select the best match
     useEffect(() => {
@@ -233,7 +242,12 @@ export function AddMovementDialog({
 
         if (openItems.length > 0) {
             const bestMatch = openItems[0];
-            const bestScore = calculateSimilarity(bestMatch, watchedFormValues);
+            const formValuesForSimilarity = {
+                societa: watchedSocieta,
+                importo: watchedImporto,
+                descrizione: watchedDescrizione
+            };
+            const bestScore = calculateSimilarity(bestMatch, formValuesForSimilarity);
             
             // Set a threshold for auto-selection to avoid weak matches
             if (bestScore > 50) { 
@@ -244,7 +258,7 @@ export function AddMovementDialog({
         } else {
              form.setValue('linkedTo', 'nessuno');
         }
-    }, [openItems, watchedFormValues, form, isEditMode]);
+    }, [openItems, watchedSocieta, watchedImporto, watchedDescrizione, form, isEditMode]);
 
 
   const onSubmit = async (data: FormValues) => {
