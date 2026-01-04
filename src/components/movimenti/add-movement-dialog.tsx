@@ -82,7 +82,7 @@ const calculateSimilarity = (item: LinkableItem, formValues: { societa?: string,
     let score = 0;
     const { societa, importo, descrizione } = formValues;
 
-    if (!societa || !importo || !descrizione) return 0;
+    if (!societa || !importo || !descrizione || importo === 0) return 0;
 
     // Company match is essential
     if (item.societa !== societa) {
@@ -141,7 +141,7 @@ export function AddMovementDialog({
           importo: movementToEdit.entrata > 0 ? movementToEdit.entrata : movementToEdit.uscita,
           tipo: movementToEdit.entrata > 0 ? 'entrata' : 'uscita',
           categoria: movementToEdit.categoria,
-          sottocategoria: movementToEdit.sottocategoria || 'nessuna',
+          sottocategoria: movementToEdit.sottocategoria || '',
           iva: movementToEdit.iva,
           conto: movementToEdit.conto || '',
           operatore: movementToEdit.operatore || '',
@@ -279,7 +279,7 @@ export function AddMovementDialog({
         anno: new Date(data.data).getFullYear(),
         descrizione: data.descrizione,
         categoria: data.categoria,
-        sottocategoria: data.sottocategoria || 'nessuna',
+        sottocategoria: data.sottocategoria || '',
         entrata: data.tipo === 'entrata' ? data.importo : 0,
         uscita: data.tipo === 'uscita' ? data.importo : 0,
         iva: data.iva,
@@ -489,7 +489,7 @@ export function AddMovementDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="nessuna">Nessuna</SelectItem>
+                              <SelectItem value="">Nessuna</SelectItem>
                               {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                             </SelectContent>
                         </Select>
