@@ -4,7 +4,7 @@
 import { useMemo, useEffect, useState } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
-import { endOfMonth, startOfMonth, addDays, isWithinInterval, startOfYear, endOfYear, getMonth } from 'date-fns';
+import { endOfMonth, startOfMonth, addDays, isWithinInterval, startOfDay } from 'date-fns';
 
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { OverviewChart } from "@/components/dashboard/overview-chart";
@@ -56,24 +56,25 @@ export default function DashboardPage() {
     const safePrevisioniEntrate = previsioniEntrate || [];
     const safePrevisioniUscite = previsioniUscite || [];
 
-    const oggi = new Date();
+    const oggi = startOfDay(new Date()); // Normalize 'today' to the start of the day
     const inizioMese = startOfMonth(oggi);
     const fineMese = endOfMonth(oggi);
     const trentaGiorni = addDays(oggi, 30);
 
     // 1. Liquidità Attuale
-    // The source of truth is the movements collection.
     const liquidita = safeMovimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
-
 
     // 2. Scadenze nei prossimi 30 giorni (non pagate)
     const scadenzeNei30gg = safeScadenze.filter(s => {
-        const dataScadenza = new Date(s.dataScadenza);
+        const dataScadenza = startOfDay(new Date(s.dataScadenza)); // Normalize deadline date
         return isWithinInterval(dataScadenza, { start: oggi, end: trentaGiorni }) && s.stato !== 'Pagato';
     });
     
     const importoScadenze30gg = scadenzeNei30gg.reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
-    const scadenze7ggCount = scadenzeNei30gg.filter(s => new Date(s.dataScadenza) <= addDays(oggi, 7)).length;
+    const scadenze7ggCount = scadenzeNei30gg.filter(s => {
+        const dataScadenza = startOfDay(new Date(s.dataScadenza)); // Normalize deadline date
+        return dataScadenza <= addDays(oggi, 7);
+    }).length;
 
     // 3. Previsioni Entrate e Uscite per il mese corrente
     const previsioniEntrateMese = safePrevisioniEntrate
