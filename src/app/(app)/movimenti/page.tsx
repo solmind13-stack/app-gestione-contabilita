@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction } from 'firebase/firestore';
+import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction, getDoc } from 'firebase/firestore';
 
 import {
   Card,
@@ -200,20 +200,75 @@ export default function MovimentiPage() {
     };
 
     const handleEditMovement = async (updatedMovement: Movimento) => {
-         if (!user || !firestore || !updatedMovement.id) return;
+        if (!user || !firestore || !updatedMovement.id) return;
+
         try {
-            const docRef = doc(firestore, 'movements', updatedMovement.id);
-            const { id, ...dataToUpdate } = updatedMovement;
-            await updateDoc(docRef, { 
-                ...dataToUpdate, 
-                updatedAt: new Date().toISOString(), 
-                createdBy: updatedMovement.createdBy || user.uid,
-                inseritoDa: user.displayName, // Always update with the current editor
+            await runTransaction(firestore, async (transaction) => {
+                const movementDocRef = doc(firestore, 'movements', updatedMovement.id);
+                
+                // 1. Get the original movement to calculate the difference
+                const originalMovementSnap = await transaction.get(movementDocRef);
+                if (!originalMovementSnap.exists()) {
+                    throw new Error("Movimento originale non trovato!");
+                }
+                const originalMovement = originalMovementSnap.data() as Movimento;
+
+                // 2. Prepare the updated movement data
+                const { id, ...dataToUpdate } = updatedMovement;
+                const finalMovementData = {
+                    ...dataToUpdate,
+                    updatedAt: new Date().toISOString(),
+                    createdBy: originalMovement.createdBy || user.uid,
+                    inseritoDa: user.displayName,
+                };
+                
+                // 3. Update the movement document
+                transaction.update(movementDocRef, finalMovementData);
+
+                // 4. If the movement is linked, update the corresponding item
+                if (updatedMovement.linkedTo) {
+                    const [collectionName, docId] = updatedMovement.linkedTo.split('/');
+                    if (!collectionName || !docId) throw new Error("ID elemento collegato non valido.");
+                    
+                    const linkedDocRef = doc(firestore, collectionName, docId);
+                    const linkedDocSnap = await transaction.get(linkedDocRef);
+                    if (!linkedDocSnap.exists()) {
+                        // If linked doc doesn't exist, we just update the movement and ignore the link update.
+                        console.warn(`Documento collegato ${updatedMovement.linkedTo} non trovato durante l'aggiornamento.`);
+                        return;
+                    }
+
+                    const originalAmount = originalMovement.uscita > 0 ? originalMovement.uscita : originalMovement.entrata;
+                    const newAmount = updatedMovement.uscita > 0 ? updatedMovement.uscita : updatedMovement.entrata;
+                    const amountDifference = newAmount - originalAmount;
+                    
+                    if (collectionName === 'deadlines') {
+                        const data = linkedDocSnap.data() as Scadenza;
+                        const newPaidAmount = (data.importoPagato || 0) + amountDifference;
+                        const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
+                        transaction.update(linkedDocRef, { importoPagato: newPaidAmount, stato: newStatus });
+
+                    } else if (collectionName === 'expenseForecasts' || collectionName === 'incomeForecasts') {
+                        const data = linkedDocSnap.data() as PrevisioneUscita | PrevisioneEntrata;
+                        const newEffectiveAmount = (data.importoEffettivo || 0) + amountDifference;
+                        const isExpense = collectionName === 'expenseForecasts';
+                        
+                        let newStatus;
+                        if (newEffectiveAmount >= data.importoLordo) {
+                            newStatus = isExpense ? 'Pagato' : 'Incassato';
+                        } else if (newEffectiveAmount > 0) {
+                            newStatus = 'Parziale';
+                        } else {
+                            newStatus = isExpense ? 'Da pagare' : 'Da incassare';
+                        }
+                        transaction.update(linkedDocRef, { importoEffettivo: newEffectiveAmount, stato: newStatus });
+                    }
+                }
             });
-            toast({ title: "Movimento Aggiornato", description: "Il movimento è stato modificato." });
-        } catch (error) {
-             console.error("Error updating movement: ", error);
-            toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare il movimento. Controlla i permessi.' });
+            toast({ title: "Movimento Aggiornato", description: "Il movimento e le voci collegate sono stati aggiornati." });
+        } catch (error: any) {
+            console.error("Error updating movement: ", error);
+            toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: `Impossibile modificare il movimento. ${error.message}` });
         }
     };
 
