@@ -92,6 +92,7 @@ export type Scadenza = {
   dataPagamento?: string | null; // New field for payment date
   descrizione: string;
   categoria: string;
+  sottocategoria?: string;
   importoPrevisto: number;
   importoPagato: number;
   stato: 'Pagato' | 'Da pagare' | 'Parziale' | 'Annullato';

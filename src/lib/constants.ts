@@ -44,7 +44,6 @@ export const IVA_PERCENTAGES = [
 
 export const METODI_PAGAMENTO = ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'];
 
-export const CATEGORIE_SCADENZE = ['IVA Trimestrale', 'IMU', 'IRES', 'IRAP', 'F24 Vari', 'Bolli', 'Cartelle Esattoriali', 'Rate Mutuo', 'Rate Prestito', 'Affitti Passivi', 'Utenze', 'Stipendi', 'Fornitori'];
 export const RICORRENZE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale'];
 export const STATI_SCADENZE = ['Da pagare', 'Pagato', 'Parziale'];
 

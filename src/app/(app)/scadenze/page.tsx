@@ -38,7 +38,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Scadenza, AppUser } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { YEARS, CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
+import { YEARS, CATEGORIE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
@@ -494,6 +494,7 @@ export default function ScadenzePage() {
                             <TableHead>Data Pagamento</TableHead>
                             <TableHead>Descrizione</TableHead>
                             <TableHead>Categoria</TableHead>
+                            <TableHead>Sottocategoria</TableHead>
                             <TableHead className="text-right">Importo Previsto</TableHead>
                             <TableHead className="text-right">Importo Pagato</TableHead>
                             <TableHead className="text-center">Stato</TableHead>
@@ -505,19 +506,19 @@ export default function ScadenzePage() {
                     <TableBody>
                         {(isLoadingScadenze || isUserLoading) ? (
                             <TableRow>
-                                <TableCell colSpan={12} className="h-24 text-center">
+                                <TableCell colSpan={13} className="h-24 text-center">
                                     <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                                 </TableCell>
                             </TableRow>
                         ) : error ? (
                             <TableRow>
-                                <TableCell colSpan={12} className="h-24 text-center text-red-500">
+                                <TableCell colSpan={13} className="h-24 text-center text-red-500">
                                     Errore nel caricamento: {error.message}
                                 </TableCell>
                             </TableRow>
                         ) : filteredScadenze.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={12} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
+                                <TableCell colSpan={13} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
                             </TableRow>
                         ) : (
                             filteredScadenze.map((scadenza) => {
@@ -542,6 +543,7 @@ export default function ScadenzePage() {
                                         <TableCell>
                                             <Badge variant="outline">{scadenza.categoria}</Badge>
                                         </TableCell>
+                                        <TableCell>{scadenza.sottocategoria}</TableCell>
                                         <TableCell className="text-right font-medium">{formatCurrency(scadenza.importoPrevisto)}</TableCell>
                                         <TableCell className="text-right font-medium">{scadenza.importoPagato > 0 ? formatCurrency(scadenza.importoPagato) : '-'}</TableCell>
                                         <TableCell className="text-center">
@@ -576,7 +578,7 @@ export default function ScadenzePage() {
                     {filteredScadenze.length > 0 && (
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={user?.role === 'admin' ? 6 : 5} className="font-bold">TOTALI</TableCell>
+                                <TableCell colSpan={user?.role === 'admin' ? 7 : 6} className="font-bold">TOTALI</TableCell>
                                 <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
                                 <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePagato)}</TableCell>
                                 <TableCell colSpan={4}></TableCell>

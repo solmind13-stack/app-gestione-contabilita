@@ -36,7 +36,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import type { Scadenza, AppUser } from '@/lib/types';
-import { CATEGORIE_SCADENZE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
+import { CATEGORIE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { CalendarIcon } from 'lucide-react';
 import { Calendar } from '../ui/calendar';
@@ -46,9 +46,10 @@ const FormSchema = z.object({
   dataScadenza: z.string().min(1, 'Seleziona una data'),
   dataPagamento: z.string().nullable().optional(),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
-  importoPrevisto: z.coerce.number().positive('L\'importo deve essere positivo'),
+  importoPrevisto: z.coerce.number().positive("L'importo deve essere positivo"),
   importoPagato: z.coerce.number().min(0).optional(),
   categoria: z.string().min(1, 'La categoria è obbligatoria'),
+  sottocategoria: z.string().optional(),
   ricorrenza: z.enum(['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale']),
   stato: z.enum(['Pagato', 'Da pagare', 'Parziale', 'Annullato']),
   note: z.string().optional(),
@@ -96,6 +97,7 @@ export function AddDeadlineDialog({
           importoPrevisto: deadlineToEdit.importoPrevisto,
           importoPagato: deadlineToEdit.importoPagato,
           categoria: deadlineToEdit.categoria,
+          sottocategoria: deadlineToEdit.sottocategoria,
           ricorrenza: deadlineToEdit.ricorrenza,
           stato: deadlineToEdit.stato,
           note: deadlineToEdit.note || '',
@@ -109,6 +111,7 @@ export function AddDeadlineDialog({
           importoPrevisto: 0,
           importoPagato: 0,
           categoria: '',
+          sottocategoria: '',
           ricorrenza: 'Nessuna',
           stato: 'Da pagare',
           note: '',
@@ -158,6 +161,8 @@ export function AddDeadlineDialog({
     setIsSubmitting(false);
     setIsOpen(false);
   };
+  
+  const selectedCategory = form.watch('categoria');
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -262,7 +267,7 @@ export function AddDeadlineDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                            {CATEGORIE_SCADENZE.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                            {Object.keys(CATEGORIE).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
@@ -271,18 +276,19 @@ export function AddDeadlineDialog({
                 />
                 <FormField
                     control={form.control}
-                    name="ricorrenza"
+                    name="sottocategoria"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Ricorrenza</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <FormLabel>Sottocategoria</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}>
                             <FormControl>
                             <SelectTrigger>
-                                <SelectValue />
+                                <SelectValue placeholder="Seleziona..." />
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                            {RICORRENZE.map(ric => <SelectItem key={ric} value={ric}>{ric}</SelectItem>)}
+                              <SelectItem value="nessuna">Nessuna</SelectItem>
+                              {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
@@ -290,6 +296,27 @@ export function AddDeadlineDialog({
                     )}
                 />
             </div>
+
+             <FormField
+                control={form.control}
+                name="ricorrenza"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Ricorrenza</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                        {RICORRENZE.map(ric => <SelectItem key={ric} value={ric}>{ric}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
