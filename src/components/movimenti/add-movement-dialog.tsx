@@ -178,6 +178,7 @@ export function AddMovementDialog({
   const watchedSocieta = form.watch('societa');
   const watchedImporto = form.watch('importo');
   const watchedDescrizione = form.watch('descrizione');
+  const watchedCategoria = form.watch('categoria');
 
 
   const openItems = useMemo((): LinkableItem[] => {
@@ -259,6 +260,13 @@ export function AddMovementDialog({
              form.setValue('linkedTo', 'nessuno');
         }
     }, [openItems, watchedSocieta, watchedImporto, watchedDescrizione, form, isEditMode]);
+
+    // Effect to set IVA to 0 for "Tasse" category
+    useEffect(() => {
+        if (watchedCategoria === 'Tasse') {
+            form.setValue('iva', 0);
+        }
+    }, [watchedCategoria, form]);
 
 
   const onSubmit = async (data: FormValues) => {
@@ -495,7 +503,7 @@ export function AddMovementDialog({
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>% IVA</FormLabel>
-                        <Select onValueChange={(val) => field.onChange(parseFloat(val))} value={String(field.value)}>
+                        <Select onValueChange={(val) => field.onChange(parseFloat(val))} value={String(field.value)} disabled={watchedCategoria === 'Tasse'}>
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue />
