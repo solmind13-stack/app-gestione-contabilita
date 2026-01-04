@@ -78,11 +78,11 @@ interface AddMovementDialogProps {
 }
 
 // Function to calculate similarity score
-const calculateSimilarity = (item: LinkableItem, formValues: { societa?: string, importo?: number, descrizione?: string }): number => {
+const calculateSimilarity = (item: LinkableItem, formValues: Partial<FormValues>): number => {
     let score = 0;
-    const { societa, importo, descrizione } = formValues;
+    const { societa, importo, descrizione, categoria, sottocategoria } = formValues;
 
-    if (!societa || !importo || !descrizione || importo === 0) return 0;
+    if (!societa || !importo || importo === 0 || !descrizione) return 0;
 
     // Company match is essential
     if (item.societa !== societa) {
@@ -93,17 +93,30 @@ const calculateSimilarity = (item: LinkableItem, formValues: { societa?: string,
     if (item.amount && importo) {
         const difference = Math.abs(item.amount - importo);
         if (difference === 0) {
-            score += 100; // Perfect match
+            score += 100; // Perfect amount match
+        } else if (importo < item.amount) {
+            // Partial payment scenario
+            score += Math.max(0, 70 - (difference / item.amount) * 100);
         } else {
-            // Score decreases as the difference grows
-            score += Math.max(0, 50 - (difference / item.amount) * 100);
+             score += Math.max(0, 50 - (difference / item.amount) * 100);
         }
     }
+    
+    // Category match
+    if (categoria && item.category === categoria) {
+        score += 30;
+    }
+    
+    // Subcategory match
+    if (sottocategoria && item.subcategory === sottocategoria) {
+        score += 20;
+    }
+
 
     // Description match (simple keyword check)
-    const movementWords = descrizione.toLowerCase().split(' ');
+    const movementWords = descrizione.toLowerCase().split(' ').filter(w => w.length > 2);
     const itemWords = item.description.toLowerCase().split(' ');
-    const commonWords = movementWords.filter(word => itemWords.includes(word) && word.length > 2);
+    const commonWords = movementWords.filter(word => itemWords.includes(word));
     score += commonWords.length * 10;
 
     return score;
@@ -179,7 +192,7 @@ export function AddMovementDialog({
   const watchedImporto = form.watch('importo');
   const watchedDescrizione = form.watch('descrizione');
   const watchedCategoria = form.watch('categoria');
-
+  const watchedSottocategoria = form.watch('sottocategoria');
 
   const openItems = useMemo((): LinkableItem[] => {
     let items: LinkableItem[] = [];
@@ -194,6 +207,8 @@ export function AddMovementDialog({
                 date: d.dataScadenza,
                 amount: d.importoPrevisto - d.importoPagato,
                 societa: d.societa,
+                category: d.categoria,
+                subcategory: d.sottocategoria || '',
             }));
 
         const openExpenseForecasts = (expenseForecasts || [])
@@ -205,6 +220,8 @@ export function AddMovementDialog({
                 date: f.dataScadenza,
                 amount: f.importoLordo - (f.importoEffettivo || 0),
                 societa: f.societa,
+                category: f.categoria,
+                subcategory: f.sottocategoria,
             }));
             
         items = [...openDeadlines, ...openExpenseForecasts];
@@ -218,15 +235,19 @@ export function AddMovementDialog({
                 date: f.dataPrevista,
                 amount: f.importoLordo - (f.importoEffettivo || 0),
                 societa: f.societa,
+                category: f.categoria,
+                subcategory: f.sottocategoria,
             }));
     }
 
-    const formValuesForSimilarity = {
+    const formValuesForSimilarity: Partial<FormValues> = {
         societa: watchedSocieta,
         importo: watchedImporto,
-        descrizione: watchedDescrizione
+        descrizione: watchedDescrizione,
+        categoria: watchedCategoria,
+        sottocategoria: watchedSottocategoria
     };
-
+    
     // Calculate scores and sort
     const scoredItems = items
         .map(item => ({ item, score: calculateSimilarity(item, formValuesForSimilarity) }))
@@ -235,7 +256,7 @@ export function AddMovementDialog({
 
     return scoredItems.map(si => si.item);
 
-  }, [watchedTipo, watchedSocieta, watchedImporto, watchedDescrizione, deadlines, expenseForecasts, incomeForecasts]);
+  }, [watchedTipo, watchedSocieta, watchedImporto, watchedDescrizione, watchedCategoria, watchedSottocategoria, deadlines, expenseForecasts, incomeForecasts]);
 
     // Effect to pre-select the best match
     useEffect(() => {
@@ -246,12 +267,14 @@ export function AddMovementDialog({
             const formValuesForSimilarity = {
                 societa: watchedSocieta,
                 importo: watchedImporto,
-                descrizione: watchedDescrizione
+                descrizione: watchedDescrizione,
+                categoria: watchedCategoria,
+                sottocategoria: watchedSottocategoria,
             };
             const bestScore = calculateSimilarity(bestMatch, formValuesForSimilarity);
             
             // Set a threshold for auto-selection to avoid weak matches
-            if (bestScore > 50) { 
+            if (bestScore > 80) { 
                 form.setValue('linkedTo', `${bestMatch.type}/${bestMatch.id}`);
             } else {
                  form.setValue('linkedTo', 'nessuno');
@@ -259,7 +282,7 @@ export function AddMovementDialog({
         } else {
              form.setValue('linkedTo', 'nessuno');
         }
-    }, [watchedSocieta, watchedImporto, watchedDescrizione, openItems, form, isEditMode]);
+    }, [watchedSocieta, watchedImporto, watchedDescrizione, watchedCategoria, watchedSottocategoria, openItems, form, isEditMode]);
 
     // Effect to set IVA to 0 for "Tasse" category
     useEffect(() => {
@@ -322,7 +345,6 @@ export function AddMovementDialog({
     }
   }, [form, toast]);
   
-  const selectedCategory = form.watch('categoria');
 
   return (
     <>
@@ -482,7 +504,7 @@ export function AddMovementDialog({
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Sottocategoria</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedCategory}>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={!watchedCategoria}>
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder="Seleziona..." />
@@ -490,7 +512,7 @@ export function AddMovementDialog({
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="nessuna">Nessuna</SelectItem>
-                              {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
+                              {watchedCategoria && CATEGORIE[watchedCategoria as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
