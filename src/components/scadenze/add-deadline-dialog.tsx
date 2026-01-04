@@ -130,19 +130,19 @@ export function AddDeadlineDialog({
       return;
     }
   
-    if (importoPagato <= 0) {
-      form.setValue('stato', 'Da pagare');
-      if (!isEditMode) { // Only clear payment date if it's a new entry
-          form.setValue('dataPagamento', null);
-      }
-    } else if (importoPagato >= importoPrevisto && importoPrevisto > 0) {
+    if (importoPagato >= importoPrevisto && importoPrevisto > 0) {
       form.setValue('stato', 'Pagato');
       // Set payment date only if it's not already set
       if (!form.getValues('dataPagamento')) {
         form.setValue('dataPagamento', format(new Date(), 'yyyy-MM-dd'));
       }
-    } else { // This is the partial payment case
-      form.setValue('stato', 'Parziale');
+    } else if (importoPagato > 0 && importoPagato < importoPrevisto) {
+       form.setValue('stato', 'Parziale');
+    } else {
+       form.setValue('stato', 'Da pagare');
+      if (!isEditMode) { // Only clear payment date if it's a new entry
+          form.setValue('dataPagamento', null);
+      }
     }
   }, [watchedImportoPagato, watchedImportoPrevisto, form, isEditMode]);
 
@@ -285,7 +285,7 @@ export function AddDeadlineDialog({
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Sottocategoria</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedCategory}>
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder="Seleziona..." />

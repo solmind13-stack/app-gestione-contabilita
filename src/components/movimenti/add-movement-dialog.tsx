@@ -259,7 +259,7 @@ export function AddMovementDialog({
         } else {
              form.setValue('linkedTo', 'nessuno');
         }
-    }, [openItems, watchedSocieta, watchedImporto, watchedDescrizione, form, isEditMode]);
+    }, [watchedSocieta, watchedImporto, watchedDescrizione, openItems, form, isEditMode]);
 
     // Effect to set IVA to 0 for "Tasse" category
     useEffect(() => {
@@ -482,14 +482,14 @@ export function AddMovementDialog({
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Sottocategoria</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedCategory}>
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder="Seleziona..." />
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">Nessuna</SelectItem>
+                              <SelectItem value="nessuna">Nessuna</SelectItem>
                               {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                             </SelectContent>
                         </Select>
