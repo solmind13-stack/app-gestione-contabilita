@@ -95,7 +95,8 @@ export function ForecastComparison({
             monthData[`entratePrevisto${year}`] = 0;
             monthData[`uscitePrevisto${year}`] = 0;
 
-            // Data from movements (historical)
+            // --- CONSUNTIVO (ACTUALS) ---
+            // The single source of truth for actuals are the movements.
             movements.forEach(mov => {
                 const movDate = new Date(mov.data);
                 if (movDate.getFullYear() === year && movDate.getMonth() === monthIndex) {
@@ -110,51 +111,42 @@ export function ForecastComparison({
                 }
             });
             
-            // Add paid deadlines to consuntivo
-            (deadlines || []).forEach(scad => {
-                if ((scad.stato === 'Pagato' || scad.stato === 'Parziale') && scad.dataPagamento) {
-                    const paymentDate = new Date(scad.dataPagamento);
-                    if (paymentDate.getFullYear() === year && paymentDate.getMonth() === monthIndex) {
-                        if (company === 'Tutte' || scad.societa === company) {
-                            const expense = scad.importoPagato || 0;
-                            monthData[`usciteConsuntivo${year}`] += expense;
-                            if (expense > 0) categoryExpenseTotals[year][scad.categoria] = (categoryExpenseTotals[year][scad.categoria] || 0) + expense;
+            // --- PREVISTO (FORECASTS) ---
+            // Income forecasts
+            incomeForecasts.forEach(forecast => {
+                const forecastDate = new Date(forecast.dataPrevista);
+                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
+                    if (company === 'Tutte' || forecast.societa === company) {
+                         // Only count if not already realized
+                        if (forecast.stato !== 'Incassato') {
+                            const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
+                            monthData[`entratePrevisto${year}`] += weightedIncome;
+                            if(weightedIncome > 0) {
+                                categoryIncomeTotals[year][forecast.categoria] = (categoryIncomeTotals[year][forecast.categoria] || 0) + weightedIncome;
+                            }
                         }
                     }
                 }
             });
 
-
-            // Data from forecasts
-            incomeForecasts.forEach(forecast => {
-                const forecastDate = new Date(forecast.dataPrevista);
-                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
-                    if (company === 'Tutte' || forecast.societa === company) {
-                        const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
-                        monthData[`entratePrevisto${year}`] += weightedIncome;
-                         if(weightedIncome > 0 && !(new Date(forecast.dataPrevista) < new Date() && forecast.stato === 'Incassato')) {
-                            // Also add to category totals for forecasts
-                             categoryIncomeTotals[year][forecast.categoria] = (categoryIncomeTotals[year][forecast.categoria] || 0) + weightedIncome;
-                         }
-                    }
-                }
-            });
-
+            // Expense forecasts
             expenseForecasts.forEach(forecast => {
                 const forecastDate = new Date(forecast.dataScadenza);
                 if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
                     if (company === 'Tutte' || forecast.societa === company) {
-                        const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
-                        monthData[`uscitePrevisto${year}`] += weightedExpense;
-                        if(weightedExpense > 0 && !(new Date(forecast.dataScadenza) < new Date() && forecast.stato === 'Pagato')){
-                           // Also add to category totals for forecasts
-                           categoryExpenseTotals[year][forecast.categoria] = (categoryExpenseTotals[year][forecast.categoria] || 0) + weightedExpense;
+                        // Only count if not already paid
+                         if (forecast.stato !== 'Pagato') {
+                            const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
+                            monthData[`uscitePrevisto${year}`] += weightedExpense;
+                            if(weightedExpense > 0){
+                               categoryExpenseTotals[year][forecast.categoria] = (categoryExpenseTotals[year][forecast.categoria] || 0) + weightedExpense;
+                            }
                         }
                     }
                 }
             });
             
-            // Add unpaid/partial deadlines to previsto
+            // Unpaid/partial deadlines
             (deadlines || []).forEach(scad => {
                  const scadenzaDate = new Date(scad.dataScadenza);
                  if (scadenzaDate.getFullYear() === year && scadenzaDate.getMonth() === monthIndex) {
