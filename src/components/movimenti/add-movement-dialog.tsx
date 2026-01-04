@@ -38,6 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { Movimento, AppUser, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { it } from 'date-fns/locale';
 import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
+import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -75,6 +76,39 @@ interface AddMovementDialogProps {
   incomeForecasts: PrevisioneEntrata[];
 }
 
+// Function to calculate similarity score
+const calculateSimilarity = (item: LinkableItem, formValues: Partial<FormValues>): number => {
+    let score = 0;
+    const { societa, importo, descrizione } = formValues;
+
+    if (!societa || !importo || !descrizione) return 0;
+
+    // Company match is essential
+    if (item.societa !== societa) {
+        return -1; // Exclude items from other companies
+    }
+
+    // Amount match (very important)
+    if (item.amount && importo) {
+        const difference = Math.abs(item.amount - importo);
+        if (difference === 0) {
+            score += 100; // Perfect match
+        } else {
+            // Score decreases as the difference grows
+            score += Math.max(0, 50 - (difference / item.amount) * 100);
+        }
+    }
+
+    // Description match (simple keyword check)
+    const movementWords = descrizione.toLowerCase().split(' ');
+    const itemWords = item.description.toLowerCase().split(' ');
+    const commonWords = movementWords.filter(word => itemWords.includes(word) && word.length > 2);
+    score += commonWords.length * 10;
+
+    return score;
+};
+
+
 export function AddMovementDialog({
   isOpen,
   setIsOpen,
@@ -106,7 +140,7 @@ export function AddMovementDialog({
           importo: movementToEdit.entrata > 0 ? movementToEdit.entrata : movementToEdit.uscita,
           tipo: movementToEdit.entrata > 0 ? 'entrata' : 'uscita',
           categoria: movementToEdit.categoria,
-          sottocategoria: movementToEdit.sottocategoria || '',
+          sottocategoria: movementToEdit.sottocategoria || 'nessuna',
           iva: movementToEdit.iva,
           conto: movementToEdit.conto || '',
           operatore: movementToEdit.operatore || '',
@@ -128,7 +162,7 @@ export function AddMovementDialog({
           operatore: '',
           metodoPag: '',
           note: '',
-          linkedTo: '',
+          linkedTo: 'nessuno',
         });
       }
   }, [isOpen, isEditMode, movementToEdit, defaultCompany, form]);
@@ -140,13 +174,15 @@ export function AddMovementDialog({
   }, [isOpen, resetForm]);
 
   const watchedTipo = form.watch('tipo');
+  const watchedFormValues = form.watch();
 
   const openItems = useMemo((): LinkableItem[] => {
     let items: LinkableItem[] = [];
+    const currentCompany = watchedFormValues.societa;
     
     if (watchedTipo === 'uscita') {
         const openDeadlines = (deadlines || [])
-            .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato')
+            .filter(d => (d.stato !== 'Pagato' && d.stato !== 'Annullato') && (d.societa === currentCompany))
             .map(d => ({
                 id: d.id,
                 type: 'deadlines' as const,
@@ -157,7 +193,7 @@ export function AddMovementDialog({
             }));
 
         const openExpenseForecasts = (expenseForecasts || [])
-            .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato')
+            .filter(f => (f.stato !== 'Pagato' && f.stato !== 'Annullato') && (f.societa === currentCompany))
             .map(f => ({
                 id: f.id,
                 type: 'expenseForecasts' as const,
@@ -170,7 +206,7 @@ export function AddMovementDialog({
         items = [...openDeadlines, ...openExpenseForecasts];
     } else { // entrata
         items = (incomeForecasts || [])
-            .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato')
+            .filter(f => (f.stato !== 'Incassato' && f.stato !== 'Annullato') && (f.societa === currentCompany))
             .map(f => ({
                 id: f.id,
                 type: 'incomeForecasts' as const,
@@ -181,20 +217,47 @@ export function AddMovementDialog({
             }));
     }
 
-    return items.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Calculate scores and sort
+    const scoredItems = items
+        .map(item => ({ item, score: calculateSimilarity(item, watchedFormValues) }))
+        .filter(scored => scored.score >= 0) // Filter out items from wrong company
+        .sort((a, b) => b.score - a.score);
 
-  }, [watchedTipo, deadlines, expenseForecasts, incomeForecasts]);
+    return scoredItems.map(si => si.item);
+
+  }, [watchedTipo, deadlines, expenseForecasts, incomeForecasts, watchedFormValues]);
+
+    // Effect to pre-select the best match
+    useEffect(() => {
+        if (isEditMode) return; // Don't auto-select in edit mode
+
+        if (openItems.length > 0) {
+            const bestMatch = openItems[0];
+            const bestScore = calculateSimilarity(bestMatch, watchedFormValues);
+            
+            // Set a threshold for auto-selection to avoid weak matches
+            if (bestScore > 50) { 
+                form.setValue('linkedTo', `${bestMatch.type}/${bestMatch.id}`);
+            } else {
+                 form.setValue('linkedTo', 'nessuno');
+            }
+        } else {
+             form.setValue('linkedTo', 'nessuno');
+        }
+    }, [openItems, watchedFormValues, form, isEditMode]);
 
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
+    const linkedItemId = data.linkedTo === 'nessuno' ? undefined : data.linkedTo;
+    
     const dataToSave: Omit<Movimento, 'id'> = {
         societa: data.societa,
         data: data.data,
         anno: new Date(data.data).getFullYear(),
         descrizione: data.descrizione,
         categoria: data.categoria,
-        sottocategoria: data.sottocategoria || 'Nessuna',
+        sottocategoria: data.sottocategoria || 'nessuna',
         entrata: data.tipo === 'entrata' ? data.importo : 0,
         uscita: data.tipo === 'uscita' ? data.importo : 0,
         iva: data.iva,
@@ -202,13 +265,13 @@ export function AddMovementDialog({
         operatore: data.operatore || '',
         metodoPag: data.metodoPag || '',
         note: data.note || '',
-        linkedTo: data.linkedTo,
+        linkedTo: linkedItemId,
     };
 
     if (isEditMode && movementToEdit) {
         await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy });
     } else {
-        await onAddMovement(dataToSave, data.linkedTo);
+        await onAddMovement(dataToSave, linkedItemId);
     }
     setIsSubmitting(false);
     setIsOpen(false);
@@ -223,10 +286,12 @@ export function AddMovementDialog({
     setIsCategorizing(true);
     try {
       const result = await categorizeTransaction({ description });
-      form.setValue('categoria', result.category, { shouldValidate: true });
-      form.setValue('sottocategoria', result.subcategory, { shouldValidate: true });
-      form.setValue('iva', result.ivaPercentage, { shouldValidate: true });
-      toast({ title: 'Categorizzazione AI completata!', description: 'Controlla i campi suggeriti.', className: 'bg-green-100 dark:bg-green-900' });
+      if (result) {
+          form.setValue('categoria', result.category, { shouldValidate: true });
+          form.setValue('sottocategoria', result.subcategory, { shouldValidate: true });
+          form.setValue('iva', result.ivaPercentage, { shouldValidate: true });
+          toast({ title: 'Categorizzazione AI completata!', description: 'Controlla i campi suggeriti.', className: 'bg-green-100 dark:bg-green-900' });
+      }
     } catch (error: any) {
       console.error("Error during AI categorization:", error);
       toast({ variant: 'destructive', title: 'Errore AI', description: error.message || 'Impossibile suggerire una categoria in questo momento.' });
@@ -348,7 +413,7 @@ export function AddMovementDialog({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Collega a Voce Esistente (Opzionale)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isEditMode}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isEditMode}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona per collegare il pagamento a una previsione/scadenza..." />
@@ -357,8 +422,8 @@ export function AddMovementDialog({
                         <SelectContent>
                             <SelectItem value="nessuno">Nessun collegamento</SelectItem>
                             {openItems.map(item => (
-                                <SelectItem key={`${item.type}-${item.id}`} value={`${item.type}/${item.id}`}>
-                                    {`(${item.societa}) ${item.description} - ${format(new Date(item.date), 'dd/MM/yy')} - €${item.amount.toFixed(2)}`}
+                                <SelectItem key={`${item.type}/${item.id}`} value={`${item.type}/${item.id}`}>
+                                    {`(${item.type === 'deadlines' ? 'Scad.' : 'Prev.'}) ${item.description} - ${format(new Date(item.date), 'dd/MM/yy')} - €${item.amount.toFixed(2)}`}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -402,7 +467,7 @@ export function AddMovementDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Nessuna">Nessuna</SelectItem>
+                              <SelectItem value="nessuna">Nessuna</SelectItem>
                               {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                             </SelectContent>
                         </Select>
