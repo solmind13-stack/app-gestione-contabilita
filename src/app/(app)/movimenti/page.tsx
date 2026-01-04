@@ -1,7 +1,7 @@
 // src/app/(app)/movimenti/page.tsx
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction, getDoc } from 'firebase/firestore';
 
@@ -205,15 +205,29 @@ export default function MovimentiPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const movementDocRef = doc(firestore, 'movements', updatedMovement.id);
-                
-                // 1. Get the original movement to calculate the difference
+
+                // --- 1. ALL READS FIRST ---
                 const originalMovementSnap = await transaction.get(movementDocRef);
                 if (!originalMovementSnap.exists()) {
                     throw new Error("Movimento originale non trovato!");
                 }
                 const originalMovement = originalMovementSnap.data() as Movimento;
 
-                // 2. Prepare the updated movement data
+                let linkedDocSnap;
+                let linkedDocRef;
+                if (updatedMovement.linkedTo) {
+                    const [collectionName, docId] = updatedMovement.linkedTo.split('/');
+                    if (!collectionName || !docId) throw new Error("ID elemento collegato non valido.");
+                    linkedDocRef = doc(firestore, collectionName, docId);
+                    linkedDocSnap = await transaction.get(linkedDocRef);
+                    if (!linkedDocSnap.exists()) {
+                        console.warn(`Documento collegato ${updatedMovement.linkedTo} non trovato durante l'aggiornamento.`);
+                        // Proceed without updating the linked doc if it doesn't exist
+                        linkedDocRef = undefined; 
+                    }
+                }
+
+                // --- 2. PREPARE DATA ---
                 const { id, ...dataToUpdate } = updatedMovement;
                 const finalMovementData = {
                     ...dataToUpdate,
@@ -221,27 +235,16 @@ export default function MovimentiPage() {
                     createdBy: originalMovement.createdBy || user.uid,
                     inseritoDa: user.displayName,
                 };
-                
-                // 3. Update the movement document
+
+                // --- 3. ALL WRITES LAST ---
                 transaction.update(movementDocRef, finalMovementData);
 
-                // 4. If the movement is linked, update the corresponding item
-                if (updatedMovement.linkedTo) {
-                    const [collectionName, docId] = updatedMovement.linkedTo.split('/');
-                    if (!collectionName || !docId) throw new Error("ID elemento collegato non valido.");
-                    
-                    const linkedDocRef = doc(firestore, collectionName, docId);
-                    const linkedDocSnap = await transaction.get(linkedDocRef);
-                    if (!linkedDocSnap.exists()) {
-                        // If linked doc doesn't exist, we just update the movement and ignore the link update.
-                        console.warn(`Documento collegato ${updatedMovement.linkedTo} non trovato durante l'aggiornamento.`);
-                        return;
-                    }
-
+                if (linkedDocRef && linkedDocSnap?.exists()) {
+                    const collectionName = linkedDocRef.parent.id;
                     const originalAmount = originalMovement.uscita > 0 ? originalMovement.uscita : originalMovement.entrata;
                     const newAmount = updatedMovement.uscita > 0 ? updatedMovement.uscita : updatedMovement.entrata;
                     const amountDifference = newAmount - originalAmount;
-                    
+
                     if (collectionName === 'deadlines') {
                         const data = linkedDocSnap.data() as Scadenza;
                         const newPaidAmount = (data.importoPagato || 0) + amountDifference;
