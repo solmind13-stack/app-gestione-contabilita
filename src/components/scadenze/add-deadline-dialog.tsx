@@ -120,30 +120,31 @@ export function AddDeadlineDialog({
     }
   }, [isOpen, isEditMode, deadlineToEdit, defaultCompany, currentUser, form]);
   
- useEffect(() => {
+  useEffect(() => {
     const importoPagato = watchedImportoPagato || 0;
     const importoPrevisto = watchedImportoPrevisto || 0;
     const currentStatus = form.getValues('stato');
-
-    // Se l'utente ha impostato manualmente lo stato su "Annullato", non fare nulla.
+  
+    // Do not automatically change status if it's manually set to 'Annullato'
     if (currentStatus === 'Annullato') {
       return;
     }
-
+  
     if (importoPagato <= 0) {
       form.setValue('stato', 'Da pagare');
-      form.setValue('dataPagamento', null);
-    } else if (importoPagato >= importoPrevisto) {
+      if (!isEditMode) { // Only clear payment date if it's a new entry
+          form.setValue('dataPagamento', null);
+      }
+    } else if (importoPagato >= importoPrevisto && importoPrevisto > 0) {
       form.setValue('stato', 'Pagato');
-      // Imposta la data di pagamento solo se non è già stata impostata (o se è la prima volta che si paga l'intero importo)
+      // Set payment date only if it's not already set
       if (!form.getValues('dataPagamento')) {
         form.setValue('dataPagamento', format(new Date(), 'yyyy-MM-dd'));
       }
-    } else {
-      // Questo è il caso del pagamento parziale
+    } else { // This is the partial payment case
       form.setValue('stato', 'Parziale');
     }
-}, [watchedImportoPagato, watchedImportoPrevisto, form]);
+  }, [watchedImportoPagato, watchedImportoPrevisto, form, isEditMode]);
 
 
   const onSubmit = async (data: FormValues) => {
