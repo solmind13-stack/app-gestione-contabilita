@@ -39,7 +39,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { Movimento, AppUser, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { it } from 'date-fns/locale';
 import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
-import { suggestMovementLink } from '@/ai/flows/suggest-movement-link-flow';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -54,7 +53,7 @@ const FormSchema = z.object({
   importo: z.coerce.number().refine(val => val !== 0, 'L\'importo non può essere zero'),
   tipo: z.enum(['entrata', 'uscita']),
   categoria: z.string().min(1, 'La categoria è obbligatoria'),
-  sottocategoria: z.string(),
+  sottocategoria: z.string().optional(),
   iva: z.coerce.number().min(0).max(1),
   conto: z.string().optional(),
   operatore: z.string().optional(),
@@ -93,10 +92,6 @@ export function AddMovementDialog({
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
-
-  const [aiSuggestions, setAiSuggestions] = useState<LinkableItem[]>([]);
-  const [selectedSuggestion, setSelectedSuggestion] = useState<string | undefined>(undefined);
-  const [showSuggestionDialog, setShowSuggestionDialog] = useState(false);
   
   const isEditMode = !!movementToEdit;
 
@@ -156,7 +151,7 @@ export function AddMovementDialog({
             .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato')
             .map(d => ({
                 id: d.id,
-                type: 'scadenze' as const,
+                type: 'deadlines' as const,
                 description: d.descrizione,
                 date: d.dataScadenza,
                 amount: d.importoPrevisto - d.importoPagato,
@@ -196,7 +191,7 @@ export function AddMovementDialog({
   }, [watchedTipo, scadenze, expenseForecasts, incomeForecasts]);
 
 
-  const prepareAndSubmit = async (data: FormValues, linkedItemId?: string) => {
+  const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
     const dataToSave: Omit<Movimento, 'id'> = {
         societa: data.societa,
@@ -204,7 +199,7 @@ export function AddMovementDialog({
         anno: new Date(data.data).getFullYear(),
         descrizione: data.descrizione,
         categoria: data.categoria,
-        sottocategoria: data.sottocategoria,
+        sottocategoria: data.sottocategoria || 'Nessuna',
         entrata: data.tipo === 'entrata' ? data.importo : 0,
         uscita: data.tipo === 'uscita' ? data.importo : 0,
         iva: data.iva,
@@ -212,67 +207,17 @@ export function AddMovementDialog({
         operatore: data.operatore || '',
         metodoPag: data.metodoPag || '',
         note: data.note || '',
-        linkedTo: linkedItemId,
+        linkedTo: data.linkedTo,
     };
 
     if (isEditMode && movementToEdit) {
         await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy });
     } else {
-        await onAddMovement(dataToSave, linkedItemId);
+        await onAddMovement(dataToSave, data.linkedTo);
     }
     setIsSubmitting(false);
     setIsOpen(false);
   }
-
-  const onSubmit = async (data: FormValues) => {
-    // If a manual link is selected, just submit.
-    if (data.linkedTo) {
-        await prepareAndSubmit(data, data.linkedTo);
-        return;
-    }
-
-    setIsSubmitting(true);
-    try {
-        const { suggestions } = await suggestMovementLink({
-            movement: {
-                description: data.descrizione,
-                amount: data.importo,
-                type: data.tipo,
-            },
-            openItems: openItems,
-        });
-
-        if (suggestions && suggestions.length > 0) {
-            setAiSuggestions(suggestions);
-            setSelectedSuggestion(suggestions[0].id); // Pre-select the first one
-            setShowSuggestionDialog(true);
-        } else {
-            // No suggestion, just save
-            await prepareAndSubmit(data);
-        }
-    } catch (e) {
-        toast({
-            variant: "destructive",
-            title: "Errore Suggerimento AI",
-            description: "Impossibile ottenere suggerimenti. Il movimento sarà salvato senza collegamento."
-        });
-        await prepareAndSubmit(data); // Save without link on AI error
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-  
-  const handleSuggestionConfirm = async () => {
-    setShowSuggestionDialog(false);
-    const data = form.getValues();
-    await prepareAndSubmit(data, selectedSuggestion);
-  };
-  
-  const handleSuggestionDecline = async () => {
-      setShowSuggestionDialog(false);
-      const data = form.getValues();
-      await prepareAndSubmit(data); // Save without any link
-  };
 
   const handleAiCategorize = useCallback(async () => {
     const description = form.getValues('descrizione');
@@ -299,59 +244,6 @@ export function AddMovementDialog({
 
   return (
     <>
-    <AlertDialog open={showSuggestionDialog} onOpenChange={setShowSuggestionDialog}>
-        <AlertDialogContent className="max-w-2xl">
-            <AlertDialogHeader>
-            <AlertDialogTitle>Suggerimento di Collegamento AI</AlertDialogTitle>
-            <AlertDialogDescription>
-                L'assistente AI ha trovato delle corrispondenze per questo movimento. Seleziona la voce corretta per collegarli o salva senza collegare.
-            </AlertDialogDescription>
-            </AlertDialogHeader>
-            
-            <Controller
-                control={form.control}
-                name="linkedTo"
-                render={({ field }) => (
-                <RadioGroup
-                    value={selectedSuggestion}
-                    onValueChange={setSelectedSuggestion}
-                    className="max-h-[400px] overflow-y-auto"
-                >
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableCell></TableCell>
-                                <TableCell>Tipo</TableCell>
-                                <TableCell>Descrizione</TableCell>
-                                <TableCell>Data</TableCell>
-                                <TableCell className="text-right">Importo</TableCell>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                        {aiSuggestions.map((s) => (
-                           <TableRow key={s.id}>
-                               <TableCell><RadioGroupItem value={s.id} id={s.id} /></TableCell>
-                               <TableCell><Badge variant="outline">{s.type === 'scadenze' ? 'Scadenza' : 'Previsione'}</Badge></TableCell>
-                               <TableCell className="font-medium">{s.description}</TableCell>
-                               <TableCell>{formatDate(s.date)}</TableCell>
-                               <TableCell className="text-right">{formatCurrency(s.amount)}</TableCell>
-                           </TableRow>
-                        ))}
-                        </TableBody>
-                    </Table>
-                </RadioGroup>
-                )}
-            />
-
-
-            <AlertDialogFooter>
-                <Button variant="outline" onClick={handleSuggestionDecline}>Salva senza Collegare</Button>
-                <Button onClick={handleSuggestionConfirm}>Conferma e Salva</Button>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
-
-
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
@@ -461,14 +353,14 @@ export function AddMovementDialog({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Collega a Voce Esistente (Opzionale)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isEditMode}>
+                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isEditMode}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona per collegare il pagamento a una previsione/scadenza..." />
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="none">Nessun collegamento</SelectItem>
+                            <SelectItem value="nessuno">Nessun collegamento</SelectItem>
                             {openItems.map(item => (
                                 <SelectItem key={`${item.type}-${item.id}`} value={`${item.type}/${item.id}`}>
                                     {`(${item.societa}) ${item.description} - ${format(new Date(item.date), 'dd/MM/yy')} - €${item.amount.toFixed(2)}`}
