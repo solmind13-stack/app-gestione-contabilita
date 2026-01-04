@@ -125,7 +125,21 @@ export default function MovimentiPage() {
         
         try {
             await runTransaction(firestore, async (transaction) => {
-                // 1. Create the new movement
+                // 1. If a link is provided, first READ the linked document
+                let linkedDocRef;
+                let linkedDoc;
+                if (linkedItemId) {
+                    const [collectionName, docId] = linkedItemId.split('/');
+                    if (!collectionName || !docId) throw new Error("ID elemento collegato non valido.");
+                    
+                    linkedDocRef = doc(firestore, collectionName, docId);
+                    linkedDoc = await transaction.get(linkedDocRef);
+                    if (!linkedDoc.exists()) {
+                        throw new Error("Documento collegato non trovato!");
+                    }
+                }
+                
+                // 2. Perform all WRITES
                 const newMovementRef = doc(collection(firestore, "movements"));
                 const movementPayload: Omit<Movimento, 'id'> = {
                     ...newMovementData,
@@ -133,30 +147,31 @@ export default function MovimentiPage() {
                     inseritoDa: user.displayName,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
-                    linkedTo: linkedItemId,
                 };
                 transaction.set(newMovementRef, movementPayload);
 
-                // 2. If a link is provided, update the linked document
-                if (linkedItemId) {
-                    const [collectionName, docId] = linkedItemId.split('/');
-                    if (!collectionName || !docId) throw new Error("Invalid linked item ID format.");
-
-                    const linkedDocRef = doc(firestore, collectionName, docId);
-                    const linkedDoc = await transaction.get(linkedDocRef);
-
-                    if (!linkedDoc.exists()) {
-                        throw new Error("Documento collegato non trovato!");
-                    }
-
-                    if (collectionName === 'deadlines' || collectionName === 'expenseForecasts') {
-                        const data = linkedDoc.data() as Scadenza | PrevisioneUscita;
+                // 3. Update the linked document if it exists
+                if (linkedDocRef && linkedDoc) {
+                    const collectionName = linkedDocRef.parent.id;
+                    if (collectionName === 'deadlines') {
+                        const data = linkedDoc.data() as Scadenza;
                         const movementAmount = newMovementData.uscita;
                         const newPaidAmount = (data.importoPagato || 0) + movementAmount;
                         const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : 'Parziale';
                         
                         transaction.update(linkedDocRef, {
                             importoPagato: newPaidAmount,
+                            stato: newStatus,
+                            dataPagamento: newMovementData.data
+                        });
+                    } else if (collectionName === 'expenseForecasts') {
+                        const data = linkedDoc.data() as PrevisioneUscita;
+                        const movementAmount = newMovementData.uscita;
+                        const newPaidAmount = (data.importoEffettivo || 0) + movementAmount;
+                        const newStatus = newPaidAmount >= data.importoLordo ? 'Pagato' : 'Parziale';
+                        
+                        transaction.update(linkedDocRef, {
+                            importoEffettivo: newPaidAmount,
                             stato: newStatus,
                             dataPagamento: newMovementData.data
                         });
@@ -177,9 +192,9 @@ export default function MovimentiPage() {
             
             toast({ title: "Operazione Completata", description: "Il movimento è stato salvato e i dati collegati sono stati aggiornati." });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error in transaction: ", error);
-            toast({ variant: 'destructive', title: 'Errore Transazione', description: `Impossibile completare l'operazione. ${error}` });
+            toast({ variant: 'destructive', title: 'Errore Transazione', description: `Impossibile completare l'operazione. ${error.message}` });
         }
     };
 
@@ -255,9 +270,9 @@ export default function MovimentiPage() {
                 title: "Importazione completata",
                 description: `${importedMovements.length} movimenti sono stati importati con successo.`
             });
-        } catch (error) {
+        } catch (error: any) {
              console.error("Error importing movements: ", error);
-             toast({ variant: 'destructive', title: 'Errore Importazione', description: 'Impossibile salvare i movimenti importati.' });
+             toast({ variant: 'destructive', title: 'Errore Importazione', description: `Impossibile salvare i movimenti importati. ${error.message}` });
         }
     };
 

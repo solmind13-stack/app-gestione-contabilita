@@ -43,7 +43,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../ui/table';
-import { Badge } from '../ui/badge';
 
 
 const FormSchema = z.object({
@@ -72,7 +71,7 @@ interface AddMovementDialogProps {
   movementToEdit?: Movimento | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
-  scadenze: Scadenza[];
+  deadlines: Scadenza[];
   expenseForecasts: PrevisioneUscita[];
   incomeForecasts: PrevisioneEntrata[];
 }
@@ -85,7 +84,7 @@ export function AddMovementDialog({
   movementToEdit,
   defaultCompany,
   currentUser,
-  scadenze,
+  deadlines,
   expenseForecasts,
   incomeForecasts
 }: AddMovementDialogProps) {
@@ -123,8 +122,8 @@ export function AddMovementDialog({
           descrizione: '',
           importo: 0,
           tipo: 'uscita',
-          categoria: '',
-          sottocategoria: '',
+          categoria: 'Da categorizzare',
+          sottocategoria: 'Da categorizzare',
           iva: 0.22,
           conto: '',
           operatore: '',
@@ -147,7 +146,7 @@ export function AddMovementDialog({
     let items: LinkableItem[] = [];
     
     if (watchedTipo === 'uscita') {
-        const openDeadlines = (scadenze || [])
+        const openDeadlines = (deadlines || [])
             .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato')
             .map(d => ({
                 id: d.id,
@@ -156,7 +155,6 @@ export function AddMovementDialog({
                 date: d.dataScadenza,
                 amount: d.importoPrevisto - d.importoPagato,
                 societa: d.societa,
-                status: d.stato,
             }));
 
         const openExpenseForecasts = (expenseForecasts || [])
@@ -168,7 +166,6 @@ export function AddMovementDialog({
                 date: f.dataScadenza,
                 amount: f.importoLordo - (f.importoEffettivo || 0),
                 societa: f.societa,
-                status: f.stato,
             }));
             
         items = [...openDeadlines, ...openExpenseForecasts];
@@ -182,13 +179,12 @@ export function AddMovementDialog({
                 date: f.dataPrevista,
                 amount: f.importoLordo - (f.importoEffettivo || 0),
                 societa: f.societa,
-                status: f.stato,
             }));
     }
 
     return items.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  }, [watchedTipo, scadenze, expenseForecasts, incomeForecasts]);
+  }, [watchedTipo, deadlines, expenseForecasts, incomeForecasts]);
 
 
   const onSubmit = async (data: FormValues) => {
@@ -232,9 +228,9 @@ export function AddMovementDialog({
       form.setValue('sottocategoria', result.subcategory, { shouldValidate: true });
       form.setValue('iva', result.ivaPercentage, { shouldValidate: true });
       toast({ title: 'Categorizzazione AI completata!', description: 'Controlla i campi suggeriti.', className: 'bg-green-100 dark:bg-green-900' });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error during AI categorization:", error);
-      toast({ variant: 'destructive', title: 'Errore AI', description: 'Impossibile suggerire una categoria in questo momento.' });
+      toast({ variant: 'destructive', title: 'Errore AI', description: error.message || 'Impossibile suggerire una categoria in questo momento.' });
     } finally {
       setIsCategorizing(false);
     }
@@ -360,7 +356,7 @@ export function AddMovementDialog({
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="nessuno">Nessun collegamento</SelectItem>
+                            <SelectItem value="">Nessun collegamento</SelectItem>
                             {openItems.map(item => (
                                 <SelectItem key={`${item.type}-${item.id}`} value={`${item.type}/${item.id}`}>
                                     {`(${item.societa}) ${item.description} - ${format(new Date(item.date), 'dd/MM/yy')} - €${item.amount.toFixed(2)}`}
@@ -407,7 +403,7 @@ export function AddMovementDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="nessuna">Nessuna</SelectItem>
+                              <SelectItem value="Nessuna">Nessuna</SelectItem>
                               {selectedCategory && CATEGORIE[selectedCategory as keyof typeof CATEGORIE]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                             </SelectContent>
                         </Select>
