@@ -127,10 +127,12 @@ const UserManagementCard = () => {
     const [editingUser, setEditingUser] = useState<AppUser | null>(null);
     const [deletingUser, setDeletingUser] = useState<AppUser | null>(null);
 
+    const isCurrentUserAdmin = currentUser?.role === 'admin';
+
     const usersQuery = useMemo(() => {
-        if (!firestore) return null;
+        if (!firestore || !isCurrentUserAdmin) return null; // Only fetch if admin
         return query(collection(firestore, 'users'));
-    }, [firestore]);
+    }, [firestore, isCurrentUserAdmin]);
 
     const { data: users, isLoading, error } = useCollection<AppUser>(usersQuery);
 
@@ -294,12 +296,19 @@ const UserManagementCard = () => {
                         Aggiungi, visualizza, modifica ed elimina gli utenti, i loro ruoli e le società associate.
                     </CardDescription>
                 </div>
-                 <Button onClick={() => setIsAddUserOpen(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Aggiungi Utente
-                </Button>
+                 {isCurrentUserAdmin && (
+                    <Button onClick={() => setIsAddUserOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Aggiungi Utente
+                    </Button>
+                )}
             </CardHeader>
             <CardContent>
+              {!isCurrentUserAdmin ? (
+                    <div className="h-24 flex items-center justify-center text-center text-muted-foreground bg-muted/50 rounded-md">
+                        <p>Solo gli amministratori possono visualizzare e gestire gli utenti.</p>
+                    </div>
+                ) : (
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -353,6 +362,7 @@ const UserManagementCard = () => {
                         )}
                     </TableBody>
                 </Table>
+              )}
             </CardContent>
         </Card>
         </>
@@ -481,6 +491,7 @@ export default function ImpostazioniPage() {
                 Questa sezione è riservata agli amministratori.
                 </p>
             </div>
+            <UserManagementCard />
         </div>
      )
   }
