@@ -82,16 +82,6 @@ export default function LoginPage() {
     <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-background to-secondary/40 p-4">
       <div className="flex flex-col items-center gap-8 w-full max-w-sm">
         <Logo className="h-10" />
-         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Attenzione</AlertTitle>
-          <AlertDescription>
-            Se è il primo accesso, devi prima creare l'utente amministratore.{" "}
-            <Link href="/bootstrap-admin" className="font-bold underline">
-              Vai alla pagina di creazione.
-            </Link>
-          </AlertDescription>
-        </Alert>
         <Card className="w-full shadow-xl">
           <CardHeader className="text-center">
             <CardTitle>Gestione Contabile LNC-STG</CardTitle>
