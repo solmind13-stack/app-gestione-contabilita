@@ -11,6 +11,7 @@ import { OverviewChart } from "@/components/dashboard/overview-chart";
 import { AiInsights } from "@/components/dashboard/ai-insights";
 import { CashflowChart } from '@/components/dashboard/cashflow-chart';
 import DashboardLoading from './loading';
+import { MonthlySummaryTable } from '@/components/dashboard/monthly-summary-table';
 
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, Kpi } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
@@ -61,7 +62,7 @@ export default function DashboardPage() {
     const fineMese = endOfMonth(oggi);
     const trentaGiorni = addDays(oggi, 30);
 
-    // 1. Liquidità Attuale
+    // 1. Liquidità Attuale - basata solo sui movimenti reali
     const liquidita = safeMovimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
 
     // 2. Scadenze nei prossimi 30 giorni (non pagate)
@@ -138,6 +139,9 @@ export default function DashboardPage() {
         {kpiData.map((kpi) => (
           <KpiCard key={kpi.title} data={kpi} />
         ))}
+      </div>
+      <div className="grid grid-cols-1 gap-6">
+         <MonthlySummaryTable allData={allData} isLoading={isLoading} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
