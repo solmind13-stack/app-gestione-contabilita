@@ -220,10 +220,9 @@ export default function MovimentiPage() {
                     if (!collectionName || !docId) throw new Error("ID elemento collegato non valido.");
                     linkedDocRef = doc(firestore, collectionName, docId);
                     linkedDocSnap = await transaction.get(linkedDocRef);
-                    if (!linkedDocSnap.exists()) {
+                    if (!linkedDocSnap?.exists()) {
                         console.warn(`Documento collegato ${updatedMovement.linkedTo} non trovato durante l'aggiornamento.`);
-                        // Proceed without updating the linked doc if it doesn't exist
-                        linkedDocRef = undefined; 
+                        linkedDocRef = undefined; // Proceed without updating the linked doc if it doesn't exist
                     }
                 }
 
@@ -241,8 +240,8 @@ export default function MovimentiPage() {
 
                 if (linkedDocRef && linkedDocSnap?.exists()) {
                     const collectionName = linkedDocRef.parent.id;
-                    const originalAmount = originalMovement.uscita > 0 ? originalMovement.uscita : originalMovement.entrata;
-                    const newAmount = updatedMovement.uscita > 0 ? updatedMovement.uscita : updatedMovement.entrata;
+                    const originalAmount = originalMovement.uscita > 0 ? originalMovement.uscita : -originalMovement.entrata;
+                    const newAmount = updatedMovement.uscita > 0 ? updatedMovement.uscita : -updatedMovement.entrata;
                     const amountDifference = newAmount - originalAmount;
 
                     if (collectionName === 'deadlines') {
@@ -278,15 +277,64 @@ export default function MovimentiPage() {
     const handleDeleteMovement = async () => {
         if (!movementToDelete || !firestore) return;
         try {
-            await deleteDoc(doc(firestore, 'movements', movementToDelete.id));
-            toast({ title: "Movimento Eliminato", description: "Il movimento è stato eliminato con successo." });
-        } catch (error) {
+            await runTransaction(firestore, async (transaction) => {
+                const movementDocRef = doc(firestore, 'movements', movementToDelete.id);
+                
+                // 1. READ movement to delete to check for a link
+                const movementSnap = await transaction.get(movementDocRef);
+                if (!movementSnap.exists()) {
+                    throw new Error("Movimento da eliminare non trovato.");
+                }
+                const movement = movementSnap.data() as Movimento;
+
+                // 2. If linked, READ the linked document
+                if (movement.linkedTo) {
+                    const [collectionName, docId] = movement.linkedTo.split('/');
+                    const linkedDocRef = doc(firestore, collectionName, docId);
+                    const linkedDocSnap = await transaction.get(linkedDocRef);
+                    
+                    if (linkedDocSnap.exists()) {
+                        const movementAmount = movement.uscita > 0 ? movement.uscita : -movement.entrata;
+                        
+                        // 3. WRITE the update to the linked document
+                        if (collectionName === 'deadlines') {
+                            const data = linkedDocSnap.data() as Scadenza;
+                            const newPaidAmount = (data.importoPagato || 0) - movement.uscita;
+                            const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
+                            transaction.update(linkedDocRef, { importoPagato: newPaidAmount, stato: newStatus });
+                        } else if (collectionName === 'expenseForecasts' || collectionName === 'incomeForecasts') {
+                            const data = linkedDocSnap.data() as PrevisioneUscita | PrevisioneEntrata;
+                            const newEffectiveAmount = (data.importoEffettivo || 0) - (movement.uscita > 0 ? movement.uscita : movement.entrata);
+                            let newStatus;
+                            const isExpense = collectionName === 'expenseForecasts';
+                             if (newEffectiveAmount >= data.importoLordo) {
+                                newStatus = isExpense ? 'Pagato' : 'Incassato';
+                            } else if (newEffectiveAmount > 0) {
+                                newStatus = 'Parziale';
+                            } else {
+                                newStatus = isExpense ? 'Da pagare' : 'Da incassare';
+                            }
+                            transaction.update(linkedDocRef, { importoEffettivo: newEffectiveAmount, stato: newStatus });
+                        }
+                    } else {
+                        console.warn(`Documento collegato ${movement.linkedTo} non trovato durante l'eliminazione.`);
+                    }
+                }
+                
+                // 4. WRITE the deletion of the movement
+                transaction.delete(movementDocRef);
+            });
+            
+            toast({ title: "Movimento Eliminato", description: "Il movimento e la voce collegata sono stati aggiornati." });
+
+        } catch (error: any) {
             console.error("Error deleting movement: ", error);
-            toast({ variant: 'destructive', title: 'Errore Eliminazione', description: 'Impossibile eliminare il movimento. Controlla i permessi.' });
+            toast({ variant: 'destructive', title: 'Errore Eliminazione', description: `Impossibile eliminare il movimento. ${error.message}` });
         } finally {
             setMovementToDelete(null);
         }
     };
+
 
     const handleBulkDelete = async () => {
         if (!firestore || selectedIds.length === 0 || user?.role !== 'admin') {
@@ -457,7 +505,7 @@ export default function MovimentiPage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Questa azione non può essere annullata. Il movimento &quot;{movementToDelete?.descrizione}&quot; del {movementToDelete && formatDate(movementToDelete.data)} per un importo di {movementToDelete && formatCurrency(movementToDelete.entrata > 0 ? movementToDelete.entrata : movementToDelete.uscita)} sarà eliminato permanentemente.
+                        Questa azione non può essere annullata. Il movimento &quot;{movementToDelete?.descrizione}&quot; del {movementToDelete && formatDate(movementToDelete.data)} per un importo di {movementToDelete && formatCurrency(movementToDelete.entrata > 0 ? movementToDelete.entrata : movementToDelete.uscita)} sarà eliminato permanentemente. Se è collegato a una scadenza, l'importo pagato verrà stornato.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
