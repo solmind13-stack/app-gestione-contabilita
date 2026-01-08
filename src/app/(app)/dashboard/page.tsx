@@ -4,7 +4,7 @@
 import { useMemo, useEffect, useState } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
-import { endOfMonth, startOfMonth, addDays, isWithinInterval, startOfDay, addMonths, startOfQuarter, endOfQuarter, startOfHalfYear, endOfHalfYear, startOfYear, endOfYear } from 'date-fns';
+import { endOfMonth, startOfMonth, addDays, isWithinInterval, startOfDay, addMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns';
 
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { OverviewChart } from "@/components/dashboard/overview-chart";
@@ -76,8 +76,14 @@ export default function DashboardPage() {
             endDate = endOfQuarter(today);
             break;
         case 'semiannual':
-            startDate = startOfHalfYear(today);
-            endDate = endOfHalfYear(today);
+            const currentMonth = today.getMonth(); // 0-11
+            if (currentMonth < 6) { // First half
+                startDate = startOfYear(today);
+                endDate = endOfMonth(addMonths(startOfYear(today), 5)); // End of June
+            } else { // Second half
+                startDate = startOfMonth(addMonths(startOfYear(today), 6)); // Start of July
+                endDate = endOfYear(today);
+            }
             break;
         case 'annual':
             startDate = startOfYear(today);
