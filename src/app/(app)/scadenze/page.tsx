@@ -1,7 +1,7 @@
 // src/app/(app)/scadenze/page.tsx
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference, deleteDoc } from 'firebase/firestore';
 import {
@@ -35,12 +35,14 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Scadenza, AppUser } from '@/lib/types';
+import type { Scadenza, AppUser, Movimento, DeadlineSuggestion } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { YEARS, CATEGORIE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { suggestDeadlines } from '@/ai/flows/suggest-deadlines-from-movements';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 
 const getScadenzeQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
@@ -70,6 +72,12 @@ export default function ScadenzePage() {
     const [deadlineToDelete, setDeadlineToDelete] = useState<Scadenza | null>(null);
     const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    
+    // State for AI suggestions
+    const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
+    const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
+    const [deadlineSuggestions, setDeadlineSuggestions] = useState<DeadlineSuggestion[]>([]);
+    const [selectedSuggestions, setSelectedSuggestions] = useState<DeadlineSuggestion[]>([]);
 
     // Filters
     const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -86,8 +94,10 @@ export default function ScadenzePage() {
     const firestore = useFirestore();
 
     const deadlinesQuery = useMemo(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
+    const movimentiQuery = useMemo(() => firestore ? query(collection(firestore, 'movements')) : null, [firestore]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
+    const { data: movimenti, isLoading: isLoadingMovimenti } = useCollection<Movimento>(movimentiQuery);
 
     useEffect(() => {
         if (user?.role === 'company' && user.company) {
@@ -171,6 +181,68 @@ export default function ScadenzePage() {
             setIsBulkDeleteAlertOpen(false);
         }
     };
+    
+    const handleSuggestDeadlines = async () => {
+        if (!movimenti || movimenti.length === 0) {
+            toast({ variant: 'destructive', title: 'Nessun Movimento', description: 'Non ci sono movimenti da analizzare.' });
+            return;
+        }
+        setIsSuggestionLoading(true);
+        try {
+            const recentMovements = movimenti.slice(0, 50).map(m => ({ description: m.descrizione, amount: m.uscita }));
+            const result = await suggestDeadlines({ movements: recentMovements });
+            
+            if (result.suggestions.length === 0) {
+                 toast({ title: 'Nessun Suggerimento', description: 'L\'AI non ha trovato nuove scadenze potenziali dai movimenti recenti.' });
+            } else {
+                setDeadlineSuggestions(result.suggestions);
+                setSelectedSuggestions(result.suggestions); // Pre-select all
+                setIsSuggestionDialogOpen(true);
+            }
+        } catch (error) {
+            console.error("Error suggesting deadlines:", error);
+            toast({ variant: 'destructive', title: 'Errore AI', description: 'Impossibile ottenere suggerimenti.' });
+        } finally {
+            setIsSuggestionLoading(false);
+        }
+    };
+
+    const handleCreateSuggestedDeadlines = async () => {
+        if (!firestore || !user || selectedSuggestions.length === 0) return;
+        setIsSuggestionLoading(true);
+        try {
+            const batch = writeBatch(firestore);
+            selectedSuggestions.forEach(suggestion => {
+                const newDeadlineRef = doc(collection(firestore, 'deadlines'));
+                const newDeadline: Omit<Scadenza, 'id'> = {
+                    societa: 'LNC', // Default or make selectable
+                    anno: new Date().getFullYear(),
+                    dataScadenza: new Date().toISOString(), // Placeholder, should be improved
+                    descrizione: suggestion.description,
+                    categoria: suggestion.category,
+                    importoPrevisto: suggestion.amount,
+                    importoPagato: 0,
+                    stato: 'Da pagare',
+                    ricorrenza: suggestion.recurrence,
+                    createdBy: user.uid,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                };
+                batch.set(newDeadlineRef, newDeadline);
+            });
+            await batch.commit();
+            toast({ title: 'Scadenze Create', description: `${selectedSuggestions.length} nuove scadenze sono state aggiunte.` });
+            setIsSuggestionDialogOpen(false);
+            setDeadlineSuggestions([]);
+            setSelectedSuggestions([]);
+        } catch (error) {
+            console.error("Error creating suggested deadlines:", error);
+            toast({ variant: 'destructive', title: 'Errore Creazione', description: 'Impossibile creare le scadenze suggerite.' });
+        } finally {
+            setIsSuggestionLoading(false);
+        }
+    };
+
 
     const handleOpenDialog = (deadline?: Scadenza) => {
         setEditingDeadline(deadline || null);
@@ -182,6 +254,14 @@ export default function ScadenzePage() {
             setSelectedIds(filteredScadenze.map(s => s.id));
         } else {
             setSelectedIds([]);
+        }
+    };
+    
+    const handleSelectSuggestion = (suggestion: DeadlineSuggestion, checked: boolean) => {
+        if (checked) {
+            setSelectedSuggestions(prev => [...prev, suggestion]);
+        } else {
+            setSelectedSuggestions(prev => prev.filter(s => s.originalMovementDescription !== suggestion.originalMovementDescription));
         }
     };
 
@@ -290,6 +370,57 @@ export default function ScadenzePage() {
         currentUser={user!}
       />
       
+      <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
+        <DialogContent className="max-w-3xl">
+            <DialogHeader>
+                <DialogTitle>Suggerimenti Scadenze dall'AI</DialogTitle>
+                <DialogDescription>
+                    L'AI ha analizzato i tuoi movimenti recenti e suggerisce di creare le seguenti scadenze ricorrenti. Seleziona quelle che vuoi aggiungere.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto">
+                 <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead><Checkbox 
+                                checked={selectedSuggestions.length === deadlineSuggestions.length}
+                                onCheckedChange={(checked) => setSelectedSuggestions(checked ? deadlineSuggestions : [])}
+                            />
+                            </TableHead>
+                            <TableHead>Nuova Descrizione</TableHead>
+                            <TableHead>Categoria</TableHead>
+                            <TableHead>Ricorrenza</TableHead>
+                            <TableHead className="text-right">Importo</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {deadlineSuggestions.map((suggestion, index) => (
+                            <TableRow key={index}>
+                                <TableCell>
+                                    <Checkbox 
+                                        checked={selectedSuggestions.some(s => s.originalMovementDescription === suggestion.originalMovementDescription)}
+                                        onCheckedChange={(checked) => handleSelectSuggestion(suggestion, checked as boolean)}
+                                    />
+                                </TableCell>
+                                <TableCell className="font-medium">{suggestion.description}</TableCell>
+                                <TableCell><Badge variant="outline">{suggestion.category}</Badge></TableCell>
+                                <TableCell>{suggestion.recurrence}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(suggestion.amount)}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsSuggestionDialogOpen(false)}>Annulla</Button>
+                <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedSuggestions.length === 0}>
+                    {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Crea ${selectedSuggestions.length} Scadenze`}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       <AlertDialog open={!!deadlineToDelete} onOpenChange={(open) => !open && setDeadlineToDelete(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -392,8 +523,8 @@ export default function ScadenzePage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                 <Button variant="outline" onClick={() => {}} disabled>
-                    <Sparkles className="mr-2 h-4 w-4" />
+                 <Button variant="outline" onClick={handleSuggestDeadlines} disabled={isSuggestionLoading}>
+                    {isSuggestionLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <Sparkles className="mr-2 h-4 w-4" />}
                     Suggerisci Scadenze
                 </Button>
                 <Button onClick={() => handleOpenDialog()} className="flex-shrink-0" disabled={!user}>
