@@ -116,7 +116,11 @@ export default function DashboardPage() {
       .filter(p => isWithinInterval(new Date(p.dataPrevista), { start: startDate, end: endDate }))
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
 
-    const cashFlowPrevisto = liquidita + previsioniEntratePeriodo - importoScadenzePeriodo;
+    const previsioniUscitePeriodo = previsioniUscite
+      .filter(p => isWithinInterval(new Date(p.dataScadenza), { start: startDate, end: endDate }))
+      .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
+
+    const cashFlowPrevisto = liquidita + previsioniEntratePeriodo - importoScadenzePeriodo - previsioniUscitePeriodo;
 
     const kpiResult: Kpi[] = [
         { title: 'Liquidità Attuale', value: formatCurrency(liquidita), icon: 'Wallet', color: 'bg-green-100 dark:bg-green-900', textColor: 'text-green-800 dark:text-green-200' },
@@ -133,9 +137,15 @@ export default function DashboardPage() {
       .filter(p => isWithinInterval(new Date(p.dataPrevista), { start: inizioMeseCorrente, end: fineMeseCorrente }))
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
 
-    const usciteMese = scadenze
+    const scadenzeMese = scadenze
       .filter(s => isWithinInterval(startOfDay(new Date(s.dataScadenza)), { start: inizioMeseCorrente, end: fineMeseCorrente }) && s.stato !== 'Pagato')
       .reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
+      
+    const previsioniUsciteMese = previsioniUscite
+      .filter(p => isWithinInterval(new Date(p.dataScadenza), { start: inizioMeseCorrente, end: fineMeseCorrente }) && p.stato !== 'Pagato')
+      .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
+
+    const usciteMese = scadenzeMese + previsioniUsciteMese;
 
     const cmKpi = [
         { title: 'Entrate Previste (Mese)', value: formatCurrency(entrateMese) },
@@ -272,6 +282,9 @@ export default function DashboardPage() {
         <div className="lg:col-span-3">
           <OverviewChart data={allDataFiltered} />
         </div>
+      </div>
+       <div className="grid grid-cols-1 gap-6">
+         <MonthlySummaryTable allData={allDataFiltered} isLoading={isLoading} />
       </div>
        <div className="grid grid-cols-1 gap-6">
          <CashflowChart data={allDataFiltered} />

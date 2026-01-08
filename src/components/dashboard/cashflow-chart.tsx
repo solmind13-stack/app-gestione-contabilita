@@ -75,9 +75,22 @@ export function CashflowChart({ data }: CashflowChartProps) {
         deadlines.forEach(s => {
             const deadlineDate = new Date(s.dataScadenza);
             if (s.stato !== 'Pagato' && isWithinInterval(deadlineDate, { start: (i === 0 ? today : monthStart), end: monthEnd })) {
-                outflows += (s.importoPrevisto - s.importoPagato);
+                outflows += (s.importoPrevisto - (s.importoPagato || 0));
             }
         })
+
+        // For past months, use actual movements instead of forecasts
+        if (targetMonthDate < startOfCurrentMonth) {
+            inflows = 0;
+            outflows = 0;
+            movements.forEach(mov => {
+                const movDate = new Date(mov.data);
+                if (isWithinInterval(movDate, { start: monthStart, end: monthEnd })) {
+                    inflows += mov.entrata || 0;
+                    outflows += mov.uscita || 0;
+                }
+            });
+        }
 
 
         saldo = saldo + inflows - outflows;
