@@ -10,7 +10,7 @@ import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useUser, useFirestore, useAuth, useCollection, useDoc } from '@/firebase';
 import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import type { AppUser, AppSettings, CategoryData, UserRole } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -235,6 +235,20 @@ const UserManagementCard = () => {
             toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile salvare le modifiche. Controlla i permessi.' });
         }
     };
+
+    const handleResetPassword = async (email: string) => {
+      if (!auth) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Servizio di autenticazione non disponibile.' });
+        return;
+      }
+      try {
+        await sendPasswordResetEmail(auth, email);
+        toast({ title: 'Email di Reset Inviata', description: `Un\'email per reimpostare la password è stata inviata a ${email}.` });
+      } catch (error: any) {
+        console.error('Error sending password reset email:', error);
+        toast({ variant: 'destructive', title: 'Invio Email Fallito', description: 'Impossibile inviare l\'email di reset. Controlla la console per i dettagli.' });
+      }
+    };
     
     const handleDeleteUser = async () => {
         if (!firestore || !deletingUser) return;
@@ -272,6 +286,7 @@ const UserManagementCard = () => {
             setIsOpen={(isOpen) => !isOpen && setEditingUser(null)}
             user={editingUser}
             onUpdateUser={handleUpdateUser}
+            onResetPassword={handleResetPassword}
         />
         <AlertDialog open={!!deletingUser} onOpenChange={(isOpen) => !isOpen && setDeletingUser(null)}>
             <AlertDialogContent>

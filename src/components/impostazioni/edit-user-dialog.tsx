@@ -30,8 +30,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, KeyRound } from 'lucide-react';
 import type { AppUser, UserRole } from '@/lib/types';
+import { Separator } from '../ui/separator';
 
 const FormSchema = z.object({
   firstName: z.string().min(2, 'Il nome è obbligatorio'),
@@ -55,6 +56,7 @@ interface EditUserDialogProps {
   setIsOpen: (open: boolean) => void;
   user: AppUser | null;
   onUpdateUser: (user: AppUser) => Promise<void>;
+  onResetPassword: (email: string) => Promise<void>;
 }
 
 export function EditUserDialog({
@@ -62,8 +64,10 @@ export function EditUserDialog({
   setIsOpen,
   user,
   onUpdateUser,
+  onResetPassword,
 }: EditUserDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -97,6 +101,13 @@ export function EditUserDialog({
 
     await onUpdateUser(updatedUserData);
     setIsSubmitting(false);
+  };
+
+  const handleResetPassword = async () => {
+    if (!user?.email) return;
+    setIsResetting(true);
+    await onResetPassword(user.email);
+    setIsResetting(false);
   };
 
   return (
@@ -188,10 +199,33 @@ export function EditUserDialog({
                         )}
                     />
                 )}
+                
+                <Separator />
 
-                <DialogFooter>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Gestione Password</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Verrà inviata un'email all'utente per reimpostare la sua password.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleResetPassword}
+                    disabled={isResetting}
+                  >
+                    {isResetting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <KeyRound className="mr-2 h-4 w-4" />
+                    )}
+                    Invia Email di Reset Password
+                  </Button>
+                </div>
+
+
+                <DialogFooter className="pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" disabled={isSubmitting || !form.formState.isDirty}>
                     {isSubmitting ? <Loader2 className="animate-spin" /> : 'Salva Modifiche'}
                 </Button>
                 </DialogFooter>
