@@ -85,7 +85,7 @@ export default function MovimentiPage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     
     // Filters state
-    const [selectedYear, setSelectedYear] = useState<string | null>(null);
+    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
     const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Tutti');
     const [selectedOperator, setSelectedOperator] = useState<string>('Tutti');
@@ -93,10 +93,6 @@ export default function MovimentiPage() {
 
     useEffect(() => {
         setIsClient(true);
-        // Set default year on client side to prevent hydration mismatch
-        if (!selectedYear) {
-            setSelectedYear(new Date().getFullYear().toString());
-        }
     }, []);
 
 
