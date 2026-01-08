@@ -243,7 +243,11 @@ const UserManagementCard = () => {
       }
       try {
         await sendPasswordResetEmail(auth, email);
-        toast({ title: 'Email di Reset Inviata', description: `Un\'email per reimpostare la password è stata inviata a ${email}.` });
+        toast({ 
+            title: 'Richiesta di Reset Inviata', 
+            description: `Se non ricevi l'email entro 5 minuti, controlla lo spam e verifica la configurazione dei modelli email nella console Firebase.`,
+            duration: 9000,
+        });
         return Promise.resolve();
       } catch (error: any) {
         console.error('Error sending password reset email:', error);
