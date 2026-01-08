@@ -38,7 +38,7 @@ interface OverviewChartProps {
 
 export function OverviewChart({ data }: OverviewChartProps) {
   const chartData = useMemo(() => {
-    const { movements, incomeForecasts, expenseForecasts } = data;
+    const { movements, incomeForecasts, expenseForecasts, deadlines } = data;
     const year = new Date().getFullYear();
     const monthsData = Array.from({ length: 12 }, (_, i) => ({
       month: new Date(year, i).toLocaleString('it-IT', { month: 'short' }),
@@ -46,7 +46,7 @@ export function OverviewChart({ data }: OverviewChartProps) {
       uscite: 0,
     }));
 
-    const processData = (item: Movimento | PrevisioneEntrata | PrevisioneUscita, isForecast: boolean) => {
+    const processData = (item: any, isForecast: boolean) => {
       let date, income, expense, probability = 1;
       if ('data' in item) { // Movimento
         date = new Date(item.data);
@@ -57,11 +57,11 @@ export function OverviewChart({ data }: OverviewChartProps) {
         income = item.importoLordo;
         expense = 0;
         if(isForecast) probability = item.probabilita;
-      } else { // PrevisioneUscita
+      } else { // PrevisioneUscita or Scadenza
         date = new Date(item.dataScadenza);
         income = 0;
-        expense = item.importoLordo;
-        if(isForecast) probability = item.probabilita;
+        expense = item.importoPrevisto || item.importoLordo;
+        if(isForecast && 'probabilita' in item) probability = item.probabilita;
       }
 
       if (date.getFullYear() === year) {
@@ -72,13 +72,13 @@ export function OverviewChart({ data }: OverviewChartProps) {
     };
     
     const today = new Date();
-    movements.forEach(m => processData(m, false));
-    incomeForecasts.forEach(f => {
-      if (new Date(f.dataPrevista) >= today) processData(f, true);
-    });
-    expenseForecasts.forEach(f => {
-      if (new Date(f.dataScadenza) >= today) processData(f, true);
-    });
+    // Process historical data
+    movements.filter(m => new Date(m.data) < today).forEach(m => processData(m, false));
+    
+    // Process future data
+    incomeForecasts.filter(f => new Date(f.dataPrevista) >= today).forEach(f => processData(f, true));
+    expenseForecasts.filter(f => new Date(f.dataScadenza) >= today).forEach(f => processData(f, true));
+    deadlines.filter(d => new Date(d.dataScadenza) >= today && d.stato !== 'Pagato').forEach(d => processData(d, false)); // Deadlines are certain
     
     return monthsData;
   }, [data]);
