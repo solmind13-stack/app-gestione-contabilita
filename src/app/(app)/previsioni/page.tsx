@@ -41,28 +41,21 @@ export default function PrevisioniPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [isClient, setIsClient] = useState(false);
-  const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
-  const [mainYear, setMainYear] = useState<number | null>(null);
-  const [comparisonYear, setComparisonYear] = useState<number | null>(null);
 
   const availableYears = useMemo(() => YEARS.filter(y => typeof y === 'number') as number[], []);
+  const currentYear = new Date().getFullYear();
+
+  const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+  const [mainYear, setMainYear] = useState<number>(currentYear);
+  const [comparisonYear, setComparisonYear] = useState<number | null>(availableYears.includes(currentYear - 1) ? currentYear - 1 : null);
 
   useEffect(() => {
-    setIsClient(true);
-    if (!mainYear) {
-      const currentYear = new Date().getFullYear();
-      setMainYear(currentYear);
-      if (availableYears.includes(currentYear - 1)) {
-        setComparisonYear(currentYear - 1);
-      }
-    }
     if (user?.role === 'company' && user.company) {
       setSelectedCompany(user.company);
     } else if (user?.role === 'company-editor' && user.company) {
         setSelectedCompany(user.company);
     }
-  }, [user, mainYear, availableYears]);
+  }, [user]);
 
   const handleMainYearChange = (yearValue: string) => {
     const year = Number(yearValue);
@@ -203,10 +196,6 @@ export default function PrevisioniPage() {
   }, [previsioniUscite, scadenze]);
 
 
-  if (!isClient || !mainYear) {
-    return null; 
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
@@ -216,10 +205,10 @@ export default function PrevisioniPage() {
             Analizza i trend, proietta la liquidità e gestisci le previsioni di entrate e uscite.
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
            {user && (user.role === 'admin' || user.role === 'editor') && (
             <Select value={selectedCompany} onValueChange={(v) => setSelectedCompany(v as any)}>
-              <SelectTrigger className="w-full md:w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px]">
                 <SelectValue placeholder="Società" />
               </SelectTrigger>
               <SelectContent>
@@ -227,9 +216,9 @@ export default function PrevisioniPage() {
               </SelectContent>
             </Select>
            )}
-           <div className="flex items-center gap-2">
+           <div className="flex items-center gap-2 w-full">
             <Select value={String(mainYear)} onValueChange={handleMainYearChange}>
-              <SelectTrigger className="w-full md:w-[120px]">
+              <SelectTrigger className="flex-1">
                 <SelectValue placeholder="Anno" />
               </SelectTrigger>
               <SelectContent>
@@ -238,7 +227,7 @@ export default function PrevisioniPage() {
             </Select>
              <span className="text-muted-foreground font-medium">vs</span>
             <Select value={comparisonYear ? String(comparisonYear) : ''} onValueChange={(v) => setComparisonYear(Number(v))}>
-                <SelectTrigger className="w-full md:w-[120px]">
+                <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Confronto" />
                 </SelectTrigger>
                 <SelectContent>
@@ -250,11 +239,11 @@ export default function PrevisioniPage() {
       </div>
       
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="cashflow">Dettaglio Cash Flow</TabsTrigger>
-          <TabsTrigger value="entrate">Dettaglio Entrate</TabsTrigger>
-          <TabsTrigger value="uscite">Dettaglio Uscite</TabsTrigger>
+          <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
+          <TabsTrigger value="entrate">Entrate</TabsTrigger>
+          <TabsTrigger value="uscite">Uscite</TabsTrigger>
           <TabsTrigger value="agente-ai">Agente AI</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard">
