@@ -125,26 +125,27 @@ export function AddDeadlineDialog({
     const importoPrevisto = watchedImportoPrevisto || 0;
     const currentStatus = form.getValues('stato');
   
-    // Do not automatically change status if it's manually set to 'Annullato'
     if (currentStatus === 'Annullato') {
       return;
     }
   
-    if (importoPagato >= importoPrevisto && importoPrevisto > 0) {
-      form.setValue('stato', 'Pagato');
-      // Set payment date only if it's not already set
-      if (!form.getValues('dataPagamento')) {
-        form.setValue('dataPagamento', format(new Date(), 'yyyy-MM-dd'));
-      }
-    } else if (importoPagato > 0 && importoPagato < importoPrevisto) {
-       form.setValue('stato', 'Parziale');
+    if (importoPrevisto > 0) {
+        if (importoPagato >= importoPrevisto) {
+            form.setValue('stato', 'Pagato');
+            if (!form.getValues('dataPagamento')) {
+                form.setValue('dataPagamento', format(new Date(), 'yyyy-MM-dd'));
+            }
+        } else if (importoPagato > 0) {
+            form.setValue('stato', 'Parziale');
+        } else {
+            form.setValue('stato', 'Da pagare');
+            form.setValue('dataPagamento', null);
+        }
     } else {
-       form.setValue('stato', 'Da pagare');
-      if (!isEditMode) { // Only clear payment date if it's a new entry
-          form.setValue('dataPagamento', null);
-      }
+         form.setValue('stato', 'Da pagare');
+         form.setValue('dataPagamento', null);
     }
-  }, [watchedImportoPagato, watchedImportoPrevisto, form, isEditMode]);
+  }, [watchedImportoPagato, watchedImportoPrevisto, form]);
 
 
   const onSubmit = async (data: FormValues) => {

@@ -294,20 +294,22 @@ export default function MovimentiPage() {
                     const linkedDocSnap = await transaction.get(linkedDocRef);
                     
                     if (linkedDocSnap.exists()) {
-                        const movementAmount = movement.uscita > 0 ? movement.uscita : -movement.entrata;
                         
                         // 3. WRITE the update to the linked document
                         if (collectionName === 'deadlines') {
                             const data = linkedDocSnap.data() as Scadenza;
-                            const newPaidAmount = (data.importoPagato || 0) - movement.uscita;
+                            const movementAmount = movement.uscita;
+                            const newPaidAmount = (data.importoPagato || 0) - movementAmount;
                             const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
                             transaction.update(linkedDocRef, { importoPagato: newPaidAmount, stato: newStatus });
                         } else if (collectionName === 'expenseForecasts' || collectionName === 'incomeForecasts') {
                             const data = linkedDocSnap.data() as PrevisioneUscita | PrevisioneEntrata;
-                            const newEffectiveAmount = (data.importoEffettivo || 0) - (movement.uscita > 0 ? movement.uscita : movement.entrata);
+                            const movementAmount = movement.uscita > 0 ? movement.uscita : movement.entrata;
+                            const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
+                            
                             let newStatus;
                             const isExpense = collectionName === 'expenseForecasts';
-                             if (newEffectiveAmount >= data.importoLordo) {
+                            if (newEffectiveAmount >= data.importoLordo) {
                                 newStatus = isExpense ? 'Pagato' : 'Incassato';
                             } else if (newEffectiveAmount > 0) {
                                 newStatus = 'Parziale';
