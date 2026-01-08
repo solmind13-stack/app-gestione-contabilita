@@ -56,7 +56,7 @@ interface EditUserDialogProps {
   setIsOpen: (open: boolean) => void;
   user: AppUser | null;
   onUpdateUser: (user: AppUser) => Promise<void>;
-  onResetPassword: (email: string) => Promise<void>;
+  onResetPassword: (email: string) => Promise<any>;
 }
 
 export function EditUserDialog({

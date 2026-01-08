@@ -239,14 +239,20 @@ const UserManagementCard = () => {
     const handleResetPassword = async (email: string) => {
       if (!auth) {
         toast({ variant: 'destructive', title: 'Errore', description: 'Servizio di autenticazione non disponibile.' });
-        return;
+        return Promise.reject(new Error("Auth service not available"));
       }
       try {
         await sendPasswordResetEmail(auth, email);
         toast({ title: 'Email di Reset Inviata', description: `Un\'email per reimpostare la password è stata inviata a ${email}.` });
+        return Promise.resolve();
       } catch (error: any) {
         console.error('Error sending password reset email:', error);
-        toast({ variant: 'destructive', title: 'Invio Email Fallito', description: 'Impossibile inviare l\'email di reset. Controlla la console per i dettagli.' });
+        toast({ 
+            variant: 'destructive', 
+            title: 'Invio Email Fallito', 
+            description: `Codice Errore: ${error.code}. Controlla la console per maggiori dettagli e verifica la configurazione del modello email su Firebase.` 
+        });
+        return Promise.reject(error);
       }
     };
     
