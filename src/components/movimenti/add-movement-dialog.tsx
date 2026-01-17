@@ -188,13 +188,29 @@ export function AddMovementDialog({
       resetForm();
     }
   }, [isOpen, resetForm]);
-
-  const watchedTipo = form.watch('tipo');
+  
   const watchedSocieta = form.watch('societa');
+  const watchedTipo = form.watch('tipo');
   const watchedImporto = form.watch('importo');
   const watchedDescrizione = form.watch('descrizione');
   const watchedCategoria = form.watch('categoria');
   const watchedSottocategoria = form.watch('sottocategoria');
+
+  useEffect(() => {
+    const subscription = form.watch((value, { name, type }) => {
+      if (name === 'societa' && type === 'change') {
+        const selectedCompany = companies.find(c => c.sigla === value.societa);
+        const accounts = selectedCompany?.conti || [];
+        if (accounts.length === 1) {
+          form.setValue('conto', accounts[0], { shouldValidate: true });
+        } else {
+          form.setValue('conto', '', { shouldValidate: true });
+        }
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form, companies]);
+
 
   const openItems = useMemo((): LinkableItem[] => {
     let items: LinkableItem[] = [];
@@ -581,15 +597,37 @@ export function AddMovementDialog({
                 <FormField
                     control={form.control}
                     name="conto"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Conto</FormLabel>
-                        <FormControl>
-                            <Input {...field} placeholder="Es: BAPR, Contanti..."/>
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
+                    render={({ field }) => {
+                        const selectedCompany = companies.find(c => c.sigla === watchedSocieta);
+                        const accounts = selectedCompany?.conti || [];
+
+                        return (
+                            <FormItem>
+                                <FormLabel>Conto</FormLabel>
+                                <FormControl>
+                                    {accounts.length > 1 ? (
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={!watchedSocieta}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Seleziona un conto..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {accounts.map(acc => (
+                                                    <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <Input
+                                            {...field}
+                                            placeholder="Es: BAPR, Contanti..."
+                                            disabled={accounts.length === 1}
+                                        />
+                                    )}
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        );
+                    }}
                 />
             </div>
 
