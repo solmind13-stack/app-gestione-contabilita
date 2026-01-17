@@ -23,21 +23,32 @@ const ImportTransactionsInputSchema = z.object({
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
-// We can't use the `Movimento` type directly because it has properties like 'id' that are added after creation.
-// Let's define a schema for what the AI should extract.
-const ExtractedMovementSchema = z.object({
+// Schema for what the AI model should extract. It's simpler to ensure higher reliability.
+const AiExtractedMovementSchema = z.object({
   data: z.string().describe("The date of the transaction in YYYY-MM-DD format."),
   descrizione: z.string().describe("The description of the transaction."),
   entrata: z.number().default(0).describe("The income amount (lordo)."),
   uscita: z.number().default(0).describe("The expense amount (lordo)."),
   societa: z.string().describe("The company to assign to the transaction."),
-  categoria: z.string().optional().describe("A suggested category for the transaction."),
-  sottocategoria: z.string().optional().describe("A suggested subcategory for the transaction."),
+  categoria: z.string().optional().describe("A suggested category for the transaction (e.g., Tasse, Fornitori, Immobiliare)."),
   iva: z.number().default(0.22).describe("The VAT percentage (e.g., 0.22 for 22%)."),
 });
 
+// The schema for the AI's direct output.
+const AiOutputSchema = z.object({
+    movements: z.array(AiExtractedMovementSchema),
+});
+
+// Schema for what the final flow will return after post-processing.
+// This matches the shape needed by the frontend component.
+const FinalMovementSchema = AiExtractedMovementSchema.extend({
+    anno: z.number(),
+    conto: z.string(),
+    sottocategoria: z.string(),
+});
+
 const ImportTransactionsOutputSchema = z.object({
-  movements: z.array(ExtractedMovementSchema),
+  movements: z.array(FinalMovementSchema),
 });
 export type ImportTransactionsOutput = z.infer<typeof ImportTransactionsOutputSchema>;
 
@@ -48,20 +59,19 @@ export async function importTransactions(input: ImportTransactionsInput): Promis
 const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
-  output: { schema: ImportTransactionsOutputSchema },
-  prompt: `You are an expert financial assistant specialized in analyzing documents to extract and categorize financial transactions for Italian companies.
-  Analyze the provided file content and extract all financial movements.
+  output: { schema: AiOutputSchema }, // AI is expected to return the simpler schema
+  prompt: `You are an expert financial assistant specialized in analyzing documents to extract financial transactions for Italian companies.
+  Analyze the provided file and extract all financial movements.
   The current year is ${new Date().getFullYear()}. If the year is not specified in a date, assume it's the current year.
   For each transaction, determine if it is an income (entrata) or an expense (uscita).
   You must assign the company '{{company}}' to every extracted transaction in the 'societa' field.
   The transaction date must be in YYYY-MM-DD format.
 
-  For each transaction, also suggest a 'categoria' based on its description, from the provided list. If you are unsure, use 'Da categorizzare'.
-  For the 'sottocategoria', provide a relevant sub-category if possible, otherwise use 'Da categorizzare'.
+  For each transaction, suggest a 'categoria'. If you are unsure, use 'Da categorizzare'.
   For 'iva', suggest a percentage, preferably one of: 0.22, 0.10, 0.04, 0.00.
-
-  Categories: Immobiliare, Energia, Fornitori, Gestione Immobili, Gestione Generale, Tasse, Finanziamenti, Movimenti Interni, Da categorizzare.
   
+  Do NOT suggest or include a 'sottocategoria' field in your response.
+
   Please provide the response in a structured JSON format. If no transactions are found, return an empty list of movements.
 
   File content:
@@ -72,7 +82,7 @@ const importTransactionsFlow = ai.defineFlow(
   {
     name: 'importTransactionsFlow',
     inputSchema: ImportTransactionsInputSchema,
-    outputSchema: ImportTransactionsOutputSchema,
+    outputSchema: ImportTransactionsOutputSchema, // The flow returns the extended, final schema
   },
   async (input) => {
     try {
@@ -82,7 +92,7 @@ const importTransactionsFlow = ai.defineFlow(
           return { movements: [] };
       }
 
-      // Post-process to fill in missing details and ensure consistency
+      // Post-process the AI's output to enrich it and fit the final schema.
       const cleanedMovements = output.movements.map(mov => {
           let anno: number;
           try {
@@ -100,7 +110,7 @@ const importTransactionsFlow = ai.defineFlow(
               conto: input.conto || '',
               anno: anno,
               categoria: mov.categoria || 'Da categorizzare',
-              sottocategoria: mov.sottocategoria || 'Da categorizzare',
+              sottocategoria: 'Da categorizzare', // Add default subcategory here
               iva: mov.iva === undefined ? 0.22 : mov.iva,
           };
       });
