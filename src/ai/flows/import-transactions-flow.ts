@@ -44,7 +44,8 @@ const AiOutputSchema = z.object({
     movements: z.array(AiExtractedMovementSchema),
 });
 
-// Schema for what the final flow will return. This is the Movimento type without the id.
+// This is what the final flow will return. The Movimento type from types.ts is not used directly
+// to avoid circular dependencies and keep the flow self-contained with Zod schemas.
 const FinalMovementSchema = z.object({
     societa: z.string(),
     anno: z.number(),
@@ -76,20 +77,28 @@ const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
   output: { schema: AiOutputSchema },
-  prompt: `Sei un esperto contabile specializzato nell'analizzare documenti (estratti conto, fatture, etc.) per estrarre movimenti finanziari per aziende italiane.
+  prompt: `Sei un esperto contabile. Il tuo compito è estrarre i movimenti finanziari dal file fornito.
 
-Il tuo compito si svolge in due fasi:
-1.  **Estrazione e Normalizzazione**: Analizza il file fornito e estrai tutti i movimenti finanziari. Normalizza i dati nel formato richiesto: 'data', 'descrizione', 'entrata', 'uscita'. La data deve essere in formato YYYY-MM-DD. Se l'anno non è specificato, assumi sia l'anno corrente (${new Date().getFullYear()}). Determina se ogni movimento è un'entrata o un'uscita.
-2.  **Categorizzazione**: Per ogni movimento estratto, suggerisci la 'categoria' e 'sottocategoria' più appropriate basandoti sulla 'descrizione'. Devi scegliere OBBLIGATORIAMENTE tra le seguenti opzioni. Se non sei sicuro, usa 'Da categorizzare' per entrambi.
+**Fase 1: Estrazione Dati Grezzi**
+Analizza il file e per ogni riga di transazione estrai:
+- La data ('data') in formato YYYY-MM-DD. Se manca l'anno, usa ${new Date().getFullYear()}.
+- La descrizione ('descrizione').
+- L'importo, determinando se è un'entrata ('entrata') o un'uscita ('uscita').
 
-Opzioni di Categoria e Sottocategoria valide:
+**Fase 2: Arricchimento Dati**
+Per ogni transazione estratta, basandoti sulla 'descrizione', compila i seguenti campi:
+- 'categoria': Scegli la categoria più adatta da questa lista. Se non sei sicuro, usa 'Da categorizzare'.
+- 'sottocategoria': Scegli la sottocategoria più adatta dalla lista. Se non sei sicuro, usa 'Da categorizzare'.
+- 'iva': Suggerisci una percentuale IVA (es: 0.22, 0.10, 0.04, 0.00).
+
+**Lista Categorie e Sottocategorie Valide:**
 ${categoryPromptData}
 
-Infine, suggerisci una percentuale IVA ('iva'), scegliendo preferibilmente tra: 0.22, 0.10, 0.04, 0.00.
+**Formato di Output Obbligatorio:**
+Restituisci ESCLUSIVAMENTE un oggetto JSON con una singola chiave "movements", che contiene un array di oggetti, uno per ogni transazione.
+Se non trovi transazioni, restituisci: {"movements": []}
 
-Restituisci il risultato in formato JSON. Se non trovi movimenti, restituisci una lista vuota.
-
-Dati del file:
+**File da analizzare:**
 {{media url=fileDataUri}}`,
 });
 
@@ -134,6 +143,9 @@ const importTransactionsFlow = ai.defineFlow(
               iva: mov.iva === undefined ? 0.22 : mov.iva,
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
+              operatore: input.inseritoDa, // Set the operator as the user who imported
+              metodoPag: 'Importato', // Default payment method
+              note: `Importato da file`,
           };
       });
 
