@@ -28,12 +28,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
+import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata, CompanyProfile } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
@@ -43,7 +42,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CATEGORIE, YEARS } from '@/lib/constants';
 
-const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte') => {
+const getMovimentiQuery = (firestore: any, user: AppUser | null, company: string) => {
     if (!firestore || !user) return null;
     
     let q = collection(firestore, 'movements') as CollectionReference<Movimento>;
@@ -63,7 +62,7 @@ const getMovimentiQuery = (firestore: any, user: AppUser | null, company: 'LNC' 
 
 export default function MovimentiPage() {
     const { toast } = useToast();
-    const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+    const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
     
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
@@ -72,12 +71,15 @@ export default function MovimentiPage() {
     const deadlinesQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
     const expenseForecastsQuery = useMemo(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
     const incomeForecastsQuery = useMemo(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
+    const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
     
 
     const { data: movimentiData, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiQuery);
     const { data: deadlines } = useCollection<Scadenza>(deadlinesQuery);
     const { data: expenseForecasts } = useCollection<PrevisioneUscita>(expenseForecastsQuery);
     const { data: incomeForecasts } = useCollection<PrevisioneEntrata>(incomeForecastsQuery);
+    const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
+
 
     const [isSeeding, setIsSeeding] = useState(false);
     const [movementToDelete, setMovementToDelete] = useState<Movimento | null>(null);
@@ -463,7 +465,8 @@ export default function MovimentiPage() {
 
     const getPageTitle = () => {
         if (selectedCompany === 'Tutte') return 'Movimenti';
-        return `Movimenti - ${selectedCompany}`;
+        const companyName = companies?.find(c => c.sigla === selectedCompany)?.name || selectedCompany;
+        return `Movimenti - ${companyName}`;
     }
     
     const canDelete = (movimento: Movimento) => {
@@ -485,6 +488,7 @@ export default function MovimentiPage() {
             deadlines={deadlines || []}
             expenseForecasts={expenseForecasts || []}
             incomeForecasts={incomeForecasts || []}
+            companies={companies || []}
         />
         <ImportMovementsDialog
             isOpen={isImportDialogOpen}
@@ -522,14 +526,18 @@ export default function MovimentiPage() {
             </AlertDialogContent>
         </AlertDialog>
 
-       <Tabs value={selectedCompany} onValueChange={(value) => setSelectedCompany(value as 'LNC' | 'STG' | 'Tutte')} className="w-full">
+       
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
             {user && (user.role === 'admin' || user.role === 'editor') && (
-                 <TabsList>
-                    <TabsTrigger value="Tutte">Tutte</TabsTrigger>
-                    <TabsTrigger value="LNC">LNC</TabsTrigger>
-                    <TabsTrigger value="STG">STG</TabsTrigger>
-                </TabsList>
+                <Select value={selectedCompany} onValueChange={(value) => setSelectedCompany(value as string)}>
+                    <SelectTrigger className="w-full md:w-[180px]">
+                        <SelectValue placeholder="Società" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Tutte">Tutte</SelectItem>
+                        {companies?.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
             )}
             <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
                 {user?.role === 'admin' && selectedIds.length > 0 && (
@@ -702,13 +710,13 @@ export default function MovimentiPage() {
                                 </TableCell>
                             )}
                             <TableCell>
-                                <Badge variant={movimento.societa === 'LNC' ? 'default' : 'secondary'}>{movimento.societa}</Badge>
+                                <Badge variant="secondary">{movimento.societa}</Badge>
                             </TableCell>
                             <TableCell>{movimento.anno}</TableCell>
                             <TableCell className="whitespace-nowrap">{formatDate(movimento.data)}</TableCell>
                             <TableCell>{movimento.descrizione}</TableCell>
                             <TableCell>
-                            <Badge variant="secondary">{movimento.categoria}</Badge>
+                            <Badge variant="outline">{movimento.categoria}</Badge>
                             </TableCell>
                             <TableCell>{movimento.sottocategoria}</TableCell>
                             <TableCell className={cn("text-right font-medium", entrataLorda > 0 && "text-green-600")}>
@@ -762,12 +770,11 @@ export default function MovimentiPage() {
             </div>
             </CardContent>
         </Card>
-        </Tabs>
 
 
       <Card className="w-full md:w-1/2 lg:w-1/3">
           <CardHeader>
-              <CardTitle>Riepilogo Movimenti {selectedCompany !== 'Tutte' && (user?.role === 'admin' || user?.role === 'editor') ? selectedCompany : ''}</CardTitle>
+              <CardTitle>Riepilogo Movimenti {selectedCompany !== 'Tutte' && (user?.role === 'admin' || user?.role === 'editor') ? (companies?.find(c => c.sigla === selectedCompany)?.name || selectedCompany) : ''}</CardTitle>
           </CardHeader>
           <CardContent>
               <div className="space-y-2 text-sm">

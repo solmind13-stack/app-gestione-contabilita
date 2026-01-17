@@ -34,7 +34,7 @@ export type NavItem = {
 
 export type Movimento = {
     id: string;
-    societa: 'LNC' | 'STG';
+    societa: string;
     anno: number;
     data: string; // Storing date as string in 'YYYY-MM-DD' format for consistency
     descrizione: string;
@@ -78,7 +78,7 @@ export type AppUser = {
     email: string;
     photoURL?: string | null;
     role: UserRole;
-    company?: 'LNC' | 'STG';
+    company?: string;
     creationDate?: string;
     lastLogin?: string;
     notificationPreferences?: NotificationPreferences;
@@ -86,7 +86,7 @@ export type AppUser = {
 
 export type Scadenza = {
   id: string;
-  societa: 'LNC' | 'STG';
+  societa: string;
   anno: number;
   dataScadenza: string;
   dataPagamento?: string | null; // New field for payment date
@@ -112,7 +112,7 @@ export type RiepilogoScadenze = {
 
 export type PrevisioneEntrata = {
   id: string;
-  societa: 'LNC' | 'STG';
+  societa: string;
   anno: number;
   mese: string;
   dataPrevista: string;
@@ -140,7 +140,7 @@ export type RiepilogoPrevisioniEntrate = {
 
 export type PrevisioneUscita = {
   id: string;
-  societa: 'LNC' | 'STG';
+  societa: string;
   anno: number;
   mese: string;
   dataScadenza: string;
@@ -220,5 +220,5 @@ export type LinkableItem = {
     description: string;
     date: string;
     amount: number;
-    societa: 'LNC' | 'STG';
+    societa: string;
 };

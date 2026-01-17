@@ -31,14 +31,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, KeyRound } from 'lucide-react';
-import type { AppUser, UserRole } from '@/lib/types';
+import type { AppUser, UserRole, CompanyProfile } from '@/lib/types';
 import { Separator } from '../ui/separator';
 
 const FormSchema = z.object({
   firstName: z.string().min(2, 'Il nome è obbligatorio'),
   lastName: z.string().min(2, 'Il cognome è obbligatorio'),
   role: z.enum(['admin', 'editor', 'company', 'company-editor'], { required_error: 'Il ruolo è obbligatorio' }),
-  company: z.enum(['LNC', 'STG']).optional(),
+  company: z.string().optional(),
 }).refine(data => {
     if((data.role === 'company' || data.role === 'company-editor') && !data.company) {
         return false;
@@ -57,6 +57,7 @@ interface EditUserDialogProps {
   user: AppUser | null;
   onUpdateUser: (user: AppUser) => Promise<void>;
   onResetPassword: (email: string) => Promise<any>;
+  companies: CompanyProfile[];
 }
 
 export function EditUserDialog({
@@ -65,6 +66,7 @@ export function EditUserDialog({
   user,
   onUpdateUser,
   onResetPassword,
+  companies
 }: EditUserDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -190,8 +192,7 @@ export function EditUserDialog({
                                 </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                <SelectItem value="LNC">LNC</SelectItem>
-                                <SelectItem value="STG">STG</SelectItem>
+                                {companies.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                             <FormMessage />

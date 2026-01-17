@@ -498,7 +498,12 @@ const UserManagementCard = () => {
         return query(collection(firestore, 'users'));
     }, [firestore, isCurrentUserAdmin]);
 
-    const { data: users, isLoading, error } = useCollection<AppUser>(usersQuery);
+    const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
+    const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
+
+    const { data: users, isLoading: isLoadingUsers, error } = useCollection<AppUser>(usersQuery);
+
+    const isLoading = isLoadingUsers || isLoadingCompanies;
 
     const handleOpenEditDialog = (user: AppUser) => {
         setEditingUser(user);
@@ -654,6 +659,7 @@ const UserManagementCard = () => {
             isOpen={isAddUserOpen}
             setIsOpen={setIsAddUserOpen}
             onAddUser={handleAddUser}
+            companies={companies || []}
         />
         <EditUserDialog 
             isOpen={!!editingUser}
@@ -661,6 +667,7 @@ const UserManagementCard = () => {
             user={editingUser}
             onUpdateUser={handleUpdateUser}
             onResetPassword={handleResetPassword}
+            companies={companies || []}
         />
         <AlertDialog open={!!deletingUser} onOpenChange={(isOpen) => !isOpen && setDeletingUser(null)}>
             <AlertDialogContent>

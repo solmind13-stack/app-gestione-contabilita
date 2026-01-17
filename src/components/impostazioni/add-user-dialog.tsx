@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
-import type { AppUser, UserRole } from '@/lib/types';
+import type { AppUser, UserRole, CompanyProfile } from '@/lib/types';
 
 const FormSchema = z.object({
   firstName: z.string().min(2, 'Il nome è obbligatorio'),
@@ -39,7 +39,7 @@ const FormSchema = z.object({
   email: z.string().email('Email non valida'),
   password: z.string().min(6, 'La password deve essere di almeno 6 caratteri'),
   role: z.enum(['admin', 'editor', 'company', 'company-editor'], { required_error: 'Il ruolo è obbligatorio' }),
-  company: z.enum(['LNC', 'STG']).optional(),
+  company: z.string().optional(),
 }).refine(data => {
     if((data.role === 'company' || data.role === 'company-editor') && !data.company) {
         return false;
@@ -56,12 +56,14 @@ interface AddUserDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onAddUser: (data: FormValues) => Promise<any>;
+  companies: CompanyProfile[];
 }
 
 export function AddUserDialog({
   isOpen,
   setIsOpen,
   onAddUser,
+  companies
 }: AddUserDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -73,7 +75,7 @@ export function AddUserDialog({
         email: '',
         password: '',
         role: 'company',
-        company: 'LNC',
+        company: companies[0]?.sigla || '',
     }
   });
   
@@ -201,8 +203,7 @@ export function AddUserDialog({
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                            <SelectItem value="LNC">LNC</SelectItem>
-                            <SelectItem value="STG">STG</SelectItem>
+                            {companies.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />

@@ -35,7 +35,7 @@ import { Loader2, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import type { Movimento, AppUser, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
+import type { Movimento, AppUser, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata, CompanyProfile } from '@/lib/types';
 import { it } from 'date-fns/locale';
 import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
@@ -47,7 +47,7 @@ import { Badge } from '../ui/badge';
 
 
 const FormSchema = z.object({
-  societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
+  societa: z.string({ required_error: 'Seleziona una società' }),
   data: z.string().min(1, 'Seleziona una data'),
   descrizione: z.string().min(3, 'La descrizione è obbligatoria'),
   importo: z.coerce.number().refine(val => val !== 0, 'L\'importo non può essere zero'),
@@ -70,11 +70,12 @@ interface AddMovementDialogProps {
   onAddMovement: (movement: Omit<Movimento, 'id'>, linkedItemId?: string) => Promise<void>;
   onEditMovement: (movement: Movimento) => Promise<void>;
   movementToEdit?: Movimento | null;
-  defaultCompany?: 'LNC' | 'STG';
+  defaultCompany?: string;
   currentUser: AppUser;
   deadlines: Scadenza[];
   expenseForecasts: PrevisioneUscita[];
   incomeForecasts: PrevisioneEntrata[];
+  companies: CompanyProfile[];
 }
 
 // Function to calculate similarity score
@@ -133,7 +134,8 @@ export function AddMovementDialog({
   currentUser,
   deadlines,
   expenseForecasts,
-  incomeForecasts
+  incomeForecasts,
+  companies
 }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -164,7 +166,7 @@ export function AddMovementDialog({
         });
       } else {
         form.reset({
-          societa: defaultCompany || 'LNC',
+          societa: defaultCompany,
           data: format(new Date(), 'yyyy-MM-dd'),
           descrizione: '',
           importo: 0,
@@ -365,15 +367,14 @@ export function AddMovementDialog({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Società</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={currentUser?.role === 'company'}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={currentUser?.role === 'company' || currentUser.role === 'company-editor'}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona società" />
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                        <SelectItem value="LNC">LNC</SelectItem>
-                        <SelectItem value="STG">STG</SelectItem>
+                          {companies.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
                     <FormMessage />

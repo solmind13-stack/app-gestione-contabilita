@@ -17,7 +17,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, Kpi } from '@/lib/types';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, Kpi, CompanyProfile } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
@@ -37,7 +37,7 @@ export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [isClient, setIsClient] = useState(false);
-  const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+  const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('monthly');
 
   // Firestore Queries
@@ -45,12 +45,14 @@ export default function DashboardPage() {
   const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
   const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
   const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
+  const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
 
   // Data fetching hooks
   const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
   const { data: allScadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
   const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
   const { data: allPrevisioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
+  const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
 
   useEffect(() => {
     setIsClient(true);
@@ -59,7 +61,7 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  const isLoading = isUserLoading || isLoadingMovements || isLoadingScadenze || isLoadingIncome || isLoadingExpenses;
+  const isLoading = isUserLoading || isLoadingMovements || isLoadingScadenze || isLoadingIncome || isLoadingExpenses || isLoadingCompanies;
 
   const {
     kpiData,
@@ -194,13 +196,15 @@ export default function DashboardPage() {
                     </Select>
                 </div>
                  {user && (user.role === 'admin' || user.role === 'editor') && (
-                     <Tabs value={selectedCompany} onValueChange={(v) => setSelectedCompany(v as any)}>
-                        <TabsList>
-                            <TabsTrigger value="Tutte">Tutte</TabsTrigger>
-                            <TabsTrigger value="LNC">LNC</TabsTrigger>
-                            <TabsTrigger value="STG">STG</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
+                     <Select value={selectedCompany} onValueChange={(v) => setSelectedCompany(v)}>
+                        <SelectTrigger className="w-full md:w-[200px]">
+                            <SelectValue placeholder="Società" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Tutte">Tutte le società</SelectItem>
+                            {companies?.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                 )}
             </CardContent>
         </Card>
