@@ -178,13 +178,29 @@ export type DeadlineSuggestion = {
     originalMovementDescription: string;
 };
 
+export type CompanyProfile = {
+  id: string;
+  type: 'persona_giuridica' | 'persona_fisica';
+  name: string;
+  vatId?: string;
+  fiscalCode?: string;
+  address?: string;
+  email?: string;
+  pec?: string;
+  phone?: string;
+  sdiCode?: string;
+  iban?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type CategoryData = {
   [key: string]: string[];
 };
 
 export type AppSettings = {
   id: string;
-  accounts: string[];
   paymentMethods: string[];
   operators: string[];
   categories: CategoryData;

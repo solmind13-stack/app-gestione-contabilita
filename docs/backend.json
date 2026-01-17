@@ -489,6 +489,81 @@
         "creationDate"
       ]
     },
+    "CompanyProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CompanyProfile",
+      "type": "object",
+      "description": "Represents a company or a person (client, supplier, etc.).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the profile."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "persona_giuridica",
+            "persona_fisica"
+          ],
+          "description": "Type of entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Company name or person's full name."
+        },
+        "vatId": {
+          "type": "string",
+          "description": "Partita IVA (VAT number)."
+        },
+        "fiscalCode": {
+          "type": "string",
+          "description": "Codice Fiscale (tax code)."
+        },
+        "address": {
+          "type": "string",
+          "description": "Full address."
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "pec": {
+          "type": "string",
+          "format": "email",
+          "description": "PEC - Certified email address."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number."
+        },
+        "sdiCode": {
+          "type": "string",
+          "description": "SDI code for e-invoicing."
+        },
+        "iban": {
+          "type": "string",
+          "description": "IBAN for bank transfers."
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "name",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
     "ChatHistory": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "ChatHistory",
@@ -563,27 +638,28 @@
       "type": "object",
       "description": "Stores global application settings and configurations, such as lists for dropdowns.",
       "properties": {
-        "accounts": {
-          "type": "array",
-          "description": "List of bank accounts.",
-          "items": { "type": "string" }
-        },
         "paymentMethods": {
           "type": "array",
           "description": "List of payment methods.",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "operators": {
           "type": "array",
           "description": "List of operators who can perform payments.",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "categories": {
           "type": "object",
           "description": "Map of movement categories to jejich subcategories.",
           "additionalProperties": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         }
       }
@@ -725,6 +801,22 @@
             {
               "name": "settingsId",
               "description": "Unique identifier for the settings document (e.g., 'appConfiguration')."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}",
+        "definition": {
+          "entityName": "CompanyProfile",
+          "schema": {
+            "$ref": "#/backend/entities/CompanyProfile"
+          },
+          "description": "Stores company profiles for clients, suppliers, or other entities.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "Unique ID for the company profile."
             }
           ]
         }

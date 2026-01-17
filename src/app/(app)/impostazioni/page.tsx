@@ -2,16 +2,19 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Pencil, RefreshCw, Building } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useUser, useFirestore, useAuth, useCollection, useDoc } from '@/firebase';
-import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
+import { collection, query, doc, updateDoc, deleteDoc, writeBatch, getDocs, where, setDoc, arrayUnion, arrayRemove, serverTimestamp, addDoc } from 'firebase/firestore';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import type { AppUser, AppSettings, CategoryData, UserRole } from '@/lib/types';
+import type { AppUser, AppSettings, CategoryData, UserRole, CompanyProfile } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { EditUserDialog } from '@/components/impostazioni/edit-user-dialog';
@@ -20,14 +23,258 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { AddUserDialog } from '@/components/impostazioni/add-user-dialog';
 import { AddCategoryDialog } from '@/components/impostazioni/add-category-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
+
+
+const CompanyFormSchema = z.object({
+  type: z.enum(['persona_giuridica', 'persona_fisica']),
+  name: z.string().min(2, 'Il nome è obbligatorio.'),
+  vatId: z.string().optional(),
+  fiscalCode: z.string().optional(),
+  address: z.string().optional(),
+  email: z.string().email('Email non valida.').optional().or(z.literal('')),
+  pec: z.string().email('PEC non valida.').optional().or(z.literal('')),
+  phone: z.string().optional(),
+  sdiCode: z.string().optional(),
+  iban: z.string().optional(),
+}).refine(data => data.type === 'persona_giuridica' ? !!data.vatId : !!data.fiscalCode, {
+  message: 'Partita IVA è richiesta per le persone giuridiche, Codice Fiscale per le persone fisiche.',
+  path: ['vatId'],
+});
+
+type CompanyFormValues = z.infer<typeof CompanyFormSchema>;
+
+const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }: { isOpen: boolean, setIsOpen: (open: boolean) => void, onSave: (data: CompanyProfile) => Promise<void>, companyToEdit: CompanyProfile | null, currentUser: AppUser }) => {
+    const isEditMode = !!companyToEdit;
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const form = useForm<CompanyFormValues>({
+        resolver: zodResolver(CompanyFormSchema),
+        defaultValues: {
+            type: 'persona_giuridica',
+            name: '',
+            vatId: '',
+            fiscalCode: '',
+            address: '',
+            email: '',
+            pec: '',
+            phone: '',
+            sdiCode: '',
+            iban: '',
+        }
+    });
+
+    useEffect(() => {
+        if(companyToEdit) {
+            form.reset(companyToEdit);
+        } else {
+            form.reset({
+                type: 'persona_giuridica',
+                name: '',
+                vatId: '',
+                fiscalCode: '',
+                address: '',
+                email: '',
+                pec: '',
+                phone: '',
+                sdiCode: '',
+                iban: '',
+            });
+        }
+    }, [companyToEdit, form]);
+
+    const watchedType = form.watch('type');
+
+    const onSubmit = async (data: CompanyFormValues) => {
+        setIsSubmitting(true);
+        const dataToSave: CompanyProfile = {
+            id: companyToEdit?.id || '', // Will be generated if new
+            ...data,
+            createdBy: companyToEdit?.createdBy || currentUser.uid,
+            createdAt: companyToEdit?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        }
+        await onSave(dataToSave);
+        setIsSubmitting(false);
+        setIsOpen(false);
+    }
+    
+    return (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>{isEditMode ? 'Modifica Società' : 'Aggiungi Nuova Società'}</DialogTitle>
+                    <DialogDescription>
+                        Inserisci i dettagli per questa entità.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
+                        <FormField control={form.control} name="type" render={({ field }) => (
+                            <FormItem><FormLabel>Tipo di Entità</FormLabel><FormControl>
+                                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-4 pt-2">
+                                    <FormItem className='flex items-center space-x-2'><FormControl><RadioGroupItem value="persona_giuridica" /></FormControl><FormLabel className="font-normal">Persona Giuridica</FormLabel></FormItem>
+                                    <FormItem className='flex items-center space-x-2'><FormControl><RadioGroupItem value="persona_fisica" /></FormControl><FormLabel className="font-normal">Persona Fisica</FormLabel></FormItem>
+                                </RadioGroup>
+                            </FormControl></FormItem>
+                        )} />
+                        
+                        <FormField control={form.control} name="name" render={({ field }) => (
+                            <FormItem><FormLabel>{watchedType === 'persona_giuridica' ? 'Ragione Sociale' : 'Nome e Cognome'}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <FormField control={form.control} name="vatId" render={({ field }) => (
+                                <FormItem><FormLabel>Partita IVA</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="fiscalCode" render={({ field }) => (
+                                <FormItem><FormLabel>Codice Fiscale</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                        </div>
+                        
+                        <FormField control={form.control} name="address" render={({ field }) => (
+                            <FormItem><FormLabel>Indirizzo Completo</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField control={form.control} name="email" render={({ field }) => (
+                                <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="pec" render={({ field }) => (
+                                <FormItem><FormLabel>PEC</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField control={form.control} name="phone" render={({ field }) => (
+                                <FormItem><FormLabel>Telefono</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="sdiCode" render={({ field }) => (
+                                <FormItem><FormLabel>Codice SDI</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                        </div>
+
+                         <FormField control={form.control} name="iban" render={({ field }) => (
+                            <FormItem><FormLabel>IBAN</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? 'Salva Modifiche' : 'Salva Società')}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+const SocietaManagementCard = () => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [companyToEdit, setCompanyToEdit] = useState<CompanyProfile | null>(null);
+    const [companyToDelete, setCompanyToDelete] = useState<CompanyProfile | null>(null);
+
+    const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
+    const { data: companies, isLoading, error } = useCollection<CompanyProfile>(companiesQuery);
+
+    const handleSave = async (companyData: CompanyProfile) => {
+        if (!firestore || !user) return;
+        try {
+            if(companyData.id) { // Edit
+                const docRef = doc(firestore, 'companies', companyData.id);
+                await updateDoc(docRef, companyData);
+                toast({ title: 'Società Aggiornata', description: 'I dati sono stati modificati.' });
+            } else { // Add
+                await addDoc(collection(firestore, 'companies'), companyData);
+                toast({ title: 'Società Aggiunta', description: 'La nuova società è stata salvata.' });
+            }
+        } catch (e) {
+            console.error(e);
+            toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare la società.' });
+        }
+    }
+    
+    const handleDelete = async () => {
+        if (!firestore || !companyToDelete) return;
+        try {
+            await deleteDoc(doc(firestore, 'companies', companyToDelete.id));
+            toast({ title: 'Società Eliminata', description: `${companyToDelete.name} è stata eliminata.` });
+        } catch(e) {
+             console.error(e);
+            toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare la società.' });
+        } finally {
+            setCompanyToDelete(null);
+        }
+    }
+    
+    const openDialog = (company?: CompanyProfile) => {
+        setCompanyToEdit(company || null);
+        setIsDialogOpen(true);
+    }
+    
+    return (
+        <>
+            <CompanyDialog isOpen={isDialogOpen} setIsOpen={setIsDialogOpen} onSave={handleSave} companyToEdit={companyToEdit} currentUser={user!} />
+            <AlertDialog open={!!companyToDelete} onOpenChange={(isOpen) => !isOpen && setCompanyToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader><AlertDialogTitle>Sei sicuro?</AlertDialogTitle><AlertDialogDescription>Stai per eliminare <strong>{companyToDelete?.name}</strong>. Questa azione non può essere annullata.</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogFooter><AlertDialogCancel>Annulla</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Elimina</AlertDialogAction></AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <Card>
+                <CardHeader className="flex-row items-center justify-between">
+                    <div>
+                        <CardTitle>Gestione Società</CardTitle>
+                        <CardDescription>Aggiungi e gestisci clienti, fornitori e altre entità.</CardDescription>
+                    </div>
+                    <Button onClick={() => openDialog()}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Aggiungi Società
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow><TableHead>Nome</TableHead><TableHead>Tipo</TableHead><TableHead>P.IVA / CF</TableHead><TableHead>Email</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {isLoading ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                            : error ? <TableRow><TableCell colSpan={5} className="h-24 text-center text-red-500">Errore di autorizzazione.</TableCell></TableRow>
+                            : companies && companies.length > 0 ? companies.map(c => (
+                                <TableRow key={c.id}>
+                                    <TableCell className="font-medium">{c.name}</TableCell>
+                                    <TableCell><Badge variant="secondary">{c.type === 'persona_giuridica' ? 'Giuridica' : 'Fisica'}</Badge></TableCell>
+                                    <TableCell>{c.vatId || c.fiscalCode}</TableCell>
+                                    <TableCell>{c.email}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => openDialog(c)}><Pencil className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" onClick={() => setCompanyToDelete(c)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                            : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nessuna società trovata.</TableCell></TableRow>}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </>
+    )
+}
 
 type ItemToDelete = {
-    type: 'category' | 'subcategory' | 'account' | 'paymentMethod' | 'operator';
+    type: 'category' | 'subcategory' | 'paymentMethod' | 'operator';
     name: string;
     parent?: string;
 }
 
-// Generic component for managing a simple list (accounts, payment methods, operators)
+// Generic component for managing a simple list (payment methods, operators)
 const SettingsListManager = ({ title, items, itemType, onUpdate, isLoading }: { title: string, items: string[], itemType: keyof AppSettings, onUpdate: (type: keyof AppSettings, value: any, action: 'add' | 'remove') => Promise<void>, isLoading: boolean }) => {
   const [newItem, setNewItem] = useState('');
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
@@ -418,7 +665,6 @@ export default function ImpostazioniPage() {
         
         try {
             await setDoc(settingsDocRef, {
-                accounts: ['LNC-BAPR', 'STG-BAPR'],
                 paymentMethods: ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'],
                 operators: ['Nuccio Senior', 'Nuccio Junior', 'Mario Rossi'],
                 categories: {
@@ -522,7 +768,6 @@ export default function ImpostazioniPage() {
   }
 
   const categories = settingsData?.categories || {};
-  const accounts = settingsData?.accounts || [];
   const paymentMethods = settingsData?.paymentMethods || [];
   const operators = settingsData?.operators || [];
 
@@ -563,7 +808,7 @@ export default function ImpostazioniPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-8">
-          <SettingsListManager title="Conti" items={accounts} itemType="accounts" onUpdate={handleUpdateList} isLoading={isLoadingSettings} />
+          <SocietaManagementCard />
           <SettingsListManager title="Metodi di Pagamento" items={paymentMethods} itemType="paymentMethods" onUpdate={handleUpdateList} isLoading={isLoadingSettings} />
         </div>
         <div className="space-y-8">

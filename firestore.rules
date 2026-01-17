@@ -43,6 +43,13 @@ service cloud.firestore {
       }
     }
     
+    // ========== COLLECTION: companies ==========
+    match /companies/{companyId} {
+      allow read, list: if isSignedIn();
+      // Only admins can create, update, or delete company profiles.
+      allow write: if isAdmin();
+    }
+    
     // ========== COLLECTION: settings ==========
     match /settings/{docId} {
       // Only admins can read or write the application settings.
