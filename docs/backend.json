@@ -511,6 +511,10 @@
           "type": "string",
           "description": "Company name or person's full name."
         },
+        "sigla": {
+          "type": "string",
+          "description": "Short identifier or acronym for the company (e.g., 'ACME')."
+        },
         "vatId": {
           "type": "string",
           "description": "Partita IVA (VAT number)."
@@ -519,9 +523,25 @@
           "type": "string",
           "description": "Codice Fiscale (tax code)."
         },
-        "address": {
+        "street": {
           "type": "string",
-          "description": "Full address."
+          "description": "Street name."
+        },
+        "streetNumber": {
+          "type": "string",
+          "description": "Street number."
+        },
+        "city": {
+          "type": "string",
+          "description": "City."
+        },
+        "province": {
+          "type": "string",
+          "description": "Province (e.g., 'MI')."
+        },
+        "zip": {
+          "type": "string",
+          "description": "ZIP/Postal code."
         },
         "email": {
           "type": "string",
@@ -560,6 +580,7 @@
         "id",
         "type",
         "name",
+        "sigla",
         "createdAt",
         "updatedAt"
       ]

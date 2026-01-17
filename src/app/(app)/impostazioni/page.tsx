@@ -32,9 +32,14 @@ import { Textarea } from '@/components/ui/textarea';
 const CompanyFormSchema = z.object({
   type: z.enum(['persona_giuridica', 'persona_fisica']),
   name: z.string().min(2, 'Il nome è obbligatorio.'),
+  sigla: z.string().min(1, 'La sigla è obbligatoria.').max(10, 'Massimo 10 caratteri.'),
   vatId: z.string().optional(),
   fiscalCode: z.string().optional(),
-  address: z.string().optional(),
+  street: z.string().optional(),
+  streetNumber: z.string().optional(),
+  city: z.string().optional(),
+  zip: z.string().optional(),
+  province: z.string().optional(),
   email: z.string().email('Email non valida.').optional().or(z.literal('')),
   pec: z.string().email('PEC non valida.').optional().or(z.literal('')),
   phone: z.string().optional(),
@@ -56,9 +61,14 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
         defaultValues: {
             type: 'persona_giuridica',
             name: '',
+            sigla: '',
             vatId: '',
             fiscalCode: '',
-            address: '',
+            street: '',
+            streetNumber: '',
+            city: '',
+            zip: '',
+            province: '',
             email: '',
             pec: '',
             phone: '',
@@ -74,9 +84,14 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
             form.reset({
                 type: 'persona_giuridica',
                 name: '',
+                sigla: '',
                 vatId: '',
                 fiscalCode: '',
-                address: '',
+                street: '',
+                streetNumber: '',
+                city: '',
+                zip: '',
+                province: '',
                 email: '',
                 pec: '',
                 phone: '',
@@ -93,6 +108,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
         const dataToSave: CompanyProfile = {
             id: companyToEdit?.id || '', // Will be generated if new
             ...data,
+            sigla: data.sigla!,
             createdBy: companyToEdit?.createdBy || currentUser.uid,
             createdAt: companyToEdit?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -106,7 +122,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>{isEditMode ? 'Modifica Società' : 'Aggiungi Nuova Società'}</DialogTitle>
+                    <DialogTitle>{isEditMode ? 'Modifica Soggetto Giuridico' : 'Aggiungi Nuovo Soggetto Giuridico'}</DialogTitle>
                     <DialogDescription>
                         Inserisci i dettagli per questa entità.
                     </DialogDescription>
@@ -122,9 +138,14 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                             </FormControl></FormItem>
                         )} />
                         
-                        <FormField control={form.control} name="name" render={({ field }) => (
-                            <FormItem><FormLabel>{watchedType === 'persona_giuridica' ? 'Ragione Sociale' : 'Nome e Cognome'}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField control={form.control} name="name" render={({ field }) => (
+                                <FormItem><FormLabel>{watchedType === 'persona_giuridica' ? 'Ragione Sociale' : 'Nome e Cognome'}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                             <FormField control={form.control} name="sigla" render={({ field }) => (
+                                <FormItem><FormLabel>Sigla</FormLabel><FormControl><Input {...field} placeholder="Es: ACME" /></FormControl><FormMessage /></FormItem>
+                            )} />
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                              <FormField control={form.control} name="vatId" render={({ field }) => (
@@ -135,9 +156,25 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                             )} />
                         </div>
                         
-                        <FormField control={form.control} name="address" render={({ field }) => (
-                            <FormItem><FormLabel>Indirizzo Completo</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <FormField control={form.control} name="street" render={({ field }) => (
+                                <FormItem className="col-span-2"><FormLabel>Via/Piazza</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="streetNumber" render={({ field }) => (
+                                <FormItem><FormLabel>N. Civico</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                             <FormField control={form.control} name="city" render={({ field }) => (
+                                <FormItem><FormLabel>Città</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                             <FormField control={form.control} name="province" render={({ field }) => (
+                                <FormItem><FormLabel>Provincia</FormLabel><FormControl><Input {...field} maxLength={2} placeholder="Es: RG" /></FormControl><FormMessage /></FormItem>
+                            )} />
+                             <FormField control={form.control} name="zip" render={({ field }) => (
+                                <FormItem><FormLabel>CAP</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                        </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormField control={form.control} name="email" render={({ field }) => (
@@ -163,7 +200,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
                             <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? 'Salva Modifiche' : 'Salva Società')}
+                                {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? 'Salva Modifiche' : 'Salva Soggetto')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -189,15 +226,15 @@ const SocietaManagementCard = () => {
         try {
             if(companyData.id) { // Edit
                 const docRef = doc(firestore, 'companies', companyData.id);
-                await updateDoc(docRef, companyData);
-                toast({ title: 'Società Aggiornata', description: 'I dati sono stati modificati.' });
+                await updateDoc(docRef, companyData as any);
+                toast({ title: 'Soggetto Aggiornato', description: 'I dati sono stati modificati.' });
             } else { // Add
                 await addDoc(collection(firestore, 'companies'), companyData);
-                toast({ title: 'Società Aggiunta', description: 'La nuova società è stata salvata.' });
+                toast({ title: 'Soggetto Aggiunto', description: 'Il nuovo soggetto giuridico è stato salvato.' });
             }
         } catch (e) {
             console.error(e);
-            toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare la società.' });
+            toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare il soggetto.' });
         }
     }
     
@@ -205,10 +242,10 @@ const SocietaManagementCard = () => {
         if (!firestore || !companyToDelete) return;
         try {
             await deleteDoc(doc(firestore, 'companies', companyToDelete.id));
-            toast({ title: 'Società Eliminata', description: `${companyToDelete.name} è stata eliminata.` });
+            toast({ title: 'Soggetto Eliminato', description: `${companyToDelete.name} è stato eliminato.` });
         } catch(e) {
              console.error(e);
-            toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare la società.' });
+            toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare il soggetto.' });
         } finally {
             setCompanyToDelete(null);
         }
@@ -231,25 +268,26 @@ const SocietaManagementCard = () => {
             <Card>
                 <CardHeader className="flex-row items-center justify-between">
                     <div>
-                        <CardTitle>Gestione Società</CardTitle>
+                        <CardTitle>Gestione Soggetti Giuridici</CardTitle>
                         <CardDescription>Aggiungi e gestisci clienti, fornitori e altre entità.</CardDescription>
                     </div>
                     <Button onClick={() => openDialog()}>
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Aggiungi Società
+                        Aggiungi Soggetto
                     </Button>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
-                            <TableRow><TableHead>Nome</TableHead><TableHead>Tipo</TableHead><TableHead>P.IVA / CF</TableHead><TableHead>Email</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
+                            <TableRow><TableHead>Nome</TableHead><TableHead>Sigla</TableHead><TableHead>Tipo</TableHead><TableHead>P.IVA / CF</TableHead><TableHead>Email</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
                         </TableHeader>
                         <TableBody>
-                            {isLoading ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
-                            : error ? <TableRow><TableCell colSpan={5} className="h-24 text-center text-red-500">Errore di autorizzazione.</TableCell></TableRow>
+                            {isLoading ? <TableRow><TableCell colSpan={6} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                            : error ? <TableRow><TableCell colSpan={6} className="h-24 text-center text-red-500">Errore di autorizzazione.</TableCell></TableRow>
                             : companies && companies.length > 0 ? companies.map(c => (
                                 <TableRow key={c.id}>
                                     <TableCell className="font-medium">{c.name}</TableCell>
+                                    <TableCell><Badge>{c.sigla}</Badge></TableCell>
                                     <TableCell><Badge variant="secondary">{c.type === 'persona_giuridica' ? 'Giuridica' : 'Fisica'}</Badge></TableCell>
                                     <TableCell>{c.vatId || c.fiscalCode}</TableCell>
                                     <TableCell>{c.email}</TableCell>
@@ -259,7 +297,7 @@ const SocietaManagementCard = () => {
                                     </TableCell>
                                 </TableRow>
                             ))
-                            : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nessuna società trovata.</TableCell></TableRow>}
+                            : <TableRow><TableCell colSpan={6} className="h-24 text-center">Nessun soggetto trovato.</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </CardContent>
@@ -474,7 +512,7 @@ const UserManagementCard = () => {
                 delete (dataToUpdate as any).company; // Remove the company field if not applicable
             }
 
-            await updateDoc(userDocRef, dataToUpdate);
+            await updateDoc(userDocRef, dataToUpdate as any);
             toast({ title: 'Utente Aggiornato', description: 'I dati dell\'utente sono stati salvati.' });
             setEditingUser(null);
         } catch (e) {

@@ -182,9 +182,14 @@ export type CompanyProfile = {
   id: string;
   type: 'persona_giuridica' | 'persona_fisica';
   name: string;
+  sigla: string;
   vatId?: string;
   fiscalCode?: string;
-  address?: string;
+  street?: string;
+  streetNumber?: string;
+  city?: string;
+  province?: string;
+  zip?: string;
   email?: string;
   pec?: string;
   phone?: string;
