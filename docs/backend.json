@@ -560,9 +560,12 @@
           "type": "string",
           "description": "SDI code for e-invoicing."
         },
-        "conto": {
-          "type": "string",
-          "description": "Numero di conto."
+        "conti": {
+          "type": "array",
+          "description": "Elenco dei numeri di conto associati.",
+          "items": {
+            "type": "string"
+          }
         },
         "createdBy": {
           "type": "string"

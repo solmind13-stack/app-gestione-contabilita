@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -44,7 +44,7 @@ const CompanyFormSchema = z.object({
   pec: z.string().email('PEC non valida.').optional().or(z.literal('')),
   phone: z.string().optional(),
   sdiCode: z.string().optional(),
-  conto: z.string().optional(),
+  conti: z.array(z.string().min(1, "Il numero di conto non può essere vuoto.")).optional(),
 }).refine(data => data.type === 'persona_giuridica' ? !!data.vatId : !!data.fiscalCode, {
   message: 'Partita IVA è richiesta per le persone giuridiche, Codice Fiscale per le persone fisiche.',
   path: ['vatId'],
@@ -73,8 +73,13 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
             pec: '',
             phone: '',
             sdiCode: '',
-            conto: '',
+            conti: [],
         }
+    });
+
+    const { fields, append, remove } = useFieldArray({
+        control: form.control,
+        name: "conti"
     });
 
     const watchedName = form.watch('name');
@@ -90,7 +95,10 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
 
     useEffect(() => {
         if(companyToEdit) {
-            form.reset(companyToEdit);
+            form.reset({
+                ...companyToEdit,
+                conti: companyToEdit.conti || [],
+            });
         } else {
             form.reset({
                 type: 'persona_giuridica',
@@ -107,7 +115,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                 pec: '',
                 phone: '',
                 sdiCode: '',
-                conto: '',
+                conti: [],
             });
         }
     }, [companyToEdit, form]);
@@ -119,6 +127,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
         const dataToSave: CompanyProfile = {
             id: companyToEdit?.id || '', // Will be generated if new
             ...data,
+            conti: data.conti,
             sigla: data.sigla!,
             createdBy: companyToEdit?.createdBy || currentUser.uid,
             createdAt: companyToEdit?.createdAt || new Date().toISOString(),
@@ -203,9 +212,40 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                                 <FormItem><FormLabel>Codice SDI</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                         </div>
-                        <FormField control={form.control} name="conto" render={({ field }) => (
-                            <FormItem><FormLabel>Numero di Conto</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
+
+                         <div className="space-y-2">
+                            <FormLabel>Numeri di Conto</FormLabel>
+                            {fields.map((field, index) => (
+                                <FormField
+                                    key={field.id}
+                                    control={form.control}
+                                    name={`conti.${index}`}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <div className="flex items-center gap-2">
+                                                <FormControl>
+                                                    <Input {...field} placeholder={`Conto #${index + 1}`} />
+                                                </FormControl>
+                                                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            ))}
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => append("")}
+                            >
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Aggiungi Conto
+                            </Button>
+                        </div>
 
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
@@ -289,7 +329,7 @@ const SocietaManagementCard = () => {
                 <CardContent>
                     <Table>
                         <TableHeader>
-                            <TableRow><TableHead>Nome</TableHead><TableHead>Sigla</TableHead><TableHead>Tipo</TableHead><TableHead>P.IVA / CF</TableHead><TableHead>Email</TableHead><TableHead>Conto</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
+                            <TableRow><TableHead>Nome</TableHead><TableHead>Sigla</TableHead><TableHead>Tipo</TableHead><TableHead>P.IVA / CF</TableHead><TableHead>Email</TableHead><TableHead>Conti</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
@@ -301,7 +341,13 @@ const SocietaManagementCard = () => {
                                     <TableCell><Badge variant="secondary">{c.type === 'persona_giuridica' ? 'Giuridica' : 'Fisica'}</Badge></TableCell>
                                     <TableCell>{c.vatId || c.fiscalCode}</TableCell>
                                     <TableCell>{c.email}</TableCell>
-                                    <TableCell>{c.conto}</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col gap-1 items-start">
+                                            {(c.conti && c.conti.length > 0) ? c.conti.map((conto, idx) => (
+                                                <Badge key={idx} variant="secondary" className="font-mono">{conto}</Badge>
+                                            )) : 'N/A'}
+                                        </div>
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => openDialog(c)}><Pencil className="h-4 w-4" /></Button>
                                         <Button variant="ghost" size="icon" onClick={() => setCompanyToDelete(c)}><Trash2 className="h-4 w-4 text-destructive" /></Button>

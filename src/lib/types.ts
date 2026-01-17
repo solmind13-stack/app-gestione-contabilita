@@ -194,7 +194,7 @@ export type CompanyProfile = {
   pec?: string;
   phone?: string;
   sdiCode?: string;
-  conto?: string;
+  conti?: string[];
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
