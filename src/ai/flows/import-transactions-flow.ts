@@ -12,11 +12,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { CATEGORIE } from '@/lib/constants';
 
-// Define a string representation of categories for the prompt
-const categoryPromptData = Object.entries(CATEGORIE)
-    .map(([category, subcategories]) => `  - Categoria: "${category}", Sottocategorie valide: [${subcategories.map(s => `"${s}"`).join(', ')}]`)
-    .join('\n');
-
 const ImportTransactionsInputSchema = z.object({
   fileDataUri: z.string().describe(
     "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'."
@@ -28,15 +23,12 @@ const ImportTransactionsInputSchema = z.object({
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
-// Schema for what the AI model should extract.
+// Schema for what the AI model should extract. Drastically simplified.
 const AiExtractedMovementSchema = z.object({
   data: z.string().describe("The date of the transaction in YYYY-MM-DD format."),
-  descrizione: z.string().describe("The description of the transaction."),
-  entrata: z.number().default(0).describe("The income amount (lordo)."),
-  uscita: z.number().default(0).describe("The expense amount (lordo)."),
-  categoria: z.string().optional().describe("The suggested category for the transaction."),
-  sottocategoria: z.string().optional().describe("The suggested subcategory for the transaction."),
-  iva: z.number().default(0.22).describe("The VAT percentage (e.g., 0.22 for 22%)."),
+  descrizione: z.string().describe("The full description of the transaction."),
+  entrata: z.number().default(0).describe("The income amount. If it's an expense, this should be 0."),
+  uscita: z.number().default(0).describe("The expense amount. If it's an income, this should be 0."),
 });
 
 // The schema for the AI's direct output.
@@ -44,8 +36,7 @@ const AiOutputSchema = z.object({
     movements: z.array(AiExtractedMovementSchema),
 });
 
-// This is what the final flow will return. The Movimento type from types.ts is not used directly
-// to avoid circular dependencies and keep the flow self-contained with Zod schemas.
+// This is what the final flow will return.
 const FinalMovementSchema = z.object({
     societa: z.string(),
     anno: z.number(),
@@ -73,29 +64,26 @@ export async function importTransactions(input: ImportTransactionsInput): Promis
   return importTransactionsFlow(input);
 }
 
+// SIMPLIFIED PROMPT
 const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
   output: { schema: AiOutputSchema },
-  prompt: `Sei un esperto contabile. Il tuo compito è estrarre i movimenti finanziari dal file fornito.
+  prompt: `Sei un assistente per l'estrazione di dati. Il tuo unico compito è estrarre i movimenti finanziari dal file fornito e restituirli in formato JSON.
 
-**Fase 1: Estrazione Dati Grezzi**
-Analizza il file e per ogni riga di transazione estrai:
-- La data ('data') in formato YYYY-MM-DD. Se manca l'anno, usa ${new Date().getFullYear()}.
-- La descrizione ('descrizione').
-- L'importo, determinando se è un'entrata ('entrata') o un'uscita ('uscita').
-
-**Fase 2: Arricchimento Dati**
-Per ogni transazione estratta, basandoti sulla 'descrizione', compila i seguenti campi:
-- 'categoria': Scegli la categoria più adatta da questa lista. Se non sei sicuro, usa 'Da categorizzare'.
-- 'sottocategoria': Scegli la sottocategoria più adatta dalla lista. Se non sei sicuro, usa 'Da categorizzare'.
-- 'iva': Suggerisci una percentuale IVA (es: 0.22, 0.10, 0.04, 0.00).
-
-**Lista Categorie e Sottocategorie Valide:**
-${categoryPromptData}
+**Istruzioni:**
+1.  Analizza il file (immagine, PDF, o altro).
+2.  Per ogni riga che rappresenta una transazione, estrai i seguenti campi:
+    - 'data': La data della transazione in formato YYYY-MM-DD. Se manca l'anno, usa l'anno corrente: ${new Date().getFullYear()}.
+    - 'descrizione': La descrizione completa e originale della transazione.
+    - 'entrata': L'importo dell'entrata (lordo). Se non è un'entrata, deve essere 0.
+    - 'uscita': L'importo dell'uscita (lordo). Se non è un'uscita, deve essere 0.
+3.  Non inventare dati. Se un campo non è presente, omettilo o usa il valore di default (0 per gli importi).
+4.  Non tentare di categorizzare o suggerire l'IVA. Concentrati solo sull'estrazione dei 4 campi richiesti.
 
 **Formato di Output Obbligatorio:**
-Restituisci ESCLUSIVAMENTE un oggetto JSON con una singola chiave "movements", che contiene un array di oggetti, uno per ogni transazione.
+La tua risposta deve essere ESCLUSIVAMENTE un oggetto JSON con una singola chiave "movements", che contiene un array di oggetti transazione.
+Esempio: {"movements": [{"data": "2024-07-29", "descrizione": "PAGAMENTO F24", "entrata": 0, "uscita": 150.55}]}
 Se non trovi transazioni, restituisci: {"movements": []}
 
 **File da analizzare:**
@@ -106,7 +94,7 @@ const importTransactionsFlow = ai.defineFlow(
   {
     name: 'importTransactionsFlow',
     inputSchema: ImportTransactionsInputSchema,
-    outputSchema: ImportTransactionsOutputSchema, // The flow returns the final schema
+    outputSchema: ImportTransactionsOutputSchema,
   },
   async (input) => {
     try {
@@ -119,28 +107,34 @@ const importTransactionsFlow = ai.defineFlow(
       // Post-process the AI's output to enrich it and fit the final schema.
       const cleanedMovements = output.movements.map(mov => {
           let anno: number;
+          let dataValida: string = mov.data;
           try {
-              anno = new Date(mov.data).getFullYear();
-              if (isNaN(anno)) { // Check if getFullYear returned NaN from an invalid date
+              const parsedDate = new Date(mov.data);
+              if (isNaN(parsedDate.getTime())) { // Check for invalid date
                   throw new Error('Invalid date format from AI');
               }
+              anno = parsedDate.getFullYear();
+              dataValida = parsedDate.toISOString().split('T')[0]; // Ensure YYYY-MM-DD format
           } catch(e) {
               anno = new Date().getFullYear(); // Fallback to current year
+              dataValida = new Date().toISOString().split('T')[0];
           }
 
-          const category = mov.categoria && Object.keys(CATEGORIE).includes(mov.categoria) ? mov.categoria : 'Da categorizzare';
-          const subcategory = category !== 'Da categorizzare' && mov.sottocategoria && CATEGORIE[category as keyof typeof CATEGORIE]?.includes(mov.sottocategoria) ? mov.sottocategoria : 'Da categorizzare';
+          // All categorization is now defaulted here, not by the AI.
+          const categoriaDefault = 'Da categorizzare';
+          const sottocategoriaDefault = 'Da categorizzare';
+          const ivaDefault = 0.22;
 
           return {
               societa: input.company,
               anno: anno,
-              data: mov.data,
+              data: dataValida,
               descrizione: mov.descrizione,
-              categoria: category,
-              sottocategoria: subcategory,
+              categoria: categoriaDefault,
+              sottocategoria: sottocategoriaDefault,
               entrata: mov.entrata || 0,
               uscita: mov.uscita || 0,
-              iva: mov.iva === undefined ? 0.22 : mov.iva,
+              iva: ivaDefault,
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
               operatore: input.inseritoDa, // Set the operator as the user who imported
