@@ -18,3 +18,14 @@ export function formatDate(date: string | Date, formatStr: string = 'dd/MM/yyyy'
   const dateObj = typeof date === 'string' ? new Date(date) : date;
   return formatFns(dateObj, formatStr, { locale: it });
 }
+
+export function maskAccountNumber(accountNumber?: string): string {
+  if (!accountNumber) {
+    return '';
+  }
+  if (accountNumber.length <= 3) {
+    return '***';
+  }
+  const lastThree = accountNumber.slice(-3);
+  return `${'*'.repeat(accountNumber.length - 3)}${lastThree}`;
+}

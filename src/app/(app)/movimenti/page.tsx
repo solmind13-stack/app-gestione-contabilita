@@ -31,7 +31,7 @@ import {
 import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
 import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata, CompanyProfile } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
@@ -730,7 +730,7 @@ export default function MovimentiPage() {
                             <TableCell className="text-right">{ivaEntrata > 0 ? formatCurrency(ivaEntrata) : '-'}</TableCell>
                             <TableCell className="text-right">{uscitaNetta > 0 ? formatCurrency(uscitaNetta) : '-'}</TableCell>
                             <TableCell className="text-right">{ivaUscita > 0 ? formatCurrency(ivaUscita) : '-'}</TableCell>
-                            <TableCell>{movimento.conto}</TableCell>
+                            <TableCell>{maskAccountNumber(movimento.conto)}</TableCell>
                             <TableCell>{movimento.metodoPag}</TableCell>
                             <TableCell>{movimento.operatore}</TableCell>
                             <TableCell>{movimento.inseritoDa}</TableCell>

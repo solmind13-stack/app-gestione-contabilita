@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
+import { maskAccountNumber } from '@/lib/utils';
 
 
 const CompanyFormSchema = z.object({
@@ -86,32 +87,29 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
     const { dirtyFields } = form.formState;
 
     useEffect(() => {
-        if (watchedName && !dirtyFields.sigla) {
-            const companyExtensions = ['srl', 'sas', 'snc', 'spa', 'sapa', 'srls'];
-            
-            // Clean the name from extensions, considering variations with dots
-            const cleanedName = watchedName
-                .toLowerCase()
-                .split(' ')
-                .filter(word => !companyExtensions.includes(word.replace(/\./g, '')))
-                .join(' ');
-            
-            const words = cleanedName.split(' ').filter(word => word.trim().length > 0);
-            let suggestion = '';
+    if (watchedName && !dirtyFields.sigla) {
+        const companyExtensions = ['srl', 'sas', 'snc', 'spa', 'sapa', 'srls'];
+        
+        const cleanedName = watchedName
+            .toLowerCase()
+            .split(' ')
+            .filter(word => !companyExtensions.includes(word.replace(/\./g, '')))
+            .join(' ');
+        
+        const words = cleanedName.split(' ').filter(word => word.trim().length > 0);
+        let suggestion = '';
 
-            if (words.length > 1) {
-                // Rule 1: Multiple words -> initials
-                suggestion = words.map(word => word[0]).join('').toUpperCase();
-            } else if (words.length === 1) {
-                // Rule 2: Single word -> first three consonants
-                const singleWord = words[0];
-                const consonants = singleWord.replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
-                suggestion = consonants.substring(0, 3).toUpperCase();
-            }
-
-            form.setValue('sigla', suggestion, { shouldValidate: true });
+        if (words.length > 1) {
+            suggestion = words.map(word => word[0]).join('').toUpperCase();
+        } else if (words.length === 1) {
+            const singleWord = words[0];
+            const consonants = singleWord.replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
+            suggestion = consonants.substring(0, 3).toUpperCase();
         }
-    }, [watchedName, dirtyFields.sigla, form]);
+
+        form.setValue('sigla', suggestion, { shouldValidate: true });
+    }
+}, [watchedName, dirtyFields.sigla, form]);
     
     useEffect(() => {
         if (isOpen) {
@@ -366,7 +364,7 @@ const SocietaManagementCard = () => {
                                     <TableCell>
                                         <div className="flex flex-col gap-1 items-start">
                                             {(c.conti && c.conti.length > 0) ? c.conti.map((conto, idx) => (
-                                                <Badge key={idx} variant="secondary" className="font-mono">{conto}</Badge>
+                                                <Badge key={idx} variant="secondary" className="font-mono">{maskAccountNumber(conto)}</Badge>
                                             )) : 'N/A'}
                                         </div>
                                     </TableCell>

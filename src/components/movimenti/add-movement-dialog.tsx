@@ -41,7 +41,7 @@ import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 
@@ -612,13 +612,14 @@ export function AddMovementDialog({
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {accounts.map(acc => (
-                                                    <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                                                    <SelectItem key={acc} value={acc}>{maskAccountNumber(acc)}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
                                     ) : (
                                         <Input
                                             {...field}
+                                            value={accounts.length === 1 ? maskAccountNumber(field.value) : field.value}
                                             placeholder="Es: BAPR, Contanti..."
                                             disabled={accounts.length === 1}
                                         />
