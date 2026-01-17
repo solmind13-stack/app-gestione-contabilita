@@ -115,6 +115,10 @@ export function ImportMovementsDialog({
         toast({ variant: 'destructive', title: 'Nessuna società selezionata' });
         return;
     }
+     if (!currentUser) {
+        toast({ variant: 'destructive', title: 'Utente non autenticato' });
+        return;
+    }
     setIsProcessing(true);
     setExtractedMovements([]);
 
@@ -125,6 +129,7 @@ export function ImportMovementsDialog({
         fileType: file.type,
         company: selectedCompany,
         conto: selectedAccount,
+        inseritoDa: currentUser.displayName,
       });
       
       setExtractedMovements(result.movements);
