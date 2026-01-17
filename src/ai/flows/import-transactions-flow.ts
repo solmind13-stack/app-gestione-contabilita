@@ -10,25 +10,24 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { CATEGORIE } from '@/lib/constants';
 
 const ImportTransactionsInputSchema = z.object({
   fileDataUri: z.string().describe(
     "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'."
   ),
-  fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf')."),
+  fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')."),
   company: z.string().describe("The company to assign to the transactions."),
   conto: z.string().optional().describe("The bank account to associate with the transactions."),
   inseritoDa: z.string().describe("The name of the user importing the file."),
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
-// Schema for what the AI model should extract. Now more lenient on amounts.
+// Schema for what the AI model should extract. This is kept simple and tolerant.
 const AiExtractedMovementSchema = z.object({
-  data: z.string().describe("The date of the transaction in YYYY-MM-DD format."),
-  descrizione: z.string().describe("The full description of the transaction."),
-  entrata: z.union([z.string(), z.number()]).default(0).describe("The income amount. If it's an expense, this should be 0."),
-  uscita: z.union([z.string(), z.number()]).default(0).describe("The expense amount. If it's an income, this should be 0."),
+  data: z.string().describe("La data della transazione in formato YYYY-MM-DD."),
+  descrizione: z.string().describe("La descrizione completa della transazione."),
+  entrata: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'entrata. Se è un'uscita, questo deve essere 0."),
+  uscita: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'uscita. Se è un'entrata, questo deve essere 0."),
 });
 
 // The schema for the AI's direct output.
@@ -36,7 +35,7 @@ const AiOutputSchema = z.object({
     movements: z.array(AiExtractedMovementSchema),
 });
 
-// This is what the final flow will return.
+// This is what the final flow will return after our code processes the AI output.
 const FinalMovementSchema = z.object({
     societa: z.string(),
     anno: z.number(),
@@ -64,27 +63,27 @@ export async function importTransactions(input: ImportTransactionsInput): Promis
   return importTransactionsFlow(input);
 }
 
-// SIMPLIFIED PROMPT
+// SIMPLIFIED PROMPT FOR ROBUST EXTRACTION
 const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
   output: { schema: AiOutputSchema },
-  prompt: `Sei un assistente per l'estrazione di dati. Il tuo unico compito è estrarre i movimenti finanziari dal file fornito e restituirli in formato JSON.
+  prompt: `Sei un assistente per l'estrazione di dati finanziari. Il tuo unico compito è estrarre i movimenti dal file fornito e restituirli in formato JSON.
 
-**Istruzioni:**
-1.  Analizza il file (immagine, PDF, o altro).
-2.  Per ogni riga che rappresenta una transazione, estrai i seguenti campi:
-    - 'data': La data della transazione in formato YYYY-MM-DD. Se manca l'anno, usa l'anno corrente: ${new Date().getFullYear()}.
-    - 'descrizione': La descrizione completa e originale della transazione.
-    - 'entrata': L'importo dell'entrata (lordo). Se non è un'entrata, deve essere 0.
-    - 'uscita': L'importo dell'uscita (lordo). Se non è un'uscita, deve essere 0.
-3.  Non inventare dati. Se un campo non è presente, omettilo o usa il valore di default (0 per gli importi).
-4.  Non tentare di categorizzare o suggerire l'IVA. Concentrati solo sull'estrazione dei 4 campi richiesti.
+**Istruzioni Fondamentali:**
+1.  Analizza il file fornito (immagine, PDF, Excel).
+2.  Per ogni transazione che identifichi, estrai **solo** i seguenti 4 campi:
+    - 'data': La data della transazione. Prova a formattarla come YYYY-MM-DD. Se l'anno non è presente, usa l'anno corrente: ${new Date().getFullYear()}.
+    - 'descrizione': La descrizione completa e originale della transazione, così com'è scritta.
+    - 'entrata': L'importo nella colonna delle entrate (o dare/accrediti). Se non è un'entrata, il valore deve essere 0.
+    - 'uscita': L'importo nella colonna delle uscite (o avere/addebiti). Se non è un'uscita, il valore deve essere 0.
+3.  **NON** tentare di indovinare categorie, sotto-categorie o IVA.
+4.  **NON** inventare dati. Se un campo non è presente, usa il valore di default (0 per gli importi).
 
 **Formato di Output Obbligatorio:**
-La tua risposta deve essere ESCLUSIVAMENTE un oggetto JSON con una singola chiave "movements", che contiene un array di oggetti transazione.
-Esempio: {"movements": [{"data": "2024-07-29", "descrizione": "PAGAMENTO F24", "entrata": 0, "uscita": 150.55}]}
-Se non trovi transazioni, restituisci: {"movements": []}
+La tua risposta DEVE essere un oggetto JSON con una singola chiave "movements", che contiene un array di oggetti transazione.
+Esempio: {"movements": [{"data": "2024-07-29", "descrizione": "PAGAMENTO F24 DELEGA", "entrata": 0, "uscita": 150.55}]}
+Se non trovi transazioni valide, restituisci un array vuoto: {"movements": []}
 
 **File da analizzare:**
 {{media url=fileDataUri}}`,
@@ -104,6 +103,7 @@ const importTransactionsFlow = ai.defineFlow(
           return { movements: [] };
       }
 
+      // This function handles various string formats for numbers
       const parseAmount = (amount: string | number | undefined): number => {
           if (typeof amount === 'number') {
               return amount;
@@ -117,10 +117,10 @@ const importTransactionsFlow = ai.defineFlow(
           return 0;
       };
 
-      // Post-process the AI's output to enrich it and fit the final schema.
+      // Post-process the AI's raw output to enrich it and fit the final schema.
       const cleanedMovements = output.movements.map(mov => {
           let anno: number;
-          let dataValida: string = mov.data;
+          let dataValida: string;
           try {
               const parsedDate = new Date(mov.data);
               if (isNaN(parsedDate.getTime())) { // Check for invalid date
@@ -133,7 +133,7 @@ const importTransactionsFlow = ai.defineFlow(
               dataValida = new Date().toISOString().split('T')[0];
           }
 
-          // All categorization is now defaulted here, not by the AI.
+          // Set default values here, in the code, for reliability.
           const categoriaDefault = 'Da categorizzare';
           const sottocategoriaDefault = 'Da categorizzare';
           const ivaDefault = 0.22;
@@ -150,9 +150,9 @@ const importTransactionsFlow = ai.defineFlow(
               iva: ivaDefault,
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
-              operatore: input.inseritoDa, // Set the operator as the user who imported
+              operatore: input.inseritoDa, // Default operator to the user who imported
               metodoPag: 'Importato', // Default payment method
-              note: `Importato da file`,
+              note: `Importato da file: ${input.fileType}`,
           };
       });
 
