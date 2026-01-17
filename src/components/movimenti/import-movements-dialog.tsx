@@ -130,9 +130,13 @@ export function ImportMovementsDialog({
       setExtractedMovements(result.movements);
       toast({ title: 'Analisi completata', description: `${result.movements.length} movimenti estratti dal file.` });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error processing file with AI:", error);
-      toast({ variant: 'destructive', title: 'Errore durante l\'analisi', description: 'Impossibile estrarre i movimenti dal file.' });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Errore durante l\'analisi', 
+        description: error.message || 'Impossibile estrarre i movimenti dal file.' 
+      });
     } finally {
       setIsProcessing(false);
     }

@@ -30,7 +30,7 @@ const ExtractedMovementSchema = z.object({
   descrizione: z.string().describe("The description of the transaction."),
   entrata: z.number().default(0).describe("The income amount (lordo)."),
   uscita: z.number().default(0).describe("The expense amount (lordo)."),
-  societa: z.string().describe("The company associated with the transaction (LNC or STG)."),
+  societa: z.string().describe("The company to assign to the transaction."),
   categoria: z.string().optional().describe("A suggested category for the transaction."),
   sottocategoria: z.string().optional().describe("A suggested subcategory for the transaction."),
   iva: z.number().default(0.22).describe("The VAT percentage (e.g., 0.22 for 22%)."),
@@ -92,11 +92,21 @@ const importTransactionsFlow = ai.defineFlow(
 
       // Post-process to fill in missing details and ensure consistency
       const cleanedMovements = output.movements.map(mov => {
+          let anno: number;
+          try {
+              anno = new Date(mov.data).getFullYear();
+              if (isNaN(anno)) { // Check if getFullYear returned NaN from an invalid date
+                  anno = new Date().getFullYear(); // Fallback to current year
+              }
+          } catch(e) {
+              anno = new Date().getFullYear(); // Fallback on any other date parsing error
+          }
+
           return {
               ...mov,
               societa: mov.societa || input.company,
               conto: input.conto || '',
-              anno: new Date(mov.data).getFullYear(),
+              anno: anno,
               categoria: mov.categoria || 'Da categorizzare',
               sottocategoria: mov.sottocategoria || 'Da categorizzare',
               iva: mov.iva === undefined ? 0.22 : mov.iva,
@@ -106,7 +116,9 @@ const importTransactionsFlow = ai.defineFlow(
       return { movements: cleanedMovements };
     } catch(e) {
         console.error("Error in importTransactionsFlow", e);
-        return { movements: [] };
+        throw new Error(
+          'L\'analisi AI non è riuscita. Ciò potrebbe essere dovuto a un file di formato non supportato, illeggibile o a un errore temporaneo del servizio. Prova con un file diverso o riprova più tardi.'
+        );
     }
   }
 );
