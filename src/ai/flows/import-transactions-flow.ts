@@ -56,21 +56,13 @@ const prompt = ai.definePrompt({
   You must assign the company '{{company}}' to every extracted transaction in the 'societa' field.
   The transaction date must be in YYYY-MM-DD format.
 
-  For each transaction, also suggest a 'categoria' and 'sottocategoria' based on its description, from the provided lists.
-  If you cannot determine a category, use 'Da categorizzare' for both fields.
-  Also suggest the correct IVA percentage.
+  For each transaction, also suggest a 'categoria' based on its description, from the provided list. If you are unsure, use 'Da categorizzare'.
+  For the 'sottocategoria', provide a relevant sub-category if possible, otherwise use 'Da categorizzare'.
+  For 'iva', suggest a percentage, preferably one of: 0.22, 0.10, 0.04, 0.00.
 
-  Categories: Immobiliare, Energia, Fornitori, Gestione Immobili, Gestione Generale, Tasse, Finanziamenti, Movimenti Interni, Da categorizzare
-  Subcategories (per Immobiliare): Affitti, Depositi Cauzionali, Recupero Spese, Immobili
-  Subcategories (per Energia): Quote CEF, Pratiche Contributo, Incentivi GSE, Vendita Energia
-  Subcategories (per Fornitori): Materiali, Lavori/Manutenzione, Impianti, Servizi
-  Subcategories (per Gestione Generale): Spese Bancarie, Commercialista, Telefonia, Altre Spese, Gestione
-  Subcategories (per Tasse): IVA Trimestrale, IMU, IRES, IRAP, F24 Vari, Bolli, Cartelle Esattoriali
-  Subcategories (per Finanziamenti): Rate Mutuo, Rate Prestito, Rimborso
-  Subcategories (per Movimenti Interni): Giroconto, Trasferimento
-  IVA Percentages: 0.22, 0.10, 0.04, 0.00
+  Categories: Immobiliare, Energia, Fornitori, Gestione Immobili, Gestione Generale, Tasse, Finanziamenti, Movimenti Interni, Da categorizzare.
   
-  Please provide the response in a structured JSON format.
+  Please provide the response in a structured JSON format. If no transactions are found, return an empty list of movements.
 
   File content:
   {{media url=fileDataUri}}`,
