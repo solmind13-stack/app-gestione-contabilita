@@ -7,8 +7,8 @@ import { collection, query, where, CollectionReference, DocumentData } from 'fir
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
-import { YEARS, COMPANIES } from '@/lib/constants';
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza } from '@/lib/types';
+import { YEARS } from '@/lib/constants';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, CompanyProfile } from '@/lib/types';
 import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
 import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
@@ -17,7 +17,7 @@ import { addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { CashflowDetail } from '@/components/previsioni/cashflow-detail';
 
 
-const getQuery = (firestore: any, user: AppUser | null, company: 'LNC' | 'STG' | 'Tutte', collectionName: string) => {
+const getQuery = (firestore: any, user: AppUser | null, company: string, collectionName: string) => {
     if (!firestore || !user) return null;
 
     let q = collection(firestore, collectionName) as CollectionReference<DocumentData>;
@@ -45,7 +45,7 @@ export default function PrevisioniPage() {
   const availableYears = useMemo(() => YEARS.filter(y => typeof y === 'number') as number[], []);
   const currentYear = new Date().getFullYear();
 
-  const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG' | 'Tutte'>('Tutte');
+  const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
   const [mainYear, setMainYear] = useState<number>(currentYear);
   const [comparisonYear, setComparisonYear] = useState<number | null>(availableYears.includes(currentYear - 1) ? currentYear - 1 : null);
 
@@ -77,14 +77,16 @@ export default function PrevisioniPage() {
   const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'expenseForecasts'), [firestore, user, selectedCompany]);
   const movimentiQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'movements'), [firestore, user, selectedCompany]);
   const scadenzeQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'deadlines'), [firestore, user, selectedCompany]);
+  const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
   
   // Data fetching hooks
   const { data: movimenti, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
   const { data: previsioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
   const { data: previsioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
   const { data: scadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
+  const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
   
-  const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze;
+  const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze || isLoadingCompanies;
   
   // CRUD Handlers for Forecasts
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
@@ -207,12 +209,13 @@ export default function PrevisioniPage() {
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-4">
            {user && (user.role === 'admin' || user.role === 'editor') && (
-            <Select value={selectedCompany} onValueChange={(v) => setSelectedCompany(v as any)}>
+            <Select value={selectedCompany} onValueChange={(v) => setSelectedCompany(v)}>
               <SelectTrigger className="w-full sm:w-[150px]">
                 <SelectValue placeholder="Società" />
               </SelectTrigger>
               <SelectContent>
-                {COMPANIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                <SelectItem value="Tutte">Tutte le società</SelectItem>
+                {companies?.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
            )}
