@@ -87,9 +87,20 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
 
     useEffect(() => {
         if (watchedName && !dirtyFields.sigla) {
-            const consonants = watchedName.toLowerCase().replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
-            const suggestion = consonants.substring(0, 3).toUpperCase();
-            form.setValue('sigla', suggestion);
+            const words = watchedName.split(' ').filter(word => word.length > 0);
+            let suggestion = '';
+
+            if (words.length > 1) {
+                // Rule 1: Multiple words -> initials
+                suggestion = words.map(word => word[0]).join('').toUpperCase();
+            } else if (words.length === 1) {
+                // Rule 2: Single word -> first three consonants
+                const singleWord = words[0];
+                const consonants = singleWord.toLowerCase().replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
+                suggestion = consonants.substring(0, 3).toUpperCase();
+            }
+
+            form.setValue('sigla', suggestion, { shouldValidate: true });
         }
     }, [watchedName, dirtyFields.sigla, form]);
 
