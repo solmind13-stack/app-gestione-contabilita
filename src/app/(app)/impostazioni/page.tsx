@@ -44,6 +44,7 @@ const CompanyFormSchema = z.object({
   pec: z.string().email('PEC non valida.').optional().or(z.literal('')),
   phone: z.string().optional(),
   sdiCode: z.string().optional(),
+  conto: z.string().optional(),
 }).refine(data => data.type === 'persona_giuridica' ? !!data.vatId : !!data.fiscalCode, {
   message: 'Partita IVA è richiesta per le persone giuridiche, Codice Fiscale per le persone fisiche.',
   path: ['vatId'],
@@ -72,6 +73,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
             pec: '',
             phone: '',
             sdiCode: '',
+            conto: '',
         }
     });
 
@@ -80,14 +82,9 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
 
     useEffect(() => {
         if (watchedName && !dirtyFields.sigla) {
-            const words = watchedName.split(' ').filter(Boolean);
-            let suggestion = '';
-            if (words.length > 1) {
-                suggestion = words.map(w => w[0]).join('');
-            } else if (words.length === 1) {
-                suggestion = words[0].substring(0, 4);
-            }
-            form.setValue('sigla', suggestion.toUpperCase().substring(0, 10));
+            const consonants = watchedName.toLowerCase().replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
+            const suggestion = consonants.substring(0, 3).toUpperCase();
+            form.setValue('sigla', suggestion);
         }
     }, [watchedName, dirtyFields.sigla, form]);
 
@@ -110,6 +107,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                 pec: '',
                 phone: '',
                 sdiCode: '',
+                conto: '',
             });
         }
     }, [companyToEdit, form]);
@@ -205,6 +203,9 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                                 <FormItem><FormLabel>Codice SDI</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                         </div>
+                        <FormField control={form.control} name="conto" render={({ field }) => (
+                            <FormItem><FormLabel>Numero di Conto</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
 
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
@@ -239,7 +240,7 @@ const SocietaManagementCard = () => {
                 toast({ title: 'Soggetto Aggiornato', description: 'I dati sono stati modificati.' });
             } else { // Add
                 await addDoc(collection(firestore, 'companies'), companyData);
-                toast({ title: 'Soggetto Aggiunto', description: 'Il nuovo soggetto giuridico è stato salvato.' });
+                toast({ title: 'Soggetto Aggiunto', description: 'Il nuovo soggetto è stato salvato.' });
             }
         } catch (e) {
             console.error(e);
@@ -277,7 +278,7 @@ const SocietaManagementCard = () => {
             <Card>
                 <CardHeader className="flex-row items-center justify-between">
                     <div>
-                        <CardTitle>Gestione Soggetti Giuridici</CardTitle>
+                        <CardTitle>Gestione Soggetti</CardTitle>
                         <CardDescription>Aggiungi e gestisci clienti, fornitori e altre entità.</CardDescription>
                     </div>
                     <Button onClick={() => openDialog()}>
@@ -288,11 +289,11 @@ const SocietaManagementCard = () => {
                 <CardContent>
                     <Table>
                         <TableHeader>
-                            <TableRow><TableHead>Nome</TableHead><TableHead>Sigla</TableHead><TableHead>Tipo</TableHead><TableHead>P.IVA / CF</TableHead><TableHead>Email</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
+                            <TableRow><TableHead>Nome</TableHead><TableHead>Sigla</TableHead><TableHead>Tipo</TableHead><TableHead>P.IVA / CF</TableHead><TableHead>Email</TableHead><TableHead>Conto</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
                         </TableHeader>
                         <TableBody>
-                            {isLoading ? <TableRow><TableCell colSpan={6} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
-                            : error ? <TableRow><TableCell colSpan={6} className="h-24 text-center text-red-500">Errore di autorizzazione.</TableCell></TableRow>
+                            {isLoading ? <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                            : error ? <TableRow><TableCell colSpan={7} className="h-24 text-center text-red-500">Errore di autorizzazione.</TableCell></TableRow>
                             : companies && companies.length > 0 ? companies.map(c => (
                                 <TableRow key={c.id}>
                                     <TableCell className="font-medium">{c.name}</TableCell>
@@ -300,13 +301,14 @@ const SocietaManagementCard = () => {
                                     <TableCell><Badge variant="secondary">{c.type === 'persona_giuridica' ? 'Giuridica' : 'Fisica'}</Badge></TableCell>
                                     <TableCell>{c.vatId || c.fiscalCode}</TableCell>
                                     <TableCell>{c.email}</TableCell>
+                                    <TableCell>{c.conto}</TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => openDialog(c)}><Pencil className="h-4 w-4" /></Button>
                                         <Button variant="ghost" size="icon" onClick={() => setCompanyToDelete(c)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                                     </TableCell>
                                 </TableRow>
                             ))
-                            : <TableRow><TableCell colSpan={6} className="h-24 text-center">Nessun soggetto trovato.</TableCell></TableRow>}
+                            : <TableRow><TableCell colSpan={7} className="h-24 text-center">Nessun soggetto trovato.</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </CardContent>
@@ -911,5 +913,3 @@ export default function ImpostazioniPage() {
     </div>
   );
 }
-
-    
