@@ -44,7 +44,6 @@ const CompanyFormSchema = z.object({
   pec: z.string().email('PEC non valida.').optional().or(z.literal('')),
   phone: z.string().optional(),
   sdiCode: z.string().optional(),
-  iban: z.string().optional(),
 }).refine(data => data.type === 'persona_giuridica' ? !!data.vatId : !!data.fiscalCode, {
   message: 'Partita IVA è richiesta per le persone giuridiche, Codice Fiscale per le persone fisiche.',
   path: ['vatId'],
@@ -73,9 +72,24 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
             pec: '',
             phone: '',
             sdiCode: '',
-            iban: '',
         }
     });
+
+    const watchedName = form.watch('name');
+    const { dirtyFields } = form.formState;
+
+    useEffect(() => {
+        if (watchedName && !dirtyFields.sigla) {
+            const words = watchedName.split(' ').filter(Boolean);
+            let suggestion = '';
+            if (words.length > 1) {
+                suggestion = words.map(w => w[0]).join('');
+            } else if (words.length === 1) {
+                suggestion = words[0].substring(0, 4);
+            }
+            form.setValue('sigla', suggestion.toUpperCase().substring(0, 10));
+        }
+    }, [watchedName, dirtyFields.sigla, form]);
 
     useEffect(() => {
         if(companyToEdit) {
@@ -96,7 +110,6 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                 pec: '',
                 phone: '',
                 sdiCode: '',
-                iban: '',
             });
         }
     }, [companyToEdit, form]);
@@ -122,7 +135,7 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>{isEditMode ? 'Modifica Soggetto Giuridico' : 'Aggiungi Nuovo Soggetto Giuridico'}</DialogTitle>
+                    <DialogTitle>{isEditMode ? 'Modifica Soggetto' : 'Aggiungi Nuovo Soggetto'}</DialogTitle>
                     <DialogDescription>
                         Inserisci i dettagli per questa entità.
                     </DialogDescription>
@@ -192,10 +205,6 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
                                 <FormItem><FormLabel>Codice SDI</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                         </div>
-
-                         <FormField control={form.control} name="iban" render={({ field }) => (
-                            <FormItem><FormLabel>IBAN</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
 
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Annulla</Button>
@@ -902,3 +911,5 @@ export default function ImpostazioniPage() {
     </div>
   );
 }
+
+    
