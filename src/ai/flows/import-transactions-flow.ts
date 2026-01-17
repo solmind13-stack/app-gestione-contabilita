@@ -23,12 +23,12 @@ const ImportTransactionsInputSchema = z.object({
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
-// Schema for what the AI model should extract. Drastically simplified.
+// Schema for what the AI model should extract. Now more lenient on amounts.
 const AiExtractedMovementSchema = z.object({
   data: z.string().describe("The date of the transaction in YYYY-MM-DD format."),
   descrizione: z.string().describe("The full description of the transaction."),
-  entrata: z.number().default(0).describe("The income amount. If it's an expense, this should be 0."),
-  uscita: z.number().default(0).describe("The expense amount. If it's an income, this should be 0."),
+  entrata: z.union([z.string(), z.number()]).default(0).describe("The income amount. If it's an expense, this should be 0."),
+  uscita: z.union([z.string(), z.number()]).default(0).describe("The expense amount. If it's an income, this should be 0."),
 });
 
 // The schema for the AI's direct output.
@@ -104,6 +104,19 @@ const importTransactionsFlow = ai.defineFlow(
           return { movements: [] };
       }
 
+      const parseAmount = (amount: string | number | undefined): number => {
+          if (typeof amount === 'number') {
+              return amount;
+          }
+          if (typeof amount === 'string') {
+              // Handles formats like "1.234,56" or "1,234.56" or "€ 1.234,56"
+              const cleaned = amount.replace(/[.€\s]/g, '').replace(',', '.');
+              const parsed = parseFloat(cleaned);
+              return isNaN(parsed) ? 0 : parsed;
+          }
+          return 0;
+      };
+
       // Post-process the AI's output to enrich it and fit the final schema.
       const cleanedMovements = output.movements.map(mov => {
           let anno: number;
@@ -132,8 +145,8 @@ const importTransactionsFlow = ai.defineFlow(
               descrizione: mov.descrizione,
               categoria: categoriaDefault,
               sottocategoria: sottocategoriaDefault,
-              entrata: mov.entrata || 0,
-              uscita: mov.uscita || 0,
+              entrata: parseAmount(mov.entrata),
+              uscita: parseAmount(mov.uscita),
               iva: ivaDefault,
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
