@@ -87,7 +87,16 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
 
     useEffect(() => {
         if (watchedName && !dirtyFields.sigla) {
-            const words = watchedName.split(' ').filter(word => word.length > 0);
+            const companyExtensions = ['srl', 'sas', 'snc', 'spa', 'sapa', 'srls'];
+            
+            // Clean the name from extensions, considering variations with dots
+            const cleanedName = watchedName
+                .toLowerCase()
+                .split(' ')
+                .filter(word => !companyExtensions.includes(word.replace(/\./g, '')))
+                .join(' ');
+            
+            const words = cleanedName.split(' ').filter(word => word.trim().length > 0);
             let suggestion = '';
 
             if (words.length > 1) {
@@ -96,40 +105,42 @@ const CompanyDialog = ({ isOpen, setIsOpen, onSave, companyToEdit, currentUser }
             } else if (words.length === 1) {
                 // Rule 2: Single word -> first three consonants
                 const singleWord = words[0];
-                const consonants = singleWord.toLowerCase().replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
+                const consonants = singleWord.replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
                 suggestion = consonants.substring(0, 3).toUpperCase();
             }
 
             form.setValue('sigla', suggestion, { shouldValidate: true });
         }
     }, [watchedName, dirtyFields.sigla, form]);
-
+    
     useEffect(() => {
-        if(companyToEdit) {
-            form.reset({
-                ...companyToEdit,
-                conti: companyToEdit.conti || [],
-            });
-        } else {
-            form.reset({
-                type: 'persona_giuridica',
-                name: '',
-                sigla: '',
-                vatId: '',
-                fiscalCode: '',
-                street: '',
-                streetNumber: '',
-                city: '',
-                zip: '',
-                province: '',
-                email: '',
-                pec: '',
-                phone: '',
-                sdiCode: '',
-                conti: [],
-            });
+        if (isOpen) {
+            if(companyToEdit) {
+                form.reset({
+                    ...companyToEdit,
+                    conti: companyToEdit.conti || [],
+                });
+            } else {
+                form.reset({
+                    type: 'persona_giuridica',
+                    name: '',
+                    sigla: '',
+                    vatId: '',
+                    fiscalCode: '',
+                    street: '',
+                    streetNumber: '',
+                    city: '',
+                    zip: '',
+                    province: '',
+                    email: '',
+                    pec: '',
+                    phone: '',
+                    sdiCode: '',
+                    conti: [],
+                });
+            }
         }
-    }, [companyToEdit, form]);
+    }, [isOpen, companyToEdit, form]);
 
     const watchedType = form.watch('type');
 
