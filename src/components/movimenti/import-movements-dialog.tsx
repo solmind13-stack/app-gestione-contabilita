@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, File, Trash2, Wand2 } from 'lucide-react';
-import type { Movimento, AppUser } from '@/lib/types';
+import type { Movimento, AppUser, CompanyProfile } from '@/lib/types';
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -30,8 +30,9 @@ interface ImportMovementsDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onImport: (movements: Omit<Movimento, 'id'>[]) => Promise<void>;
-  defaultCompany?: 'LNC' | 'STG';
+  defaultCompany?: string;
   currentUser: AppUser | null;
+  companies: CompanyProfile[];
 }
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -49,24 +50,25 @@ export function ImportMovementsDialog({
   onImport,
   defaultCompany,
   currentUser,
+  companies,
 }: ImportMovementsDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedMovements, setExtractedMovements] = useState<Omit<Movimento, 'id'>[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<'LNC' | 'STG'>('LNC');
+  const [selectedCompany, setSelectedCompany] = useState<string>('');
   const { toast } = useToast();
 
   useEffect(() => {
     if(isOpen) {
         if (currentUser?.role === 'company' || currentUser?.role === 'company-editor') {
             setSelectedCompany(currentUser.company!);
-        } else if (defaultCompany) {
+        } else if (defaultCompany && defaultCompany !== 'Tutte') {
             setSelectedCompany(defaultCompany);
-        } else {
-            setSelectedCompany('LNC');
+        } else if (companies && companies.length > 0) {
+            setSelectedCompany(companies[0].sigla);
         }
     }
-  }, [isOpen, currentUser, defaultCompany])
+  }, [isOpen, currentUser, defaultCompany, companies])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -96,7 +98,7 @@ export function ImportMovementsDialog({
 
     } catch (error) {
       console.error("Error processing file with AI:", error);
-      toast({ variant: 'destructive', title: 'Errore durante l\'analisi', description: 'Impossibile estrarre i movimenti dal file.' });
+      toast({ variant: 'destructive', title: 'Errore durante l'analisi', description: 'Impossibile estrarre i movimenti dal file.' });
     } finally {
       setIsProcessing(false);
     }
@@ -146,15 +148,14 @@ export function ImportMovementsDialog({
                     <Label htmlFor="company-select">Importa per la società</Label>
                     <Select 
                         value={selectedCompany} 
-                        onValueChange={(v) => setSelectedCompany(v as 'LNC' | 'STG')}
+                        onValueChange={(v) => setSelectedCompany(v)}
                         disabled={!canSelectCompany}
                     >
                         <SelectTrigger id="company-select">
-                            <SelectValue />
+                            <SelectValue placeholder="Seleziona società..." />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="LNC">LNC</SelectItem>
-                            <SelectItem value="STG">STG</SelectItem>
+                            {companies?.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
                 </div>

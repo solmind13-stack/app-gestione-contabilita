@@ -496,6 +496,7 @@ export default function MovimentiPage() {
             onImport={handleImportMovements}
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
             currentUser={user}
+            companies={companies || []}
         />
         <AlertDialog open={!!movementToDelete} onOpenChange={(open) => !open && setMovementToDelete(null)}>
             <AlertDialogContent>

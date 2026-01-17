@@ -18,7 +18,7 @@ const ImportTransactionsInputSchema = z.object({
     "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'."
   ),
   fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf')."),
-  company: z.enum(['LNC', 'STG']).describe("The company to assign to the transactions."),
+  company: z.string().describe("The company to assign to the transactions."),
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
@@ -29,7 +29,7 @@ const ExtractedMovementSchema = z.object({
   descrizione: z.string().describe("The description of the transaction."),
   entrata: z.number().default(0).describe("The income amount (lordo)."),
   uscita: z.number().default(0).describe("The expense amount (lordo)."),
-  societa: z.enum(['LNC', 'STG']).describe("The company associated with the transaction (LNC or STG)."),
+  societa: z.string().describe("The company associated with the transaction (LNC or STG)."),
   categoria: z.string().optional().describe("A suggested category for the transaction."),
   sottocategoria: z.string().optional().describe("A suggested subcategory for the transaction."),
   iva: z.number().default(0.22).describe("The VAT percentage (e.g., 0.22 for 22%)."),
