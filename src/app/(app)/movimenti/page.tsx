@@ -89,11 +89,6 @@ export default function MovimentiPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
     const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Tutti');
     const [selectedOperator, setSelectedOperator] = useState<string>('Tutti');
-    const [isClient, setIsClient] = useState(false)
-
-    useEffect(() => {
-        setIsClient(true);
-    }, []);
 
 
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -563,7 +558,7 @@ export default function MovimentiPage() {
                 </Button>
             </div>
         </div>
-        {isClient && <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
                 <Select value={selectedYear || ''} onValueChange={(value) => setSelectedYear(value)}>
@@ -619,7 +614,7 @@ export default function MovimentiPage() {
                     </SelectContent>
                 </Select>
             </div>
-        </div>}
+        </div>
 
         <Card>
             <CardHeader>
