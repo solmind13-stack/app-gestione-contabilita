@@ -21,10 +21,11 @@ import type { Movimento, AppUser, CompanyProfile } from '@/lib/types';
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
+import { cn } from '@/lib/utils';
 
 interface ImportMovementsDialogProps {
   isOpen: boolean;
@@ -56,6 +57,8 @@ export function ImportMovementsDialog({
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedMovements, setExtractedMovements] = useState<Omit<Movimento, 'id'>[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
+  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -68,7 +71,17 @@ export function ImportMovementsDialog({
             setSelectedCompany(companies[0].sigla);
         }
     }
-  }, [isOpen, currentUser, defaultCompany, companies])
+  }, [isOpen, currentUser, defaultCompany, companies]);
+
+  useEffect(() => {
+    const company = companies.find(c => c.sigla === selectedCompany);
+    if (company) {
+        const accounts = company.conti || [];
+        setSelectedAccount(accounts.length > 0 ? accounts[0] : '');
+    } else {
+        setSelectedAccount('');
+    }
+  }, [selectedCompany, companies]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -77,10 +90,30 @@ export function ImportMovementsDialog({
     }
   };
 
+  const handleDragEvents = (e: React.DragEvent<HTMLDivElement>, isOver: boolean) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(isOver);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      const droppedFile = e.dataTransfer.files?.[0];
+      if (droppedFile) {
+          setFile(droppedFile);
+      }
+  };
+
   const handleProcessFile = async () => {
     if (!file) {
       toast({ variant: 'destructive', title: 'Nessun file selezionato' });
       return;
+    }
+    if (!selectedCompany) {
+        toast({ variant: 'destructive', title: 'Nessuna società selezionata' });
+        return;
     }
     setIsProcessing(true);
     setExtractedMovements([]);
@@ -91,6 +124,7 @@ export function ImportMovementsDialog({
         fileDataUri: fileDataUri,
         fileType: file.type,
         company: selectedCompany,
+        conto: selectedAccount,
       });
       
       setExtractedMovements(result.movements);
@@ -121,6 +155,7 @@ export function ImportMovementsDialog({
     setFile(null);
     setExtractedMovements([]);
     setIsProcessing(false);
+    setIsDragging(false);
   }
 
   const handleClose = (open: boolean) => {
@@ -131,6 +166,9 @@ export function ImportMovementsDialog({
   }
 
   const canSelectCompany = currentUser?.role === 'admin' || currentUser?.role === 'editor';
+  
+  const currentCompanyDetails = companies.find(c => c.sigla === selectedCompany);
+  const companyAccounts = currentCompanyDetails?.conti || [];
   
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -144,23 +182,45 @@ export function ImportMovementsDialog({
         
         {!extractedMovements.length ? (
             <div className="py-8 space-y-4">
-                <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label htmlFor="company-select">Importa per la società</Label>
-                    <Select 
-                        value={selectedCompany} 
-                        onValueChange={(v) => setSelectedCompany(v)}
-                        disabled={!canSelectCompany}
-                    >
-                        <SelectTrigger id="company-select">
-                            <SelectValue placeholder="Seleziona società..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {companies?.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid w-full items-center gap-1.5">
+                        <Label htmlFor="company-select">Importa per la società</Label>
+                        <Select 
+                            value={selectedCompany} 
+                            onValueChange={(v) => setSelectedCompany(v)}
+                            disabled={!canSelectCompany}
+                        >
+                            <SelectTrigger id="company-select">
+                                <SelectValue placeholder="Seleziona società..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {companies?.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="grid w-full items-center gap-1.5">
+                        <Label htmlFor="account-select">Associa al conto</Label>
+                        {companyAccounts.length > 1 ? (
+                            <Select value={selectedAccount} onValueChange={setSelectedAccount} disabled={!selectedCompany}>
+                                <SelectTrigger id="account-select"><SelectValue placeholder="Seleziona conto..." /></SelectTrigger>
+                                <SelectContent>
+                                    {companyAccounts.map(acc => <SelectItem key={acc} value={acc}>{maskAccountNumber(acc)}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        ) : (
+                             <Input id="account-select" value={companyAccounts.length === 1 ? maskAccountNumber(companyAccounts[0]) : "Nessun conto definito"} disabled />
+                        )}
+                    </div>
                 </div>
-                <div className="flex items-center justify-center w-full">
-                    <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80">
+                 <div
+                    className={cn(
+                        "flex items-center justify-center w-full"
+                    )}
+                    onDragOver={(e) => handleDragEvents(e, true)}
+                    onDragLeave={(e) => handleDragEvents(e, false)}
+                    onDrop={handleDrop}
+                >
+                    <label htmlFor="dropzone-file" className={cn("flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80", isDragging && "border-primary bg-primary/10")}>
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                             <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
                             <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
@@ -190,8 +250,11 @@ export function ImportMovementsDialog({
                             <TableRow>
                                 <TableHead>Data</TableHead>
                                 <TableHead>Descrizione</TableHead>
+                                <TableHead>Categoria</TableHead>
+                                <TableHead>Sottocat.</TableHead>
                                 <TableHead>Entrata</TableHead>
                                 <TableHead>Uscita</TableHead>
+                                <TableHead>IVA</TableHead>
                                 <TableHead>Società</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -200,8 +263,11 @@ export function ImportMovementsDialog({
                                 <TableRow key={index}>
                                     <TableCell>{formatDate(mov.data)}</TableCell>
                                     <TableCell>{mov.descrizione}</TableCell>
+                                    <TableCell><Badge variant="outline">{mov.categoria}</Badge></TableCell>
+                                    <TableCell>{mov.sottocategoria}</TableCell>
                                     <TableCell className="text-green-600">{mov.entrata > 0 ? formatCurrency(mov.entrata) : '-'}</TableCell>
                                     <TableCell className="text-red-600">{mov.uscita > 0 ? formatCurrency(mov.uscita) : '-'}</TableCell>
+                                    <TableCell>{(mov.iva * 100).toFixed(0)}%</TableCell>
                                     <TableCell><Badge variant={mov.societa === 'LNC' ? 'default' : 'secondary'}>{mov.societa}</Badge></TableCell>
                                 </TableRow>
                             ))}

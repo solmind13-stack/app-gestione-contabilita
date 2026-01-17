@@ -19,6 +19,7 @@ const ImportTransactionsInputSchema = z.object({
   ),
   fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf')."),
   company: z.string().describe("The company to assign to the transactions."),
+  conto: z.string().optional().describe("The bank account to associate with the transactions."),
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
@@ -48,12 +49,26 @@ const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
   output: { schema: ImportTransactionsOutputSchema },
-  prompt: `You are an expert financial assistant specialized in analyzing documents to extract financial transactions for Italian companies.
+  prompt: `You are an expert financial assistant specialized in analyzing documents to extract and categorize financial transactions for Italian companies.
   Analyze the provided file content and extract all financial movements.
   The current year is ${new Date().getFullYear()}. If the year is not specified in a date, assume it's the current year.
   For each transaction, determine if it is an income (entrata) or an expense (uscita).
   You must assign the company '{{company}}' to every extracted transaction in the 'societa' field.
   The transaction date must be in YYYY-MM-DD format.
+
+  For each transaction, also suggest a 'categoria' and 'sottocategoria' based on its description, from the provided lists.
+  If you cannot determine a category, use 'Da categorizzare' for both fields.
+  Also suggest the correct IVA percentage.
+
+  Categories: Immobiliare, Energia, Fornitori, Gestione Immobili, Gestione Generale, Tasse, Finanziamenti, Movimenti Interni, Da categorizzare
+  Subcategories (per Immobiliare): Affitti, Depositi Cauzionali, Recupero Spese, Immobili
+  Subcategories (per Energia): Quote CEF, Pratiche Contributo, Incentivi GSE, Vendita Energia
+  Subcategories (per Fornitori): Materiali, Lavori/Manutenzione, Impianti, Servizi
+  Subcategories (per Gestione Generale): Spese Bancarie, Commercialista, Telefonia, Altre Spese, Gestione
+  Subcategories (per Tasse): IVA Trimestrale, IMU, IRES, IRAP, F24 Vari, Bolli, Cartelle Esattoriali
+  Subcategories (per Finanziamenti): Rate Mutuo, Rate Prestito, Rimborso
+  Subcategories (per Movimenti Interni): Giroconto, Trasferimento
+  IVA Percentages: 0.22, 0.10, 0.04, 0.00
   
   Please provide the response in a structured JSON format.
 
@@ -77,10 +92,10 @@ const importTransactionsFlow = ai.defineFlow(
 
       // Post-process to fill in missing details and ensure consistency
       const cleanedMovements = output.movements.map(mov => {
-          const today = new Date();
           return {
               ...mov,
               societa: mov.societa || input.company,
+              conto: input.conto || '',
               anno: new Date(mov.data).getFullYear(),
               categoria: mov.categoria || 'Da categorizzare',
               sottocategoria: mov.sottocategoria || 'Da categorizzare',
