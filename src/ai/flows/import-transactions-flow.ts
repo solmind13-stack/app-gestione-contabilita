@@ -52,8 +52,6 @@ export async function importTransactions(input: ImportTransactionsInput): Promis
   return importTransactionsFlow(input);
 }
 
-// The prompt is simplified to ask for a raw JSON string. 
-// No output schema is defined here to make the AI's job easier.
 const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
@@ -63,10 +61,10 @@ For each transaction object, you MUST extract the following fields as TEXT STRIN
 If a field value is not present for a transaction, use '0' as the string value. Do NOT format numbers or currencies.
 
 {{#if textContent}}
-The content below is from a spreadsheet (in CSV or JSON format). Analyze it to extract the transactions.
+The content below is a JSON string representing rows from a spreadsheet. The keys of the objects are the column headers. Your job is to analyze this JSON and extract the transaction data based on the values.
 {{{textContent}}}
 {{else}}
-Analyze the following file to extract the transactions:
+Analyze the following file (an image or PDF) to extract the transactions.
 {{media url=fileDataUri}}
 {{/if}}`,
   config: {
@@ -99,13 +97,11 @@ const importTransactionsFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      // The AI will return a GenerationResponse, we get the text from it.
       const response = await prompt(input);
       const rawJsonString = response.text;
 
       let parsedAiOutput;
       try {
-        // Manually parse the string into a JSON object.
         parsedAiOutput = JSON.parse(rawJsonString);
       } catch (jsonError) {
         console.error("AI returned invalid JSON string:", rawJsonString);
@@ -137,7 +133,7 @@ const importTransactionsFlow = ai.defineFlow(
       };
 
       const cleanedMovements = aiMovements.map(mov => {
-          if (!mov.descrizione || !mov.data) return null; // Skip invalid entries
+          if (!mov.descrizione || !mov.data) return null;
 
           let anno: number;
           let dataValida: string;
@@ -171,7 +167,7 @@ const importTransactionsFlow = ai.defineFlow(
               note: `Importato da file: ${input.fileType}`,
               status: 'manual_review' as const,
           };
-      }).filter((mov): mov is NonNullable<typeof mov> => mov !== null); // Filter out nulls
+      }).filter((mov): mov is NonNullable<typeof mov> => mov !== null);
 
       return { movements: cleanedMovements };
     } catch(e: any) {

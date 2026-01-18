@@ -35,6 +35,7 @@ interface ImportMovementsDialogProps {
   defaultCompany?: string;
   currentUser: AppUser | null;
   companies: CompanyProfile[];
+  categories: CategoryData;
 }
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -155,9 +156,8 @@ export function ImportMovementsDialog({
             const workbook = XLSX.read(fileData);
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            // header: 1 produces an array of arrays, easier for AI to parse as CSV-like
-            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); 
-            const textContent = json.map(row => (row as any[]).join(',')).join('\n');
+            const json = XLSX.utils.sheet_to_json(worksheet); 
+            const textContent = JSON.stringify(json, null, 2);
             
             result = await importTransactions({
                 ...basePayload,
