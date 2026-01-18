@@ -24,7 +24,7 @@ const CategorizeTransactionOutputSchema = z.object({
 });
 export type CategorizeTransactionOutput = z.infer<typeof CategorizeTransactionOutputSchema>;
 
-export async function categorizeTransaction(input: CategorizeTransactionInput): Promise<CategorizeTransactionOutput> {
+export async function categorizeTransaction(input: CategorizeTransactionInput): Promise<CategorizeTransactionOutput | null> {
   return categorizeTransactionFlow(input);
 }
 
@@ -57,7 +57,7 @@ const categorizeTransactionFlow = ai.defineFlow(
   {
     name: 'categorizeTransactionFlow',
     inputSchema: CategorizeTransactionInputSchema,
-    outputSchema: CategorizeTransactionOutputSchema,
+    outputSchema: z.nullable(CategorizeTransactionOutputSchema),
   },
   async input => {
     try {
@@ -65,11 +65,8 @@ const categorizeTransactionFlow = ai.defineFlow(
       return output!;
     } catch (error) {
       console.error('Error in categorizeTransactionFlow:', error);
-      // Return a controlled error response instead of letting the flow crash.
-      // This will prevent the UI from breaking and allow for graceful error handling.
-      throw new Error(
-        'Spiacenti, non è stato possibile generare un suggerimento in questo momento. Ciò potrebbe essere dovuto a un volume elevato di richieste o al superamento dei limiti di utilizzo del piano gratuito. Riprova tra qualche istante.'
-      );
+      // Return null on error to not break batch processing
+      return null;
     }
   }
 );

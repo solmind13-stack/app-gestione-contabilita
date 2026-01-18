@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import { useFirestore } from '@/firebase';
 import {
   Dialog,
   DialogContent,
@@ -14,9 +15,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UploadCloud, File as FileIcon, Trash2, Check } from 'lucide-react';
+import { Loader2, UploadCloud, File as FileIcon, Trash2, Check, Wand2 } from 'lucide-react';
 import type { Movimento, AppUser, CompanyProfile } from '@/lib/types';
-import { importTransactions } from '@/ai/flows/import-transactions-flow';
+import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
@@ -24,20 +25,10 @@ import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { cn } from '@/lib/utils';
-
-type RawRow = { id: number; data: { [key: string]: any } };
-type ProcessedRow = { rawId: number; movement: Omit<Movimento, 'id'>; isProcessed: boolean };
-type ImportStage = 'upload' | 'review';
+import { doc, writeBatch } from 'firebase/firestore';
 
 
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
-};
+type ImportStage = 'upload' | 'review' | 'ai_progress' | 'final_review';
 
 export function ImportMovementsDialog({
   isOpen,
@@ -49,28 +40,32 @@ export function ImportMovementsDialog({
 }: {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onImport: (movements: Omit<Movimento, 'id'>[]) => Promise<void>;
+  onImport: (movements: Omit<Movimento, 'id'>[]) => Promise<Movimento[]>;
   defaultCompany?: string;
   currentUser: AppUser | null;
   companies: CompanyProfile[];
+  categories: any;
 }) {
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [processedRows, setProcessedRows] = useState<ProcessedRow[]>([]);
+  const [processedRows, setProcessedRows] = useState<Omit<Movimento, 'id'>[]>([]);
+  const [importedMovements, setImportedMovements] = useState<Movimento[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
   const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
+  const firestore = useFirestore();
 
-  const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+  const SUPPORTED_MIME_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/pdf', 'image/png', 'image/jpeg'];
   const ACCEPTED_FILES = ".xlsx, .pdf, .png, .jpg, .jpeg";
   
   const clearState = () => {
     setStage('upload');
     setFile(null);
     setProcessedRows([]);
+    setImportedMovements([]);
     setIsProcessing(false);
     setIsDragging(false);
   };
@@ -111,7 +106,7 @@ export function ImportMovementsDialog({
         toast({
             variant: 'destructive',
             title: 'Formato File Non Supportato',
-            description: `Per favore, carica un file PDF, PNG, JPG o Excel.`,
+            description: `Per favore, carica un file Excel, PDF, PNG, o JPG.`,
         });
         return false;
     }
@@ -158,15 +153,14 @@ export function ImportMovementsDialog({
     };
 
     return rows.map(data => {
-      const description = findColumn(data, ['Descrizione operazione', 'descrizione', 'description']);
-      const dateValue = findColumn(data, ['Data movimento', 'data', 'date']);
-      const amountValue = findColumn(data, ['Importo', 'importo', 'amount']);
+      const description = findColumn(data, ['descrizione operazione', 'descrizione', 'description']);
+      const dateValue = findColumn(data, ['data movimento', 'data', 'date']);
+      const amountValue = findColumn(data, ['importo', 'amount']);
       
       if (!description || !dateValue || amountValue === undefined || amountValue === null) {
         return null;
       }
       
-      // Handle Excel dates (can be numbers or strings)
       const isDateNumber = typeof dateValue === 'number';
       const jsDate = isDateNumber ? XLSX.SSF.parse_date_code(dateValue) : new Date(dateValue);
       const dataValida = !isNaN(jsDate.getTime()) ? new Date(jsDate.getUTCFullYear(), jsDate.getUTCMonth(), jsDate.getUTCDate()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
@@ -206,33 +200,20 @@ export function ImportMovementsDialog({
     setIsProcessing(true);
 
     try {
-        const isExcel = file.type.includes('spreadsheetml');
-
-        if (isExcel) {
-            const fileData = await file.arrayBuffer();
-            const workbook = XLSX.read(fileData, { type: 'buffer' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData: { [key: string]: any }[] = XLSX.utils.sheet_to_json(worksheet, { raw: false });
-            
-            if (!jsonData || jsonData.length === 0) {
-                throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
-            }
-
-            const processedMovements = processExcelDataClientSide(jsonData);
-            
-            const finalProcessedRows: ProcessedRow[] = processedMovements.map((mov, index) => ({
-                rawId: index, 
-                movement: mov,
-                isProcessed: true,
-            }));
-
-            setProcessedRows(finalProcessedRows);
-            setStage('review');
-            toast({ title: 'Lettura Completata', description: `${processedMovements.length} movimenti pronti per la revisione.` });
-        } else {
-            await handleAnalyzeWithAI();
+        const fileData = await file.arrayBuffer();
+        const workbook = XLSX.read(fileData, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData: { [key: string]: any }[] = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+        
+        if (!jsonData || jsonData.length === 0) {
+            throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
         }
+
+        const processed = processExcelDataClientSide(jsonData);
+        setProcessedRows(processed);
+        setStage('review');
+        toast({ title: 'Lettura Completata', description: `${processed.length} movimenti pronti per la revisione.` });
 
     } catch (error: any) {
         console.error("Error reading file:", error);
@@ -241,53 +222,66 @@ export function ImportMovementsDialog({
         setIsProcessing(false);
     }
   };
-
-  const handleAnalyzeWithAI = async () => {
-    if (!file || !currentUser) {
-       toast({ variant: 'destructive', title: 'Errore', description: 'File o utente mancante.' });
-       return;
-   }
-   setIsProcessing(true);
-   toast({ title: 'Analisi AI in corso...', description: 'Estrazione dei dati dal documento in corso. Potrebbe richiedere un momento.'});
-
-   try {
-        const fileDataUri = await fileToBase64(file);
-        const result = await importTransactions({
-            fileDataUri: fileDataUri,
-            fileType: file.type,
-            company: selectedCompany,
-            conto: selectedAccount,
-            inseritoDa: currentUser.displayName,
-        });
-
-       const newProcessedRows: ProcessedRow[] = result.movements.map((mov, index) => ({
-           rawId: index,
-           movement: mov,
-           isProcessed: true,
-       }));
-
-       setProcessedRows(newProcessedRows);
-       setStage('review');
-       toast({ title: 'Analisi File Completata', description: `${result.movements.length} movimenti estratti.` });
-
-   } catch (error: any) {
-       console.error("Error processing file with AI:", error);
-       toast({ variant: 'destructive', title: 'Errore Analisi AI', description: error.message });
-   } finally {
-       setIsProcessing(false);
-   }
- };
-
-  const handleConfirmImport = async () => {
-    const finalMovements = processedRows.map(pr => pr.movement);
-    if (finalMovements.length === 0) {
+  
+  const handleConfirmAndImport = async () => {
+    if (processedRows.length === 0) {
       toast({ variant: 'destructive', title: 'Nessun movimento da importare' });
       return;
     }
     setIsProcessing(true);
-    await onImport(finalMovements);
-    handleClose(false);
+    try {
+      const newMovements = await onImport(processedRows);
+      setImportedMovements(newMovements);
+      setStage('ai_progress');
+      toast({ title: "Importazione Riuscita", description: "Ora puoi avviare l'analisi AI per la categorizzazione." });
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Errore', description: 'Importazione fallita.' });
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  const handleStartAiAnalysis = async () => {
+    if (!firestore || importedMovements.length === 0) return;
+    
+    setIsProcessing(true);
+    toast({ title: 'Analisi AI in corso...', description: `Analizzo ${importedMovements.length} movimenti.` });
+
+    const updatedMovements = [...importedMovements];
+    const batch = writeBatch(firestore);
+
+    for (let i = 0; i < importedMovements.length; i++) {
+        const movement = importedMovements[i];
+        try {
+            const result = await categorizeTransaction({ description: movement.descrizione });
+            if (result && result.category && result.category !== 'Da categorizzare') {
+                const updatedMov = { ...movement, categoria: result.category, sottocategoria: result.subcategory, status: 'ok' as const };
+                updatedMovements[i] = updatedMov;
+                
+                const movRef = doc(firestore, 'movements', movement.id);
+                batch.update(movRef, {
+                    categoria: result.category,
+                    sottocategoria: result.subcategory,
+                    status: 'ok'
+                });
+            }
+        } catch (error) {
+            console.error(`Error categorizing movement ${movement.id}:`, error);
+        }
+    }
+
+    try {
+        await batch.commit();
+        setImportedMovements(updatedMovements);
+        setStage('final_review');
+        toast({ title: 'Analisi Completata!', description: 'Le categorie sono state aggiornate.' });
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare le categorie aggiornate.' });
+    } finally {
+        setIsProcessing(false);
+    }
+};
+
   
   const canSelectCompany = currentUser?.role === 'admin' || currentUser?.role === 'editor';
   const currentCompanyDetails = companies.find(c => c.sigla === selectedCompany);
@@ -318,9 +312,9 @@ export function ImportMovementsDialog({
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
                     <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
-                    <p className="text-xs text-muted-foreground">XLSX, PDF, PNG, JPG</p>
+                    <p className="text-xs text-muted-foreground">Solo file Excel (.xlsx)</p>
                 </div>
-                <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept={ACCEPTED_FILES} />
+                <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept=".xlsx" />
             </label>
         </div> 
         {file && (
@@ -332,27 +326,29 @@ export function ImportMovementsDialog({
     </div>
   );
   
-  const renderReviewStage = () => (
+  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> | Movimento)[], isFinal: boolean) => (
      <div className="py-4 space-y-4">
-        <h3 className="text-lg font-medium">Dati Estratti - Verifica e Conferma</h3>
-        <p className="text-sm text-muted-foreground">
-            Controlla i movimenti estratti. Verranno tutti importati e potranno essere modificati in seguito nella pagina "Da Revisionare".
-        </p>
-        <ScrollArea className="h-[400px] border rounded-md">
+        <h3 className="text-lg font-medium">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+        <ScrollArea className="h-[60vh] border rounded-md">
             <Table>
                 <TableHeader><TableRow>
                     <TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Categoria</TableHead><TableHead>Entrata</TableHead><TableHead>Uscita</TableHead><TableHead>Società</TableHead><TableHead>Stato</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                    {processedRows.map((row, index) => (
-                        <TableRow key={index} className={cn(row.movement.status === 'manual_review' && 'bg-amber-50 dark:bg-amber-900/20')}>
-                            <TableCell>{formatDate(row.movement.data)}</TableCell>
-                            <TableCell>{row.movement.descrizione}</TableCell>
-                            <TableCell><Badge variant="outline">{row.movement.categoria}</Badge></TableCell>
-                            <TableCell className="text-green-600">{row.movement.entrata > 0 ? formatCurrency(row.movement.entrata) : '-'}</TableCell>
-                            <TableCell className="text-red-600">{row.movement.uscita > 0 ? formatCurrency(row.movement.uscita) : '-'}</TableCell>
-                            <TableCell><Badge variant={row.movement.societa === 'LNC' ? 'default' : 'secondary'}>{row.movement.societa}</Badge></TableCell>
-                             <TableCell><Badge variant={row.movement.status === 'manual_review' ? 'destructive' : 'secondary'}>{row.movement.status === 'manual_review' ? 'Da Revisionare' : 'OK'}</Badge></TableCell>
+                    {movements.map((row, index) => (
+                        <TableRow key={index} className={cn(row.status === 'manual_review' && 'bg-amber-50 dark:bg-amber-900/20')}>
+                            <TableCell>{formatDate(row.data)}</TableCell>
+                            <TableCell>{row.descrizione}</TableCell>
+                            <TableCell><Badge variant="outline">{row.categoria}</Badge></TableCell>
+                            <TableCell className="text-green-600">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
+                            <TableCell className="text-red-600">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>
+                            <TableCell><Badge variant={row.societa === 'LNC' ? 'default' : 'secondary'}>{row.societa}</Badge></TableCell>
+                            <TableCell>
+                              <Badge variant={row.status === 'manual_review' ? 'destructive' : 'default'} className={cn(row.status === 'ok' && 'bg-green-600')}>
+                                {row.status === 'manual_review' ? 'Da Revisionare' : 'OK'}
+                              </Badge>
+                            </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
@@ -363,28 +359,44 @@ export function ImportMovementsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-6xl">
+      <DialogContent className="max-w-7xl">
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
-          <DialogDescription>
-            {stage === 'upload' && "Carica un file Excel, PDF o immagine per estrarre i movimenti."}
-            {stage === 'review' && "Rivedi i dati finali prima di importarli nel database."}
+           <DialogDescription>
+            {stage === 'upload' && "Carica un file Excel (.xlsx) per estrarre i movimenti."}
+            {stage === 'review' && "Rivedi i dati estratti prima di salvarli nel database."}
+            {stage === 'ai_progress' && "I movimenti sono stati importati. Ora puoi avviare l'analisi AI."}
+            {stage === 'final_review' && "Analisi AI completata. Rivedi i risultati finali."}
           </DialogDescription>
         </DialogHeader>
         
         {stage === 'upload' && renderUploadStage()}
-        {stage === 'review' && renderReviewStage()}
+        {stage === 'review' && renderReviewStage("Dati Estratti - Verifica e Conferma", "Controlla i movimenti estratti. Verranno tutti importati e potranno essere modificati in seguito nella pagina 'Da Revisionare'.", processedRows, false)}
+        {stage === 'ai_progress' && renderReviewStage("Analisi AI", "Clicca su 'Avvia Analisi AI' per categorizzare automaticamente i movimenti importati.", importedMovements, false)}
+        {stage === 'final_review' && renderReviewStage("Risultati Analisi", "L'AI ha aggiornato le categorie. I movimenti non classificati restano 'Da Revisionare'.", importedMovements, true)}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={isProcessing}>Annulla</Button>
+          {stage !== 'final_review' && <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={isProcessing}>Annulla</Button>}
+           
            {stage === 'upload' && (
               <Button type="button" onClick={handleProceed} disabled={isProcessing || !file}>
                 {isProcessing ? <Loader2 className="animate-spin" /> : <>Procedi alla revisione</>}
               </Button>
            )}
            {stage === 'review' && (
-               <Button type="button" onClick={handleConfirmImport} disabled={isProcessing || processedRows.length === 0}>
+               <Button type="button" onClick={handleConfirmAndImport} disabled={isProcessing || processedRows.length === 0}>
                 {isProcessing ? <Loader2 className="animate-spin" /> : <><Check className="mr-2 h-4 w-4" />Conferma e Importa ({processedRows.length})</>}
+              </Button>
+           )}
+           {stage === 'ai_progress' && (
+               <Button type="button" onClick={handleStartAiAnalysis} disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="animate-spin" /> : <><Wand2 className="mr-2 h-4 w-4" />Avvia Analisi AI</>}
+              </Button>
+           )}
+            {stage === 'final_review' && (
+               <Button type="button" onClick={() => handleClose(false)}>
+                <Check className="mr-2 h-4 w-4" />
+                Chiudi
               </Button>
            )}
         </DialogFooter>

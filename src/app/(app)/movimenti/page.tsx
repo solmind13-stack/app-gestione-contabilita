@@ -357,30 +357,39 @@ export default function MovimentiPage() {
         }
     };
     
-    const handleImportMovements = async (importedMovements: Omit<Movimento, 'id'>[]) => {
-        if (!user || !firestore) return;
+    const handleImportMovements = async (importedMovements: Omit<Movimento, 'id'>[]): Promise<Movimento[]> => {
+        if (!user || !firestore) return [];
+        const newMovementsWithIds: Movimento[] = [];
         try {
             const batch = writeBatch(firestore);
+            
             importedMovements.forEach(movement => {
                 const docRef = doc(collection(firestore, 'movements'));
-                batch.set(docRef, {
+                const newMovement: Movimento = {
+                    id: docRef.id,
                     ...movement,
                     createdBy: user.uid,
-                    // inseritoDa is already set by the AI flow
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
-                });
+                };
+                batch.set(docRef, newMovement);
+                newMovementsWithIds.push(newMovement);
             });
+
             await batch.commit();
             toast({
                 title: "Importazione completata",
-                description: `${importedMovements.length} movimenti sono stati importati con successo.`
+                description: `${newMovementsWithIds.length} movimenti sono stati salvati nel database.`
             });
+            return newMovementsWithIds;
+
         } catch (error: any) {
              console.error("Error importing movements: ", error);
              toast({ variant: 'destructive', title: 'Errore Importazione', description: `Impossibile salvare i movimenti importati. ${error.message}` });
+             return []; // Return empty array on failure
         }
     };
+
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
