@@ -1,7 +1,7 @@
 // src/components/movimenti/import-movements-dialog.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Dialog,
@@ -46,7 +46,14 @@ export function ImportMovementsDialog({
   defaultCompany,
   currentUser,
   companies,
-}: ImportMovementsDialogProps) {
+}: {
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+  onImport: (movements: Omit<Movimento, 'id'>[]) => Promise<void>;
+  defaultCompany?: string;
+  currentUser: AppUser | null;
+  companies: CompanyProfile[];
+}) {
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [processedRows, setProcessedRows] = useState<ProcessedRow[]>([]);
@@ -57,6 +64,19 @@ export function ImportMovementsDialog({
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const ROWS_PER_PAGE = 10;
+
+  const { paginatedRows, totalPages } = useMemo(() => {
+    const totalPages = Math.ceil(processedRows.length / ROWS_PER_PAGE);
+    const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
+    const endIndex = startIndex + ROWS_PER_PAGE;
+    return {
+      paginatedRows: processedRows.slice(startIndex, endIndex),
+      totalPages,
+    };
+  }, [processedRows, currentPage]);
+
   const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
   const ACCEPTED_FILES = ".xlsx, .pdf, .png, .jpg, .jpeg";
   
@@ -66,6 +86,7 @@ export function ImportMovementsDialog({
     setProcessedRows([]);
     setIsProcessing(false);
     setIsDragging(false);
+    setCurrentPage(1);
   };
   
   const handleClose = (open: boolean) => {
@@ -197,6 +218,7 @@ export function ImportMovementsDialog({
       return;
     }
     setIsProcessing(true);
+    setCurrentPage(1);
 
     try {
         const isExcel = file.type.includes('spreadsheetml');
@@ -260,6 +282,7 @@ export function ImportMovementsDialog({
        }));
 
        setProcessedRows(newProcessedRows);
+       setCurrentPage(1);
        setStage('review');
        toast({ title: 'Analisi File Completata', description: `${result.movements.length} movimenti estratti.` });
 
@@ -337,7 +360,7 @@ export function ImportMovementsDialog({
                     <TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Categoria</TableHead><TableHead>Entrata</TableHead><TableHead>Uscita</TableHead><TableHead>Società</TableHead><TableHead>Stato</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                    {processedRows.map((row, index) => (
+                    {paginatedRows.map((row, index) => (
                         <TableRow key={index} className={cn(row.movement.status === 'manual_review' && 'bg-amber-50 dark:bg-amber-900/20')}>
                             <TableCell>{formatDate(row.movement.data)}</TableCell>
                             <TableCell>{row.movement.descrizione}</TableCell>
@@ -351,6 +374,29 @@ export function ImportMovementsDialog({
                 </TableBody>
             </Table>
         </ScrollArea>
+        <div className="flex items-center justify-between pt-4">
+            <div className="text-sm text-muted-foreground">
+                Pagina {currentPage} di {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                >
+                    Precedente
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                    disabled={currentPage >= totalPages}
+                >
+                    Successivo
+                </Button>
+            </div>
+        </div>
     </div>
   );
 
