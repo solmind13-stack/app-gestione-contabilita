@@ -31,6 +31,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverActions: {
+    executionTimeout: 180,
+  },
 };
 
 export default nextConfig;
