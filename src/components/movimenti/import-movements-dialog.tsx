@@ -63,6 +63,20 @@ export function ImportMovementsDialog({
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
+  const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
+
+  const validateFile = (file: File) => {
+    if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
+        toast({
+            variant: 'destructive',
+            title: 'Formato File Non Supportato',
+            description: `Per favore, carica un file PDF, PNG o JPG. I file Excel devono essere salvati prima in formato PDF.`,
+        });
+        return false;
+    }
+    return true;
+  };
+
   useEffect(() => {
     if(isOpen) {
         if (currentUser?.role === 'company' || currentUser?.role === 'company-editor') {
@@ -87,7 +101,7 @@ export function ImportMovementsDialog({
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
-    if (selectedFile) {
+    if (selectedFile && validateFile(selectedFile)) {
       setFile(selectedFile);
     }
   };
@@ -103,7 +117,7 @@ export function ImportMovementsDialog({
       e.stopPropagation();
       setIsDragging(false);
       const droppedFile = e.dataTransfer.files?.[0];
-      if (droppedFile) {
+      if (droppedFile && validateFile(droppedFile)) {
           setFile(droppedFile);
       }
   };
