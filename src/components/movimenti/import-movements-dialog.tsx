@@ -1,7 +1,7 @@
 // src/components/movimenti/import-movements-dialog.tsx
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UploadCloud, File as FileIcon, Trash2, Wand2, ChevronRight, Check } from 'lucide-react';
+import { Loader2, UploadCloud, File as FileIcon, Trash2, Check } from 'lucide-react';
 import type { Movimento, AppUser, CompanyProfile } from '@/lib/types';
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
@@ -24,26 +24,11 @@ import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { cn } from '@/lib/utils';
-import { Checkbox } from '../ui/checkbox';
-import { Progress } from '../ui/progress';
-
-
-interface ImportMovementsDialogProps {
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
-  onImport: (movements: Omit<Movimento, 'id'>[]) => Promise<void>;
-  defaultCompany?: string;
-  currentUser: AppUser | null;
-  companies: CompanyProfile[];
-}
-
-// Stage 1: File Upload
-// Stage 2: Raw data review & AI analysis
-// Stage 3: Final review & Import
-type ImportStage = 'upload' | 'analysis' | 'review';
 
 type RawRow = { id: number; data: { [key: string]: any } };
 type ProcessedRow = { rawId: number; movement: Omit<Movimento, 'id'>; isProcessed: boolean };
+type ImportStage = 'upload' | 'review';
+
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -64,9 +49,7 @@ export function ImportMovementsDialog({
 }: ImportMovementsDialogProps) {
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [rawRows, setRawRows] = useState<RawRow[]>([]);
   const [processedRows, setProcessedRows] = useState<ProcessedRow[]>([]);
-  const [selectedRawIds, setSelectedRawIds] = useState<number[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
   const [selectedCompany, setSelectedCompany] = useState<string>('');
@@ -80,9 +63,7 @@ export function ImportMovementsDialog({
   const clearState = () => {
     setStage('upload');
     setFile(null);
-    setRawRows([]);
     setProcessedRows([]);
-    setSelectedRawIds([]);
     setIsProcessing(false);
     setIsDragging(false);
   };
@@ -152,8 +133,65 @@ export function ImportMovementsDialog({
           setFile(droppedFile);
       }
   };
+
+  const processExcelDataClientSide = (rows: { [key: string]: any }[]): Omit<Movimento, 'id'>[] => {
+    if (!currentUser) return [];
+
+    const findColumn = (data: {[key: string]: any}, possibleKeys: string[]): any => {
+      const dataKeys = Object.keys(data).map(k => k.toLowerCase().trim());
+      for (const key of possibleKeys) {
+        const lowerKey = key.toLowerCase().trim();
+        const dataKeyIndex = dataKeys.indexOf(lowerKey);
+        if (dataKeyIndex !== -1) {
+          const originalKey = Object.keys(data)[dataKeyIndex];
+          return data[originalKey];
+        }
+      }
+      return undefined;
+    };
+
+    return rows.map(data => {
+      const description = findColumn(data, ['Descrizione operazione', 'descrizione', 'description']);
+      const dateValue = findColumn(data, ['Data movimento', 'data', 'date']);
+      const amountValue = findColumn(data, ['Importo', 'importo', 'amount']);
+      
+      if (!description || !dateValue || amountValue === undefined || amountValue === null) {
+        return null;
+      }
+      
+      // Handle Excel dates (can be numbers or strings)
+      const isDateNumber = typeof dateValue === 'number';
+      const jsDate = isDateNumber ? XLSX.SSF.parse_date_code(dateValue) : new Date(dateValue);
+      const dataValida = !isNaN(jsDate.getTime()) ? new Date(jsDate.getUTCFullYear(), jsDate.getUTCMonth(), jsDate.getUTCDate()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const anno = new Date(dataValida).getFullYear();
+
+      const numericAmount = parseFloat(String(amountValue).replace(',', '.'));
+      if (isNaN(numericAmount)) return null;
+
+      const entrata = numericAmount > 0 ? numericAmount : 0;
+      const uscita = numericAmount < 0 ? Math.abs(numericAmount) : 0;
+      
+      return {
+        societa: selectedCompany,
+        anno: anno,
+        data: dataValida,
+        descrizione: String(description),
+        categoria: 'Da categorizzare',
+        sottocategoria: 'Da categorizzare',
+        entrata: entrata,
+        uscita: uscita,
+        iva: 0.22,
+        conto: selectedAccount || '',
+        inseritoDa: currentUser.displayName,
+        operatore: `Acquisizione da ${currentUser.displayName}`,
+        metodoPag: 'Importato',
+        note: `Importato da file: ${file?.name}`,
+        status: 'manual_review' as const,
+      };
+    }).filter((mov): mov is NonNullable<typeof mov> => mov !== null);
+  };
   
-  const handleExtractDataFromFile = async () => {
+  const handleProceed = async () => {
     if (!file) {
       toast({ variant: 'destructive', title: 'Nessun file selezionato' });
       return;
@@ -165,95 +203,73 @@ export function ImportMovementsDialog({
 
         if (isExcel) {
             const fileData = await file.arrayBuffer();
-            const workbook = XLSX.read(fileData);
+            const workbook = XLSX.read(fileData, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            const jsonData: { [key: string]: any }[] = XLSX.utils.sheet_to_json(worksheet, { raw: false });
             
-            const rawData: RawRow[] = json.slice(1) // skip header
-                .map((row: any, index) => ({
-                    id: index,
-                    data: (json[0] as any[]).reduce((obj, header, i) => {
-                        obj[header] = row[i];
-                        return obj;
-                    }, {} as {[key: string]: any})
-                }))
-                .filter(row => Object.values(row.data).some(val => val !== null && val !== undefined && val !== ''));
+            if (!jsonData || jsonData.length === 0) {
+                throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
+            }
+
+            const processedMovements = processExcelDataClientSide(jsonData);
             
-            setRawRows(rawData);
-            setSelectedRawIds(rawData.map(r => r.id)); // Pre-select all
-            setStage('analysis');
+            const finalProcessedRows: ProcessedRow[] = processedMovements.map((mov, index) => ({
+                rawId: index, 
+                movement: mov,
+                isProcessed: true,
+            }));
+
+            setProcessedRows(finalProcessedRows);
+            setStage('review');
+            toast({ title: 'Lettura Completata', description: `${processedMovements.length} movimenti pronti per la revisione.` });
         } else {
-             // For PDF/Images, we go directly to AI analysis as we can't pre-process
-            await handleAnalyzeWithAI(null);
-        }
-
-    } catch (error) {
-        console.error("Error reading file:", error);
-        toast({ variant: 'destructive', title: 'Errore Lettura File', description: 'Impossibile leggere il file Excel.' });
-    } finally {
-        setIsProcessing(false);
-    }
-  }
-
-  const handleAnalyzeWithAI = async (rowsToProcess: RawRow[] | null) => {
-     if (!file || !currentUser) {
-        toast({ variant: 'destructive', title: 'Errore', description: 'File o utente mancante.' });
-        return;
-    }
-    setIsProcessing(true);
-
-    try {
-        let result;
-        const basePayload = {
-            fileType: file.type,
-            company: selectedCompany,
-            conto: selectedAccount,
-            inseritoDa: currentUser.displayName,
-        };
-
-        if (rowsToProcess) { // Excel flow
-            const textContent = JSON.stringify(rowsToProcess.map(r => r.data), null, 2);
-            result = await importTransactions({
-                ...basePayload,
-                textContent: textContent,
-            });
-        } else { // PDF/Image flow
-            const fileDataUri = await fileToBase64(file);
-            result = await importTransactions({
-                ...basePayload,
-                fileDataUri: fileDataUri,
-            });
-        }
-        
-        // Merge results
-        const newProcessedRows: ProcessedRow[] = result.movements.map((mov, index) => ({
-            rawId: rowsToProcess ? rowsToProcess[index].id : index, // Link back to raw row if it exists
-            movement: mov,
-            isProcessed: true,
-        }));
-
-        if (rowsToProcess) {
-            setProcessedRows(prev => [...prev, ...newProcessedRows]);
-            setSelectedRawIds(prev => prev.filter(id => !rowsToProcess.some(r => r.id === id)));
-        } else {
-            setProcessedRows(newProcessedRows);
-        }
-        
-        if (rowsToProcess) {
-           toast({ title: 'Analisi Lotto Completata', description: `${rowsToProcess.length} righe analizzate.` });
-        } else {
-           toast({ title: 'Analisi File Completata', description: `${result.movements.length} movimenti estratti.` });
-           setStage('review'); // Go to final review for PDF/Image
+            await handleAnalyzeWithAI();
         }
 
     } catch (error: any) {
-        console.error("Error processing file with AI:", error);
-        toast({ variant: 'destructive', title: 'Errore Analisi AI', description: error.message });
+        console.error("Error reading file:", error);
+        toast({ variant: 'destructive', title: 'Errore Lettura File', description: error.message || 'Impossibile leggere il file.' });
     } finally {
         setIsProcessing(false);
     }
   };
+
+  const handleAnalyzeWithAI = async () => {
+    if (!file || !currentUser) {
+       toast({ variant: 'destructive', title: 'Errore', description: 'File o utente mancante.' });
+       return;
+   }
+   setIsProcessing(true);
+   toast({ title: 'Analisi AI in corso...', description: 'Estrazione dei dati dal documento in corso. Potrebbe richiedere un momento.'});
+
+   try {
+        const fileDataUri = await fileToBase64(file);
+        const result = await importTransactions({
+            fileDataUri: fileDataUri,
+            fileType: file.type,
+            company: selectedCompany,
+            conto: selectedAccount,
+            inseritoDa: currentUser.displayName,
+        });
+
+       const newProcessedRows: ProcessedRow[] = result.movements.map((mov, index) => ({
+           rawId: index,
+           movement: mov,
+           isProcessed: true,
+       }));
+
+       setProcessedRows(newProcessedRows);
+       setStage('review');
+       toast({ title: 'Analisi File Completata', description: `${result.movements.length} movimenti estratti.` });
+
+   } catch (error: any) {
+       console.error("Error processing file with AI:", error);
+       toast({ variant: 'destructive', title: 'Errore Analisi AI', description: error.message });
+   } finally {
+       setIsProcessing(false);
+   }
+ };
 
   const handleConfirmImport = async () => {
     const finalMovements = processedRows.map(pr => pr.movement);
@@ -263,7 +279,7 @@ export function ImportMovementsDialog({
     }
     setIsProcessing(true);
     await onImport(finalMovements);
-    handleClose(false); // This also clears the state
+    handleClose(false);
   };
   
   const canSelectCompany = currentUser?.role === 'admin' || currentUser?.role === 'editor';
@@ -309,65 +325,11 @@ export function ImportMovementsDialog({
     </div>
   );
   
-  const renderAnalysisStage = () => {
-    const unprocessedRows = rawRows.filter(r => !processedRows.some(pr => pr.rawId === r.id));
-    const selectedRows = unprocessedRows.filter(r => selectedRawIds.includes(r.id));
-    const CHUNK_SIZE = 10;
-    
-    const handleAnalyzeSelected = async () => {
-        const chunks: RawRow[][] = [];
-        for (let i = 0; i < selectedRows.length; i += CHUNK_SIZE) {
-            chunks.push(selectedRows.slice(i, i + CHUNK_SIZE));
-        }
-        
-        for (const chunk of chunks) {
-            await handleAnalyzeWithAI(chunk);
-        }
-    };
-    
-    return (
-        <div className="py-4 space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-medium">Dati Grezzi da Analizzare</h3>
-            <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => setStage('review')} disabled={isProcessing}>
-                    Vai alla Revisione <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-                <Button onClick={handleAnalyzeSelected} disabled={isProcessing || selectedRawIds.length === 0}>
-                    {isProcessing ? <Loader2 className="animate-spin" /> : <><Wand2 className="mr-2 h-4 w-4"/>Analizza Selezionati ({selectedRawIds.length})</>}
-                </Button>
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground">
-             Dati estratti dal file Excel. Seleziona le righe che vuoi che l'AI analizzi e normalizzi. Le righe già analizzate sono state rimosse.
-          </p>
-          <ScrollArea className="h-[400px] border rounded-md">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead><Checkbox checked={selectedRawIds.length === unprocessedRows.length && unprocessedRows.length > 0} onCheckedChange={(checked) => setSelectedRawIds(checked ? unprocessedRows.map(r => r.id) : [])} /></TableHead>
-                        {Object.keys(rawRows[0]?.data || {}).map(key => <TableHead key={key}>{key}</TableHead>)}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                   {unprocessedRows.map(row => (
-                       <TableRow key={row.id}>
-                           <TableCell><Checkbox checked={selectedRawIds.includes(row.id)} onCheckedChange={(checked) => setSelectedRawIds(prev => checked ? [...prev, row.id] : prev.filter(id => id !== row.id))} /></TableCell>
-                           {Object.values(row.data).map((val, i) => <TableCell key={i}>{String(val)}</TableCell>)}
-                       </TableRow>
-                   ))}
-                </TableBody>
-            </Table>
-          </ScrollArea>
-        </div>
-    );
-  };
-  
   const renderReviewStage = () => (
      <div className="py-4 space-y-4">
-        <h3 className="text-lg font-medium">Movimenti Estratti - Verifica e Conferma</h3>
+        <h3 className="text-lg font-medium">Dati Estratti - Verifica e Conferma</h3>
         <p className="text-sm text-muted-foreground">
-            Controlla i movimenti analizzati dall'AI. Quelli che richiedono la tua attenzione sono evidenziati.
+            Controlla i movimenti estratti. Verranno tutti importati e potranno essere modificati in seguito nella pagina "Da Revisionare".
         </p>
         <ScrollArea className="h-[400px] border rounded-md">
             <Table>
@@ -399,20 +361,18 @@ export function ImportMovementsDialog({
           <DialogTitle>Importa Movimenti da File</DialogTitle>
           <DialogDescription>
             {stage === 'upload' && "Carica un file Excel, PDF o immagine per estrarre i movimenti."}
-            {stage === 'analysis' && "Analizza i dati grezzi estratti dal tuo file Excel."}
             {stage === 'review' && "Rivedi i dati finali prima di importarli nel database."}
           </DialogDescription>
         </DialogHeader>
         
         {stage === 'upload' && renderUploadStage()}
-        {stage === 'analysis' && renderAnalysisStage()}
         {stage === 'review' && renderReviewStage()}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={isProcessing}>Annulla</Button>
            {stage === 'upload' && (
-              <Button type="button" onClick={handleExtractDataFromFile} disabled={isProcessing || !file}>
-                {isProcessing ? <Loader2 className="animate-spin" /> : <><ChevronRight className="mr-2 h-4 w-4"/>Procedi all'analisi</>}
+              <Button type="button" onClick={handleProceed} disabled={isProcessing || !file}>
+                {isProcessing ? <Loader2 className="animate-spin" /> : <>Procedi alla revisione</>}
               </Button>
            )}
            {stage === 'review' && (

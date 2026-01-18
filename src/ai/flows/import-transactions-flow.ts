@@ -102,7 +102,9 @@ const importTransactionsFlow = ai.defineFlow(
 
       let parsedAiOutput;
       try {
-        parsedAiOutput = JSON.parse(rawJsonString);
+        // AI might return a markdown code block, so we need to clean it
+        const cleanedJsonString = rawJsonString.replace(/^```json\n|```$/g, '');
+        parsedAiOutput = JSON.parse(cleanedJsonString);
       } catch (jsonError) {
         console.error("AI returned invalid JSON string:", rawJsonString);
         throw new Error("L'AI non ha restituito un formato di dati valido. Riprova.");
@@ -123,6 +125,8 @@ const importTransactionsFlow = ai.defineFlow(
                 .trim()
                 .replace(/\./g, (match, offset, fullString) => {
                     const rest = fullString.substring(offset + 1);
+                    // This logic is tricky: it tries to remove thousand separators but keep decimal points.
+                    // It assumes if a '.' is followed by a ',' or more than 3 digits, it's a thousand separator.
                     return rest.includes(',') || rest.length > 3 ? '' : '.';
                 })
                 .replace(',', '.');
@@ -134,21 +138,47 @@ const importTransactionsFlow = ai.defineFlow(
 
       const cleanedMovements = aiMovements.map(mov => {
           if (!mov.descrizione || !mov.data) return null;
-
+          
           let anno: number;
           let dataValida: string;
           try {
-              const dateString = mov.data.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1');
+              // Attempt to parse various common date formats
+              const dateString = String(mov.data).replace(/(\d{2})[./-](\d{2})[./-](\d{4})/, '$3-$2-$1');
               const parsedDate = new Date(dateString);
               if (isNaN(parsedDate.getTime())) {
-                  throw new Error('Invalid date');
+                  // Try to handle Excel's numeric date format if it comes as a string
+                  const excelDateNumber = parseInt(dateString, 10);
+                  if (!isNaN(excelDateNumber) && excelDateNumber > 25569) { // Basic check for Excel date number
+                     const excelEpoch = new Date(1899, 11, 30);
+                     parsedDate.setTime(excelEpoch.getTime() + excelDateNumber * 86400000);
+                  } else {
+                     throw new Error('Invalid date');
+                  }
               }
               anno = parsedDate.getFullYear();
               dataValida = parsedDate.toISOString().split('T')[0];
           } catch(e) {
+              console.warn(`Could not parse date "${mov.data}", using today's date.`);
               anno = new Date().getFullYear();
               dataValida = new Date().toISOString().split('T')[0]; 
           }
+
+          const entrataLorda = parseAmount(mov.entrata);
+          const uscitaLorda = parseAmount(mov.uscita);
+          
+          let finalEntrata = 0;
+          let finalUscita = 0;
+
+          // The AI might put a negative number in 'entrata' for an expense.
+          if(entrataLorda < 0) {
+              finalUscita = Math.abs(entrataLorda);
+          } else {
+              finalEntrata = entrataLorda;
+          }
+          if(uscitaLorda > 0) {
+              finalUscita = uscitaLorda;
+          }
+
 
           return {
               societa: input.company,
@@ -157,8 +187,8 @@ const importTransactionsFlow = ai.defineFlow(
               descrizione: mov.descrizione,
               categoria: 'Da categorizzare',
               sottocategoria: 'Da categorizzare',
-              entrata: parseAmount(mov.entrata),
-              uscita: parseAmount(mov.uscita),
+              entrata: finalEntrata,
+              uscita: finalUscita,
               iva: 0.22,
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
