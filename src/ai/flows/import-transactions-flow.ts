@@ -23,19 +23,6 @@ const ImportTransactionsInputSchema = z.object({
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
-// Schema for what the AI model should extract. All fields are strings for maximum flexibility.
-const AiExtractedMovementSchema = z.object({
-  data: z.string().describe("La data della transazione come testo."),
-  descrizione: z.string().describe("La descrizione completa della transazione come testo."),
-  entrata: z.string().default('0').describe("L'importo dell'entrata come testo. Se non presente, usa '0'."),
-  uscita: z.string().default('0').describe("L'importo dell'uscita come testo. Se non presente, usa '0'."),
-});
-
-// The schema for the AI's direct output.
-const AiOutputSchema = z.object({
-    movements: z.array(AiExtractedMovementSchema),
-});
-
 // This is what the final flow will return after our code processes the AI output.
 const FinalMovementSchema = z.object({
     societa: z.string(),
@@ -65,15 +52,17 @@ export async function importTransactions(input: ImportTransactionsInput): Promis
   return importTransactionsFlow(input);
 }
 
+// The prompt is simplified to ask for a raw JSON string. 
+// No output schema is defined here to make the AI's job easier.
 const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
-  output: { schema: AiOutputSchema },
-  prompt: `Il tuo unico compito è estrarre le transazioni dal file. Restituisci un oggetto JSON con una chiave "movements" che contiene un array di oggetti.
-Per ogni transazione, estrai i seguenti campi come stringhe di testo: 'data', 'descrizione', 'entrata', 'uscita'.
-Se 'entrata' o 'uscita' non sono presenti, usa '0'.
+  prompt: `Your ONLY task is to extract transactions from the provided file.
+You MUST return a raw JSON string. The JSON object must have a single key "movements", which is an array of objects.
+For each transaction object, you MUST extract the following fields as TEXT STRINGS: 'data', 'descrizione', 'entrata', 'uscita'.
+If 'entrata' or 'uscita' is not present for a transaction, use '0' as the string value. Do NOT format numbers or currencies.
 
-File da analizzare:
+File to analyze:
 {{media url=fileDataUri}}`,
 });
 
@@ -85,23 +74,35 @@ const importTransactionsFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      const { output } = await prompt(input);
-      
-      if (!output || !output.movements) {
-          return { movements: [] };
-      }
+      // The AI will return a GenerationResponse, we get the text from it.
+      const response = await prompt(input);
+      const rawJsonString = response.text;
 
-      // Robust amount parser to handle different formats from AI
+      let parsedAiOutput;
+      try {
+        // Manually parse the string into a JSON object.
+        parsedAiOutput = JSON.parse(rawJsonString);
+      } catch (jsonError) {
+        console.error("AI returned invalid JSON string:", rawJsonString);
+        throw new Error("L'AI non ha restituito un formato di dati valido. Riprova.");
+      }
+      
+      if (!parsedAiOutput || !Array.isArray(parsedAiOutput.movements)) {
+          throw new Error("Il formato JSON restituito dall'AI non è corretto (manca l'array 'movements').");
+      }
+      
+      const aiMovements: {data?: string, descrizione?: string, entrata?: string, uscita?: string}[] = parsedAiOutput.movements;
+
       const parseAmount = (amount: string | number | undefined): number => {
+          if (amount === undefined || amount === null) return 0;
           if (typeof amount === 'number') return amount;
           if (typeof amount === 'string') {
-              // Remove currency symbols, spaces, and thousands separators (.), then replace comma decimal with a period.
               const cleaned = amount
-                .replace(/[€$£]/g, '') // Remove common currency symbols
+                .replace(/[€$£]/g, '')
                 .trim()
                 .replace(/\./g, (match, offset, fullString) => {
-                    // Treat dot as a thousands separator only if it's followed by 3 digits and not at the end
-                    return fullString.substring(offset + 1).length >= 3 && /\d{3}/.test(fullString.substring(offset + 1, offset + 4)) ? '' : '.';
+                    const rest = fullString.substring(offset + 1);
+                    return rest.includes(',') || rest.length > 3 ? '' : '.';
                 })
                 .replace(',', '.');
               const parsed = parseFloat(cleaned);
@@ -110,20 +111,20 @@ const importTransactionsFlow = ai.defineFlow(
           return 0;
       };
 
-      const cleanedMovements = output.movements.map(mov => {
+      const cleanedMovements = aiMovements.map(mov => {
+          if (!mov.descrizione || !mov.data) return null; // Skip invalid entries
+
           let anno: number;
           let dataValida: string;
           try {
-              // Attempt to parse various date formats that the AI might return
-              const dateString = mov.data.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); // DD/MM/YYYY to YYYY-MM-DD
+              const dateString = mov.data.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1');
               const parsedDate = new Date(dateString);
               if (isNaN(parsedDate.getTime())) {
-                  throw new Error('Invalid date format from AI');
+                  throw new Error('Invalid date');
               }
               anno = parsedDate.getFullYear();
               dataValida = parsedDate.toISOString().split('T')[0];
           } catch(e) {
-              // Fallback if AI provides an unparseable date
               anno = new Date().getFullYear();
               dataValida = new Date().toISOString().split('T')[0]; 
           }
@@ -137,22 +138,21 @@ const importTransactionsFlow = ai.defineFlow(
               sottocategoria: 'Da categorizzare',
               entrata: parseAmount(mov.entrata),
               uscita: parseAmount(mov.uscita),
-              iva: 0.22, // Default IVA, user will review
+              iva: 0.22,
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
               operatore: `Acquisizione da ${input.inseritoDa}`,
               metodoPag: 'Importato',
               note: `Importato da file: ${input.fileType}`,
-              status: 'manual_review' as const, // Always needs review
+              status: 'manual_review' as const,
           };
-      });
+      }).filter((mov): mov is NonNullable<typeof mov> => mov !== null); // Filter out nulls
 
       return { movements: cleanedMovements };
-    } catch(e) {
+    } catch(e: any) {
         console.error("Error in importTransactionsFlow", e);
-        // This makes the error message more useful for debugging and for the user.
         throw new Error(
-          'L\'analisi AI non è riuscita. Ciò potrebbe essere dovuto a un file di formato non supportato, illeggibile o a un errore temporaneo del servizio. Prova con un file diverso o riprova più tardi.'
+          e.message || 'L\'analisi AI non è riuscita. Ciò potrebbe essere dovuto a un file di formato non supportato, illeggibile o a un errore temporaneo del servizio. Prova con un file diverso o riprova più tardi.'
         );
     }
   }
