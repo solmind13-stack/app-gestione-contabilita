@@ -70,7 +70,7 @@ export function ImportMovementsDialog({
         toast({
             variant: 'destructive',
             title: 'Formato File Non Supportato',
-            description: `Per favore, carica un file PDF, PNG o JPG. I file Excel devono essere salvati prima in formato PDF.`,
+            description: `Per favore, carica un file PDF, PNG o JPG.`,
         });
         return false;
     }
@@ -202,7 +202,7 @@ export function ImportMovementsDialog({
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
           <DialogDescription>
-            Carica un file PDF o un'immagine di un estratto conto. Per i file Excel, salvali prima in formato PDF. L'AI analizzerà il contenuto ed estrarrà i movimenti.
+            Carica un file PDF o un'immagine di un estratto conto. L'AI analizzerà il contenuto ed estrarrà i movimenti.
           </DialogDescription>
         </DialogHeader>
         
@@ -251,8 +251,9 @@ export function ImportMovementsDialog({
                             <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
                             <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
                             <p className="text-xs text-muted-foreground">PDF, PNG, JPG</p>
+                            <p className="text-xs text-slate-500 mt-2">Per file Excel (.xlsx), salvali prima come PDF.</p>
                         </div>
-                        <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" />
+                        <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept="application/pdf,image/png,image/jpeg" />
                     </label>
                 </div> 
                 {file && (
