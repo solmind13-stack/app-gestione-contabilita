@@ -35,7 +35,6 @@ interface ImportMovementsDialogProps {
   defaultCompany?: string;
   currentUser: AppUser | null;
   companies: CompanyProfile[];
-  categories: CategoryData;
 }
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -54,7 +53,6 @@ export function ImportMovementsDialog({
   defaultCompany,
   currentUser,
   companies,
-  categories,
 }: ImportMovementsDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -64,8 +62,8 @@ export function ImportMovementsDialog({
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
-  const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
-  const ACCEPTED_FILES = ".xlsx, .xls, .pdf, .png, .jpg, .jpeg";
+  const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+  const ACCEPTED_FILES = ".xlsx, .pdf, .png, .jpg, .jpeg";
 
 
   const validateFile = (file: File) => {
@@ -148,10 +146,9 @@ export function ImportMovementsDialog({
             company: selectedCompany,
             conto: selectedAccount,
             inseritoDa: currentUser.displayName,
-            categories: categories,
         };
 
-        const isExcel = file.type.includes('spreadsheetml') || file.type.includes('ms-excel');
+        const isExcel = file.type.includes('spreadsheetml');
 
         if (isExcel) {
             const fileData = await file.arrayBuffer();
@@ -227,7 +224,7 @@ export function ImportMovementsDialog({
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
           <DialogDescription>
-            Carica un file PDF, immagine o Excel. L'AI analizzerà il contenuto ed estrarrà i movimenti.
+            Carica un file Excel, PDF o immagine. L'AI analizzerà il contenuto ed estrarrà i movimenti.
           </DialogDescription>
         </DialogHeader>
         

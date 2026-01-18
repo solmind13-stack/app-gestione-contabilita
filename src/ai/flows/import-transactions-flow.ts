@@ -13,14 +13,13 @@ import { z } from 'zod';
 
 const ImportTransactionsInputSchema = z.object({
   fileDataUri: z.string().describe(
-    "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'."
+    "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'"
   ).optional(),
   textContent: z.string().describe("The text content extracted from a file, like a CSV or JSON string.").optional(),
   fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf')."),
   company: z.string().describe("The company to assign to the transactions."),
   conto: z.string().optional().describe("The bank account to associate with the transactions."),
   inseritoDa: z.string().describe("The name of the user importing the file."),
-  categories: z.record(z.array(z.string())).describe("A JSON object of available categories and subcategories."),
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
@@ -70,6 +69,26 @@ The content below is from a spreadsheet (in CSV or JSON format). Analyze it to e
 Analyze the following file to extract the transactions:
 {{media url=fileDataUri}}
 {{/if}}`,
+  config: {
+    safetySettings: [
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_NONE',
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_NONE',
+      },
+    ],
+  },
 });
 
 const importTransactionsFlow = ai.defineFlow(
