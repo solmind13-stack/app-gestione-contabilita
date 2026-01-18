@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import * as XLSX from 'xlsx';
 import {
   Dialog,
   DialogContent,
@@ -63,14 +64,16 @@ export function ImportMovementsDialog({
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
-  const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
+  const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+  const ACCEPTED_FILES = ".xlsx, .xls, .pdf, .png, .jpg, .jpeg";
+
 
   const validateFile = (file: File) => {
     if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
         toast({
             variant: 'destructive',
             title: 'Formato File Non Supportato',
-            description: `Per favore, carica un file PDF, PNG o JPG.`,
+            description: `Per favore, carica un file PDF, PNG, JPG o Excel.`,
         });
         return false;
     }
@@ -139,16 +142,38 @@ export function ImportMovementsDialog({
     setExtractedMovements([]);
 
     try {
-      const fileDataUri = await fileToBase64(file);
-      const result = await importTransactions({
-        fileDataUri: fileDataUri,
-        fileType: file.type,
-        company: selectedCompany,
-        conto: selectedAccount,
-        inseritoDa: currentUser.displayName,
-        categories: categories,
-      });
-      
+        let result;
+        const basePayload = {
+            fileType: file.type,
+            company: selectedCompany,
+            conto: selectedAccount,
+            inseritoDa: currentUser.displayName,
+            categories: categories,
+        };
+
+        const isExcel = file.type.includes('spreadsheetml') || file.type.includes('ms-excel');
+
+        if (isExcel) {
+            const fileData = await file.arrayBuffer();
+            const workbook = XLSX.read(fileData);
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            // header: 1 produces an array of arrays, easier for AI to parse as CSV-like
+            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); 
+            const textContent = json.map(row => (row as any[]).join(',')).join('\n');
+            
+            result = await importTransactions({
+                ...basePayload,
+                textContent: textContent,
+            });
+        } else {
+            const fileDataUri = await fileToBase64(file);
+            result = await importTransactions({
+                ...basePayload,
+                fileDataUri: fileDataUri,
+            });
+        }
+
       setExtractedMovements(result.movements);
       toast({ title: 'Analisi completata', description: `${result.movements.length} movimenti estratti dal file.` });
 
@@ -202,7 +227,7 @@ export function ImportMovementsDialog({
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
           <DialogDescription>
-            Carica un file PDF o un'immagine di un estratto conto. L'AI analizzerà il contenuto ed estrarrà i movimenti.
+            Carica un file PDF, immagine o Excel. L'AI analizzerà il contenuto ed estrarrà i movimenti.
           </DialogDescription>
         </DialogHeader>
         
@@ -250,10 +275,9 @@ export function ImportMovementsDialog({
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                             <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
                             <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
-                            <p className="text-xs text-muted-foreground">PDF, PNG, JPG</p>
-                            <p className="text-xs text-slate-500 mt-2">Per file Excel (.xlsx), salvali prima come PDF.</p>
+                            <p className="text-xs text-muted-foreground">XLSX, PDF, PNG, JPG</p>
                         </div>
-                        <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept="application/pdf,image/png,image/jpeg" />
+                        <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept={ACCEPTED_FILES} />
                     </label>
                 </div> 
                 {file && (

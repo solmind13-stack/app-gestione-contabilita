@@ -14,7 +14,8 @@ import { z } from 'zod';
 const ImportTransactionsInputSchema = z.object({
   fileDataUri: z.string().describe(
     "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'."
-  ),
+  ).optional(),
+  textContent: z.string().describe("The text content extracted from a file, like a CSV or JSON string.").optional(),
   fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf')."),
   company: z.string().describe("The company to assign to the transactions."),
   conto: z.string().optional().describe("The bank account to associate with the transactions."),
@@ -57,13 +58,18 @@ export async function importTransactions(input: ImportTransactionsInput): Promis
 const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
-  prompt: `Your ONLY task is to extract transactions from the provided file.
+  prompt: `Your ONLY task is to extract transactions from the provided content.
 You MUST return a raw JSON string. The JSON object must have a single key "movements", which is an array of objects.
 For each transaction object, you MUST extract the following fields as TEXT STRINGS: 'data', 'descrizione', 'entrata', 'uscita'.
-If 'entrata' or 'uscita' is not present for a transaction, use '0' as the string value. Do NOT format numbers or currencies.
+If a field value is not present for a transaction, use '0' as the string value. Do NOT format numbers or currencies.
 
-File to analyze:
-{{media url=fileDataUri}}`,
+{{#if textContent}}
+The content below is from a spreadsheet (in CSV or JSON format). Analyze it to extract the transactions.
+{{{textContent}}}
+{{else}}
+Analyze the following file to extract the transactions:
+{{media url=fileDataUri}}
+{{/if}}`,
 });
 
 const importTransactionsFlow = ai.defineFlow(
