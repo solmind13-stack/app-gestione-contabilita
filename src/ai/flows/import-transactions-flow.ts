@@ -25,10 +25,10 @@ export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSche
 
 // Schema for what the AI model should extract. All fields are strings for maximum flexibility.
 const AiExtractedMovementSchema = z.object({
-  data: z.string().describe("La data della transazione in formato YYYY-MM-DD."),
-  descrizione: z.string().describe("La descrizione completa della transazione."),
-  entrata: z.string().default('0').describe("L'importo dell'entrata come stringa. Se non è un'entrata, deve essere '0'."),
-  uscita: z.string().default('0').describe("L'importo dell'uscita come stringa. Se non è un'uscita, deve essere '0'."),
+  data: z.string().describe("La data della transazione come testo."),
+  descrizione: z.string().describe("La descrizione completa della transazione come testo."),
+  entrata: z.string().default('0').describe("L'importo dell'entrata come testo. Se non presente, usa '0'."),
+  uscita: z.string().default('0').describe("L'importo dell'uscita come testo. Se non presente, usa '0'."),
 });
 
 // The schema for the AI's direct output.
@@ -69,19 +69,9 @@ const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
   output: { schema: AiOutputSchema },
-  prompt: `Sei un assistente AI specializzato nell'estrazione di dati finanziari da documenti. Il tuo unico compito è analizzare il file fornito ed estrarre i dati grezzi delle transazioni.
-
-Per ogni riga che rappresenta una transazione, estrai ESATTAMENTE e SOLTANTO i seguenti campi come stringhe di testo:
-- 'data': La data della transazione. Formattala come YYYY-MM-DD.
-- 'descrizione': La descrizione completa e originale della transazione, senza alterazioni.
-- 'entrata': L'importo dell'entrata o accredito. Restituisci il valore come testo, senza simboli di valuta. Se non presente, restituisci '0'.
-- 'uscita': L'importo dell'uscita o addebito. Restituisci il valore come testo, senza simboli di valuta. Se non presente, restituisci '0'.
-
-IMPORTANTE:
-- Non categorizzare, interpretare o aggiungere alcun altro campo.
-- Non formattare i numeri. Restituisci il testo così come lo vedi.
-- Il tuo output DEVE essere un oggetto JSON con una singola chiave "movements", che contiene un array degli oggetti transazione estratti.
-- Se il file è vuoto o illeggibile, restituisci un array vuoto: {"movements": []}.
+  prompt: `Il tuo unico compito è estrarre le transazioni dal file. Restituisci un oggetto JSON con una chiave "movements" che contiene un array di oggetti.
+Per ogni transazione, estrai i seguenti campi come stringhe di testo: 'data', 'descrizione', 'entrata', 'uscita'.
+Se 'entrata' o 'uscita' non sono presenti, usa '0'.
 
 File da analizzare:
 {{media url=fileDataUri}}`,
@@ -107,9 +97,12 @@ const importTransactionsFlow = ai.defineFlow(
           if (typeof amount === 'string') {
               // Remove currency symbols, spaces, and thousands separators (.), then replace comma decimal with a period.
               const cleaned = amount
-                .replace(/€/g, '')
-                .replace(/\s/g, '')
-                .replace(/\./g, '') 
+                .replace(/[€$£]/g, '') // Remove common currency symbols
+                .trim()
+                .replace(/\./g, (match, offset, fullString) => {
+                    // Treat dot as a thousands separator only if it's followed by 3 digits and not at the end
+                    return fullString.substring(offset + 1).length >= 3 && /\d{3}/.test(fullString.substring(offset + 1, offset + 4)) ? '' : '.';
+                })
                 .replace(',', '.');
               const parsed = parseFloat(cleaned);
               return isNaN(parsed) ? 0 : parsed;
@@ -121,8 +114,9 @@ const importTransactionsFlow = ai.defineFlow(
           let anno: number;
           let dataValida: string;
           try {
-              const parsedDate = new Date(mov.data);
-              // Check if the date is valid. AI might return invalid date strings.
+              // Attempt to parse various date formats that the AI might return
+              const dateString = mov.data.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); // DD/MM/YYYY to YYYY-MM-DD
+              const parsedDate = new Date(dateString);
               if (isNaN(parsedDate.getTime())) {
                   throw new Error('Invalid date format from AI');
               }
@@ -134,7 +128,6 @@ const importTransactionsFlow = ai.defineFlow(
               dataValida = new Date().toISOString().split('T')[0]; 
           }
 
-          // All imported movements will need manual review for categorization
           return {
               societa: input.company,
               anno: anno,
