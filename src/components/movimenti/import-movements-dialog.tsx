@@ -188,7 +188,7 @@ export function ImportMovementsDialog({
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
           <DialogDescription>
-            Carica un file Excel, PDF o un'immagine di un estratto conto. L'AI analizzerà il contenuto ed estrarrà i movimenti.
+            Carica un file PDF o un'immagine di un estratto conto. Per i file Excel, salvali prima in formato PDF. L'AI analizzerà il contenuto ed estrarrà i movimenti.
           </DialogDescription>
         </DialogHeader>
         
@@ -236,9 +236,9 @@ export function ImportMovementsDialog({
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                             <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
                             <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
-                            <p className="text-xs text-muted-foreground">XLSX, PDF, PNG, JPG</p>
+                            <p className="text-xs text-muted-foreground">PDF, PNG, JPG</p>
                         </div>
-                        <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" />
+                        <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" />
                     </label>
                 </div> 
                 {file && (

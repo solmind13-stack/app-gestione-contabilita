@@ -15,7 +15,7 @@ const ImportTransactionsInputSchema = z.object({
   fileDataUri: z.string().describe(
     "The file content as a data URI. Must include a MIME type and use Base64 encoding. e.g., 'data:<mimetype>;base64,<encoded_data>'."
   ),
-  fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')."),
+  fileType: z.string().describe("The MIME type of the file (e.g., 'image/png', 'application/pdf')."),
   company: z.string().describe("The company to assign to the transactions."),
   conto: z.string().optional().describe("The bank account to associate with the transactions."),
   inseritoDa: z.string().describe("The name of the user importing the file."),
