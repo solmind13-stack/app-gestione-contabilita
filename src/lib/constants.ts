@@ -3,6 +3,7 @@ export const YEARS = Array.from({ length: 11 }, (_, i) => new Date().getFullYear
 export const NAV_ITEMS = [
   { href: '/dashboard', icon: 'LayoutGrid', label: 'Dashboard' },
   { href: '/movimenti', icon: 'ArrowRightLeft', label: 'Movimenti' },
+  { href: '/movimenti/revisione', icon: 'ClipboardCheck', label: 'Da Revisionare' },
   { href: '/scadenze', icon: 'CalendarDays', label: 'Scadenze' },
   { 
     href: '/previsioni', 

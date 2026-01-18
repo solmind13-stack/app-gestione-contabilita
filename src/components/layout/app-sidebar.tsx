@@ -21,6 +21,7 @@ import {
   FilePieChart,
   Sparkles,
   Settings,
+  ClipboardCheck,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useUser } from "@/firebase";
@@ -35,6 +36,7 @@ const ICONS: { [key: string]: React.ElementType } = {
   FilePieChart,
   Sparkles,
   Settings,
+  ClipboardCheck,
 };
 
 export function AppSidebar() {

@@ -92,6 +92,11 @@
           "type": "string",
           "description": "The timestamp when the movement was last updated.",
           "format": "date-time"
+        },
+        "status": {
+            "type": "string",
+            "enum": ["ok", "manual_review"],
+            "description": "The status of the AI categorization for this movement."
         }
       },
       "required": [
@@ -687,6 +692,21 @@
           }
         }
       }
+    },
+    "TrainingFeedback": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "TrainingFeedback",
+        "type": "object",
+        "description": "Stores user feedback for AI training, linking a transaction description pattern to a chosen category.",
+        "properties": {
+            "id": { "type": "string", "description": "Unique ID for the feedback entry." },
+            "descriptionPattern": { "type": "string", "description": "The original transaction description." },
+            "category": { "type": "string", "description": "The category chosen by the user." },
+            "subcategory": { "type": "string", "description": "The subcategory chosen by the user." },
+            "userId": { "type": "string", "description": "The ID of the user who provided the feedback." },
+            "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of feedback creation." }
+        },
+        "required": ["descriptionPattern", "category", "userId", "createdAt"]
     }
   },
   "auth": {
@@ -843,6 +863,22 @@
               "description": "Unique ID for the company profile."
             }
           ]
+        }
+      },
+      {
+        "path": "/training_feedback/{feedbackId}",
+        "definition": {
+            "entityName": "TrainingFeedback",
+            "schema": {
+                "$ref": "#/backend/entities/TrainingFeedback"
+            },
+            "description": "Stores user corrections to AI categorization to create a feedback loop for learning.",
+            "params": [
+                {
+                    "name": "feedbackId",
+                    "description": "Unique ID for the feedback entry."
+                }
+            ]
         }
       }
     ],

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, File, Trash2, Wand2 } from 'lucide-react';
-import type { Movimento, AppUser, CompanyProfile } from '@/lib/types';
+import type { Movimento, AppUser, CompanyProfile, CategoryData } from '@/lib/types';
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -34,6 +34,7 @@ interface ImportMovementsDialogProps {
   defaultCompany?: string;
   currentUser: AppUser | null;
   companies: CompanyProfile[];
+  categories: CategoryData;
 }
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -52,6 +53,7 @@ export function ImportMovementsDialog({
   defaultCompany,
   currentUser,
   companies,
+  categories,
 }: ImportMovementsDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -130,6 +132,7 @@ export function ImportMovementsDialog({
         company: selectedCompany,
         conto: selectedAccount,
         inseritoDa: currentUser.displayName,
+        categories: categories,
       });
       
       setExtractedMovements(result.movements);
@@ -265,11 +268,12 @@ export function ImportMovementsDialog({
                                 <TableHead>Uscita</TableHead>
                                 <TableHead>IVA</TableHead>
                                 <TableHead>Società</TableHead>
+                                <TableHead>Stato</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {extractedMovements.map((mov, index) => (
-                                <TableRow key={index}>
+                                <TableRow key={index} className={cn(mov.status === 'manual_review' && 'bg-amber-50 dark:bg-amber-900/20')}>
                                     <TableCell>{formatDate(mov.data)}</TableCell>
                                     <TableCell>{mov.descrizione}</TableCell>
                                     <TableCell><Badge variant="outline">{mov.categoria}</Badge></TableCell>
@@ -278,6 +282,11 @@ export function ImportMovementsDialog({
                                     <TableCell className="text-red-600">{mov.uscita > 0 ? formatCurrency(mov.uscita) : '-'}</TableCell>
                                     <TableCell>{(mov.iva * 100).toFixed(0)}%</TableCell>
                                     <TableCell><Badge variant={mov.societa === 'LNC' ? 'default' : 'secondary'}>{mov.societa}</Badge></TableCell>
+                                     <TableCell>
+                                        <Badge variant={mov.status === 'manual_review' ? 'destructive' : 'secondary'}>
+                                            {mov.status === 'manual_review' ? 'Da Revisionare' : 'OK'}
+                                        </Badge>
+                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>

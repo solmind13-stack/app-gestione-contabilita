@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useCollection, useFirestore, useUser } from '@/firebase';
+import { useCollection, useFirestore, useUser, useDoc } from '@/firebase';
 import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction, getDoc } from 'firebase/firestore';
 
 import {
@@ -32,7 +32,7 @@ import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
-import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata, CompanyProfile } from '@/lib/types';
+import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata, CompanyProfile, AppSettings } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
@@ -66,6 +66,9 @@ export default function MovimentiPage() {
     
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
+
+    const settingsDocRef = useMemo(() => firestore ? doc(firestore, 'settings', 'appConfiguration') : null, [firestore]);
+    const { data: appSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
     
     const movimentiQuery = useMemo(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
     const deadlinesQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
@@ -141,6 +144,7 @@ export default function MovimentiPage() {
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     linkedTo: linkedItemId || null, // Ensure linkedTo is null, not undefined
+                    status: 'ok' as const,
                 };
                 transaction.set(newMovementRef, movementPayload);
 
@@ -362,7 +366,7 @@ export default function MovimentiPage() {
                 batch.set(docRef, {
                     ...movement,
                     createdBy: user.uid,
-                    inseritoDa: user.displayName,
+                    // inseritoDa is already set by the AI flow
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                 });
@@ -497,6 +501,7 @@ export default function MovimentiPage() {
             defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
             currentUser={user}
             companies={companies || []}
+            categories={appSettings?.categories || {}}
         />
         <AlertDialog open={!!movementToDelete} onOpenChange={(open) => !open && setMovementToDelete(null)}>
             <AlertDialogContent>

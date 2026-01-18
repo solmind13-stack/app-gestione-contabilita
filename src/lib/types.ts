@@ -52,6 +52,7 @@ export type Movimento = {
     createdAt?: string;
     updatedAt?: string;
     linkedTo?: string; // Format: 'collectionName/documentId' e.g., 'deadlines/xyz123'
+    status?: 'ok' | 'manual_review';
 };
 
 export type Riepilogo = {
@@ -222,3 +223,12 @@ export type LinkableItem = {
     amount: number;
     societa: string;
 };
+
+export type TrainingFeedback = {
+    id?: string;
+    descriptionPattern: string;
+    category: string;
+    subcategory: string;
+    userId: string;
+    createdAt: string;
+}

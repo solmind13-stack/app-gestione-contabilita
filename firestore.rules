@@ -55,6 +55,16 @@ service cloud.firestore {
       // Only admins can read or write the application settings.
       allow read, write: if isAdmin();
     }
+    
+    // ========== COLLECTION: training_feedback ==========
+    match /training_feedback/{feedbackId} {
+      // Allow any signed-in user to create their own feedback.
+      // This helps the AI learn from everyone's corrections.
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Reading feedback could be restricted, but for now, we'll allow all users to read.
+      allow read: if isSignedIn();
+    }
+
 
     // ========== FINANCIAL DATA COLLECTIONS ==========
     match /movements/{docId} {
@@ -126,7 +136,7 @@ service cloud.firestore {
                   (
                     hasGlobalWriteAccess() ||
                     (
-                      (getUserRole() == 'company' || getUserRole() == 'company-editor') &&
+                      (getUserRole() == 'company' || getUserRole == 'company-editor') &&
                       request.query.where[0][0] == 'societa' && 
                       request.query.where[0][1] == '==' && 
                       request.query.where[0][2] == getUserProfile().company
@@ -135,4 +145,3 @@ service cloud.firestore {
     }
   }
 }
-

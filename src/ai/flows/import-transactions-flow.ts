@@ -19,15 +19,18 @@ const ImportTransactionsInputSchema = z.object({
   company: z.string().describe("The company to assign to the transactions."),
   conto: z.string().optional().describe("The bank account to associate with the transactions."),
   inseritoDa: z.string().describe("The name of the user importing the file."),
+  categories: z.record(z.array(z.string())).describe("A JSON object of available categories and subcategories."),
 });
 export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSchema>;
 
-// Schema for what the AI model should extract. This is kept simple and tolerant.
+// Schema for what the AI model should extract. It includes optional category fields.
 const AiExtractedMovementSchema = z.object({
   data: z.string().describe("La data della transazione in formato YYYY-MM-DD."),
   descrizione: z.string().describe("La descrizione completa della transazione."),
   entrata: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'entrata. Se è un'uscita, questo deve essere 0."),
   uscita: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'uscita. Se è un'entrata, questo deve essere 0."),
+  categoria: z.string().optional().describe("La categoria più probabile scelta dalla lista fornita."),
+  sottocategoria: z.string().optional().describe("La sotto-categoria più probabile scelta dalla lista fornita."),
 });
 
 // The schema for the AI's direct output.
@@ -51,6 +54,7 @@ const FinalMovementSchema = z.object({
     metodoPag: z.string().optional(),
     note: z.string().optional(),
     inseritoDa: z.string().optional(),
+    status: z.enum(['ok', 'manual_review']),
 });
 
 
@@ -63,27 +67,36 @@ export async function importTransactions(input: ImportTransactionsInput): Promis
   return importTransactionsFlow(input);
 }
 
-// SIMPLIFIED PROMPT FOR ROBUST EXTRACTION
 const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
   output: { schema: AiOutputSchema },
-  prompt: `Sei un assistente per l'estrazione di dati finanziari. Il tuo unico compito è estrarre i movimenti dal file fornito e restituirli in formato JSON.
+  prompt: `Sei un assistente per l'acquisizione di dati finanziari. Il tuo compito è eseguire due passaggi:
 
-**Istruzioni Fondamentali:**
-1.  Analizza il file fornito (immagine, PDF, Excel).
-2.  Per ogni transazione che identifichi, estrai **solo** i seguenti 4 campi:
-    - 'data': La data della transazione. Prova a formattarla come YYYY-MM-DD. Se l'anno non è presente, usa l'anno corrente: ${new Date().getFullYear()}.
-    - 'descrizione': La descrizione completa e originale della transazione, così com'è scritta.
-    - 'entrata': L'importo nella colonna delle entrate (o dare/accrediti). Se non è un'entrata, il valore deve essere 0.
-    - 'uscita': L'importo nella colonna delle uscite (o avere/addebiti). Se non è un'uscita, il valore deve essere 0.
-3.  **NON** tentare di indovinare categorie, sotto-categorie o IVA.
-4.  **NON** inventare dati. Se un campo non è presente, usa il valore di default (0 per gli importi).
+**Fase 1: Estrazione Dati Grezzi**
+Analizza il file fornito. Per ogni transazione, estrai i seguenti campi fondamentali:
+- 'data': La data della transazione. Formattala come YYYY-MM-DD. Se l'anno non è presente, usa l'anno corrente: ${new Date().getFullYear()}.
+- 'descrizione': La descrizione completa e originale della transazione.
+- 'entrata': L'importo nella colonna delle entrate (dare/accrediti). Se non è un'entrata, deve essere 0.
+- 'uscita': L'importo nella colonna delle uscite (avere/addebiti). Se non è un'uscita, deve essere 0.
+
+**Fase 2: Classificazione**
+Usa la descrizione estratta per assegnare la categoria e la sotto-categoria più appropriate.
+- Scegli una 'categoria' dall'elenco delle chiavi principali del seguente oggetto JSON.
+- Scegli una 'sottocategoria' dall'array corrispondente alla categoria scelta.
+
+**Elenco Categorie/Sotto-categorie autorizzate:**
+\`\`\`json
+{{{json categories}}}
+\`\`\`
+
+**Regole di Classificazione:**
+- Se sei sicuro della classificazione (confidenza > 90%), assegna i campi 'categoria' e 'sottocategoria'.
+- Se NON sei sicuro, lascia i campi 'categoria' e 'sottocategoria' vuoti o null.
 
 **Formato di Output Obbligatorio:**
 La tua risposta DEVE essere un oggetto JSON con una singola chiave "movements", che contiene un array di oggetti transazione.
-Esempio: {"movements": [{"data": "2024-07-29", "descrizione": "PAGAMENTO F24 DELEGA", "entrata": 0, "uscita": 150.55}]}
-Se non trovi transazioni valide, restituisci un array vuoto: {"movements": []}
+Se non trovi transazioni, restituisci un array vuoto: {"movements": []}
 
 **File da analizzare:**
 {{media url=fileDataUri}}`,
@@ -103,13 +116,9 @@ const importTransactionsFlow = ai.defineFlow(
           return { movements: [] };
       }
 
-      // This function handles various string formats for numbers
       const parseAmount = (amount: string | number | undefined): number => {
-          if (typeof amount === 'number') {
-              return amount;
-          }
+          if (typeof amount === 'number') return amount;
           if (typeof amount === 'string') {
-              // Handles formats like "1.234,56" or "1,234.56" or "€ 1.234,56"
               const cleaned = amount.replace(/[.€\s]/g, '').replace(',', '.');
               const parsed = parseFloat(cleaned);
               return isNaN(parsed) ? 0 : parsed;
@@ -117,49 +126,43 @@ const importTransactionsFlow = ai.defineFlow(
           return 0;
       };
 
-      // Post-process the AI's raw output to enrich it and fit the final schema.
       const cleanedMovements = output.movements.map(mov => {
           let anno: number;
           let dataValida: string;
           try {
               const parsedDate = new Date(mov.data);
-              if (isNaN(parsedDate.getTime())) { // Check for invalid date
-                  throw new Error('Invalid date format from AI');
-              }
+              if (isNaN(parsedDate.getTime())) throw new Error('Invalid date');
               anno = parsedDate.getFullYear();
-              dataValida = parsedDate.toISOString().split('T')[0]; // Ensure YYYY-MM-DD format
+              dataValida = parsedDate.toISOString().split('T')[0];
           } catch(e) {
-              anno = new Date().getFullYear(); // Fallback to current year
+              anno = new Date().getFullYear();
               dataValida = new Date().toISOString().split('T')[0];
           }
 
-          // Set default values here, in the code, for reliability.
-          const categoriaDefault = 'Da categorizzare';
-          const sottocategoriaDefault = 'Da categorizzare';
-          const ivaDefault = 0.22;
-
+          const needsReview = !mov.categoria || !input.categories[mov.categoria];
+          
           return {
               societa: input.company,
               anno: anno,
               data: dataValida,
               descrizione: mov.descrizione,
-              categoria: categoriaDefault,
-              sottocategoria: sottocategoriaDefault,
+              categoria: needsReview ? 'Da categorizzare' : mov.categoria!,
+              sottocategoria: needsReview ? 'Da categorizzare' : (mov.sottocategoria || 'Da categorizzare'),
               entrata: parseAmount(mov.entrata),
               uscita: parseAmount(mov.uscita),
-              iva: ivaDefault,
+              iva: 0.22, // Default IVA
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
-              operatore: input.inseritoDa, // Default operator to the user who imported
-              metodoPag: 'Importato', // Default payment method
+              operatore: `Acquisizione da ${input.inseritoDa}`,
+              metodoPag: 'Importato',
               note: `Importato da file: ${input.fileType}`,
+              status: needsReview ? 'manual_review' as const : 'ok' as const,
           };
       });
 
       return { movements: cleanedMovements };
     } catch(e) {
         console.error("Error in importTransactionsFlow", e);
-        // This makes the error message more useful for debugging and for the user.
         throw new Error(
           'L\'analisi AI non è riuscita. Ciò potrebbe essere dovuto a un file di formato non supportato, illeggibile o a un errore temporaneo del servizio. Prova con un file diverso o riprova più tardi.'
         );
