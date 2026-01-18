@@ -27,10 +27,8 @@ export type ImportTransactionsInput = z.infer<typeof ImportTransactionsInputSche
 const AiExtractedMovementSchema = z.object({
   data: z.string().describe("La data della transazione in formato YYYY-MM-DD."),
   descrizione: z.string().describe("La descrizione completa della transazione."),
-  entrata: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'entrata. Se è un'uscita, questo deve essere 0."),
-  uscita: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'uscita. Se è un'entrata, questo deve essere 0."),
-  categoria: z.string().optional().describe("La categoria più probabile scelta dalla lista fornita."),
-  sottocategoria: z.string().optional().describe("La sotto-categoria più probabile scelta dalla lista fornita."),
+  entrata: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'entrata (dare/accrediti). Se non è un'entrata, questo deve essere 0."),
+  uscita: z.union([z.string(), z.number()]).default(0).describe("L'importo dell'uscita (avere/addebiti). Se non è un'uscita, questo deve essere 0."),
 });
 
 // The schema for the AI's direct output.
@@ -71,34 +69,20 @@ const prompt = ai.definePrompt({
   name: 'importTransactionsPrompt',
   input: { schema: ImportTransactionsInputSchema },
   output: { schema: AiOutputSchema },
-  prompt: `Sei un assistente per l'acquisizione di dati finanziari. Il tuo compito è eseguire due passaggi:
+  prompt: `Sei un assistente AI specializzato nell'estrazione di dati finanziari. Il tuo unico compito è analizzare il file fornito ed estrarre i dati grezzi delle transazioni.
 
-**Fase 1: Estrazione Dati Grezzi**
-Analizza il file fornito. Per ogni transazione, estrai i seguenti campi fondamentali:
-- 'data': La data della transazione. Formattala come YYYY-MM-DD. Se l'anno non è presente, usa l'anno corrente: ${new Date().getFullYear()}.
-- 'descrizione': La descrizione completa e originale della transazione.
-- 'entrata': L'importo nella colonna delle entrate (dare/accrediti). Se non è un'entrata, deve essere 0.
-- 'uscita': L'importo nella colonna delle uscite (avere/addebiti). Se non è un'uscita, deve essere 0.
+Per ogni riga che rappresenta una transazione, estrai ESATTAMENTE e SOLTANTO i seguenti campi:
+- 'data': La data della transazione. Formattala come YYYY-MM-DD. Se l'anno non è esplicitamente presente, usa l'anno corrente: ${new Date().getFullYear()}.
+- 'descrizione': La descrizione completa e originale della transazione, senza alterazioni.
+- 'entrata': L'importo che risulta essere un'entrata o un accredito. Se la colonna è vuota o la transazione è un'uscita, il valore deve essere 0.
+- 'uscita': L'importo che risulta essere un'uscita o un addebito. Se la colonna è vuota o la transazione è un'entrata, il valore deve essere 0.
 
-**Fase 2: Classificazione**
-Usa la descrizione estratta per assegnare la categoria e la sotto-categoria più appropriate.
-- Scegli una 'categoria' dall'elenco delle chiavi principali del seguente oggetto JSON.
-- Scegli una 'sottocategoria' dall'array corrispondente alla categoria scelta.
+IMPORTANTE: Non devi categorizzare, interpretare o aggiungere alcun altro campo. La tua unica responsabilità è l'estrazione pura.
 
-**Elenco Categorie/Sotto-categorie autorizzate:**
-\`\`\`json
-{{{json categories}}}
-\`\`\`
+Il tuo output DEVE essere un oggetto JSON con una singola chiave "movements", che contiene un array degli oggetti transazione estratti.
+Se il file è vuoto o illeggibile, restituisci un array vuoto: {"movements": []}.
 
-**Regole di Classificazione:**
-- Se sei sicuro della classificazione (confidenza > 90%), assegna i campi 'categoria' e 'sottocategoria'.
-- Se NON sei sicuro, lascia i campi 'categoria' e 'sottocategoria' vuoti o null.
-
-**Formato di Output Obbligatorio:**
-La tua risposta DEVE essere un oggetto JSON con una singola chiave "movements", che contiene un array di oggetti transazione.
-Se non trovi transazioni, restituisci un array vuoto: {"movements": []}
-
-**File da analizzare:**
+File da analizzare:
 {{media url=fileDataUri}}`,
 });
 
@@ -139,30 +123,30 @@ const importTransactionsFlow = ai.defineFlow(
               dataValida = new Date().toISOString().split('T')[0];
           }
 
-          const needsReview = !mov.categoria || !input.categories[mov.categoria];
-          
+          // All imported movements will need manual review for categorization
           return {
               societa: input.company,
               anno: anno,
               data: dataValida,
               descrizione: mov.descrizione,
-              categoria: needsReview ? 'Da categorizzare' : mov.categoria!,
-              sottocategoria: needsReview ? 'Da categorizzare' : (mov.sottocategoria || 'Da categorizzare'),
+              categoria: 'Da categorizzare',
+              sottocategoria: 'Da categorizzare',
               entrata: parseAmount(mov.entrata),
               uscita: parseAmount(mov.uscita),
-              iva: 0.22, // Default IVA
+              iva: 0.22, // Default IVA, user will review
               conto: input.conto || '',
               inseritoDa: input.inseritoDa,
               operatore: `Acquisizione da ${input.inseritoDa}`,
               metodoPag: 'Importato',
               note: `Importato da file: ${input.fileType}`,
-              status: needsReview ? 'manual_review' as const : 'ok' as const,
+              status: 'manual_review' as const, // Always needs review
           };
       });
 
       return { movements: cleanedMovements };
     } catch(e) {
         console.error("Error in importTransactionsFlow", e);
+        // This makes the error message more useful for debugging and for the user.
         throw new Error(
           'L\'analisi AI non è riuscita. Ciò potrebbe essere dovuto a un file di formato non supportato, illeggibile o a un errore temporaneo del servizio. Prova con un file diverso o riprova più tardi.'
         );
