@@ -47,6 +47,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CATEGORIE, YEARS } from '@/lib/constants';
+import { ReviewMovementsDialog } from '@/components/movimenti/review-movements-dialog';
 
 const getMovimentiQuery = (firestore: any, user: AppUser | null, company: string) => {
     if (!firestore || !user) return null;
@@ -536,52 +537,13 @@ export default function MovimentiPage() {
             companies={companies || []}
             categories={appSettings?.categories || {}}
         />
-         <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
-            <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                    <DialogTitle>Movimenti da Revisionare</DialogTitle>
-                    <DialogDescription>
-                        Controlla e classifica i movimenti importati che richiedono un intervento manuale.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="max-h-[60vh] overflow-y-auto">
-                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Descrizione</TableHead>
-                                <TableHead className="text-right">Importo</TableHead>
-                                <TableHead className="text-right">Azione</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {movimentiDaRevisionare.length === 0 ? (
-                                <TableRow><TableCell colSpan={4} className="h-24 text-center">Nessun movimento da revisionare.</TableCell></TableRow>
-                            ) : (
-                                movimentiDaRevisionare.map(mov => (
-                                    <TableRow key={mov.id}>
-                                        <TableCell>{formatDate(mov.data)}</TableCell>
-                                        <TableCell>{mov.descrizione}</TableCell>
-                                        <TableCell className={cn("text-right", mov.uscita > 0 ? "text-red-600" : "text-green-600")}>
-                                            {formatCurrency(mov.uscita > 0 ? -mov.uscita : mov.entrata)}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="outline" size="sm" onClick={() => {
-                                                handleOpenAddDialog(mov);
-                                                setIsReviewDialogOpen(false);
-                                            }}>
-                                                <Pencil className="mr-2 h-4 w-4" />
-                                                Revisiona
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </DialogContent>
-        </Dialog>
+        <ReviewMovementsDialog
+            isOpen={isReviewDialogOpen}
+            setIsOpen={setIsReviewDialogOpen}
+            movementsToReview={movimentiDaRevisionare}
+            appSettings={appSettings}
+            onFeedback={handleSaveFeedback}
+        />
         <AlertDialog open={!!movementToDelete} onOpenChange={(open) => !open && setMovementToDelete(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
