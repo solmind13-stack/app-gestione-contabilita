@@ -332,7 +332,8 @@ export function AddMovementDialog({
     };
 
     if (isEditMode && movementToEdit) {
-        await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy });
+        const newStatus = movementToEdit.status === 'manual_review' && data.categoria !== 'Da categorizzare' ? 'ok' : movementToEdit.status;
+        await onEditMovement({ ...dataToSave, id: movementToEdit.id, createdBy: movementToEdit.createdBy, status: newStatus });
     } else {
         await onAddMovement(dataToSave, linkedItemId);
     }

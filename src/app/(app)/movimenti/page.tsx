@@ -4,7 +4,13 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useCollection, useFirestore, useUser, useDoc } from '@/firebase';
 import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction, getDoc } from 'firebase/firestore';
-
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Card,
   CardContent,
@@ -28,11 +34,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, Sparkles, Loader2, Trash2 } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, Sparkles, Loader2, Trash2, ClipboardCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
-import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata, CompanyProfile, AppSettings } from '@/lib/types';
+import type { Movimento, Riepilogo, AppUser, Scadenza, PrevisioneUscita, PrevisioneEntrata, CompanyProfile, AppSettings, TrainingFeedback } from '@/lib/types';
 import { AddMovementDialog } from '@/components/movimenti/add-movement-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
@@ -98,6 +104,7 @@ export default function MovimentiPage() {
 
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+    const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingMovement, setEditingMovement] = useState<Movimento | null>(null);
@@ -115,6 +122,19 @@ export default function MovimentiPage() {
         setEditingMovement(movement || null);
         setIsAddDialogOpen(true);
     }
+    
+    const handleSaveFeedback = useCallback(async (feedback: Omit<TrainingFeedback, 'id' | 'createdAt'>) => {
+        if (!firestore || !user) return;
+        try {
+            await addDoc(collection(firestore, 'training_feedback'), {
+                ...feedback,
+                createdAt: new Date().toISOString(),
+                userId: user.uid,
+            });
+        } catch(e) {
+            console.error("Failed to save training feedback:", e);
+        }
+    }, [firestore, user]);
     
     const handleAddMovement = async (newMovementData: Omit<Movimento, 'id'>, linkedItemId?: string) => {
         if (!user || !firestore) return;
@@ -198,18 +218,19 @@ export default function MovimentiPage() {
 
     const handleEditMovement = async (updatedMovement: Movimento) => {
         if (!user || !firestore || !updatedMovement.id) return;
-
+    
+        const originalMovement = movimentiData?.find(m => m.id === updatedMovement.id);
+    
         try {
             await runTransaction(firestore, async (transaction) => {
                 const movementDocRef = doc(firestore, 'movements', updatedMovement.id);
-
-                // --- 1. ALL READS FIRST ---
+    
                 const originalMovementSnap = await transaction.get(movementDocRef);
                 if (!originalMovementSnap.exists()) {
                     throw new Error("Movimento originale non trovato!");
                 }
-                const originalMovement = originalMovementSnap.data() as Movimento;
-
+                const originalMovementData = originalMovementSnap.data() as Movimento;
+    
                 let linkedDocSnap;
                 let linkedDocRef;
                 if (updatedMovement.linkedTo) {
@@ -219,34 +240,32 @@ export default function MovimentiPage() {
                     linkedDocSnap = await transaction.get(linkedDocRef);
                     if (!linkedDocSnap?.exists()) {
                         console.warn(`Documento collegato ${updatedMovement.linkedTo} non trovato durante l'aggiornamento.`);
-                        linkedDocRef = undefined; // Proceed without updating the linked doc if it doesn't exist
+                        linkedDocRef = undefined; 
                     }
                 }
-
-                // --- 2. PREPARE DATA ---
+    
                 const { id, ...dataToUpdate } = updatedMovement;
                 const finalMovementData = {
                     ...dataToUpdate,
                     updatedAt: new Date().toISOString(),
-                    createdBy: originalMovement.createdBy || user.uid,
+                    createdBy: originalMovementData.createdBy || user.uid,
                     inseritoDa: user.displayName,
                 };
-
-                // --- 3. ALL WRITES LAST ---
+    
                 transaction.update(movementDocRef, finalMovementData);
-
+    
                 if (linkedDocRef && linkedDocSnap?.exists()) {
                     const collectionName = linkedDocRef.parent.id;
-                    const originalAmount = originalMovement.uscita > 0 ? originalMovement.uscita : -originalMovement.entrata;
+                    const originalAmount = originalMovementData.uscita > 0 ? originalMovementData.uscita : -originalMovementData.entrata;
                     const newAmount = updatedMovement.uscita > 0 ? updatedMovement.uscita : -updatedMovement.entrata;
                     const amountDifference = newAmount - originalAmount;
-
+    
                     if (collectionName === 'deadlines') {
                         const data = linkedDocSnap.data() as Scadenza;
                         const newPaidAmount = (data.importoPagato || 0) + amountDifference;
                         const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
                         transaction.update(linkedDocRef, { importoPagato: newPaidAmount, stato: newStatus });
-
+    
                     } else if (collectionName === 'expenseForecasts' || collectionName === 'incomeForecasts') {
                         const data = linkedDocSnap.data() as PrevisioneUscita | PrevisioneEntrata;
                         const newEffectiveAmount = (data.importoEffettivo || 0) + amountDifference;
@@ -264,6 +283,16 @@ export default function MovimentiPage() {
                     }
                 }
             });
+            
+            if (originalMovement && originalMovement.status === 'manual_review' && updatedMovement.status === 'ok') {
+                await handleSaveFeedback({
+                    descriptionPattern: originalMovement.descrizione,
+                    category: updatedMovement.categoria,
+                    subcategory: updatedMovement.sottocategoria,
+                    userId: user.uid,
+                });
+            }
+    
             toast({ title: "Movimento Aggiornato", description: "Il movimento e le voci collegate sono stati aggiornati." });
         } catch (error: any) {
             console.error("Error updating movement: ", error);
@@ -277,14 +306,12 @@ export default function MovimentiPage() {
             await runTransaction(firestore, async (transaction) => {
                 const movementDocRef = doc(firestore, 'movements', movementToDelete.id);
                 
-                // 1. READ movement to delete to check for a link
                 const movementSnap = await transaction.get(movementDocRef);
                 if (!movementSnap.exists()) {
                     throw new Error("Movimento da eliminare non trovato.");
                 }
                 const movement = movementSnap.data() as Movimento;
 
-                // 2. If linked, READ the linked document
                 if (movement.linkedTo) {
                     const [collectionName, docId] = movement.linkedTo.split('/');
                     const linkedDocRef = doc(firestore, collectionName, docId);
@@ -292,7 +319,6 @@ export default function MovimentiPage() {
                     
                     if (linkedDocSnap.exists()) {
                         
-                        // 3. WRITE the update to the linked document
                         if (collectionName === 'deadlines') {
                             const data = linkedDocSnap.data() as Scadenza;
                             const movementAmount = movement.uscita;
@@ -320,7 +346,6 @@ export default function MovimentiPage() {
                     }
                 }
                 
-                // 4. WRITE the deletion of the movement
                 transaction.delete(movementDocRef);
             });
             
@@ -412,17 +437,18 @@ export default function MovimentiPage() {
 
     const { 
         filteredMovimenti, 
+        movimentiDaRevisionare,
         uniqueCategories, 
         uniqueSubCategories, 
         uniqueOperators 
     } = useMemo(() => {
         let data = movimentiData || [];
         
-        // Dynamic options for filters
+        const inReview = data.filter(m => m.status === 'manual_review');
+        
         const categories = [...new Set(data.map(m => m.categoria))].sort();
         const operators = [...new Set(data.map(m => m.operatore).filter(Boolean))].sort();
         
-        // Filtering logic
         let filtered = data
             .filter(m => !selectedYear || m.anno === Number(selectedYear))
             .filter(m => selectedCategory === 'Tutti' || m.categoria === selectedCategory)
@@ -430,10 +456,8 @@ export default function MovimentiPage() {
             .filter(m => selectedOperator === 'Tutti' || m.operatore === selectedOperator)
             .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
         
-        // After filtering by category, find available subcategories
         const subCategories = [...new Set(filtered.map(m => m.sottocategoria))].sort();
 
-        // Sorting logic
         filtered = filtered.sort((a, b) => {
                 const dateA = new Date(a.data).getTime();
                 const dateB = new Date(b.data).getTime();
@@ -446,6 +470,7 @@ export default function MovimentiPage() {
 
         return {
             filteredMovimenti: filtered,
+            movimentiDaRevisionare: inReview,
             uniqueCategories: categories,
             uniqueSubCategories: subCategories,
             uniqueOperators: operators
@@ -453,7 +478,6 @@ export default function MovimentiPage() {
     }, [movimentiData, searchTerm, sortOrder, selectedYear, selectedCategory, selectedSubCategory, selectedOperator]);
     
     useEffect(() => {
-        // Reset subcategory if parent category changes and subcategory is no longer valid
         if (selectedCategory === 'Tutti') {
             setSelectedSubCategory('Tutti');
         }
@@ -512,6 +536,52 @@ export default function MovimentiPage() {
             companies={companies || []}
             categories={appSettings?.categories || {}}
         />
+         <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+            <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                    <DialogTitle>Movimenti da Revisionare</DialogTitle>
+                    <DialogDescription>
+                        Controlla e classifica i movimenti importati che richiedono un intervento manuale.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="max-h-[60vh] overflow-y-auto">
+                     <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Data</TableHead>
+                                <TableHead>Descrizione</TableHead>
+                                <TableHead className="text-right">Importo</TableHead>
+                                <TableHead className="text-right">Azione</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {movimentiDaRevisionare.length === 0 ? (
+                                <TableRow><TableCell colSpan={4} className="h-24 text-center">Nessun movimento da revisionare.</TableCell></TableRow>
+                            ) : (
+                                movimentiDaRevisionare.map(mov => (
+                                    <TableRow key={mov.id}>
+                                        <TableCell>{formatDate(mov.data)}</TableCell>
+                                        <TableCell>{mov.descrizione}</TableCell>
+                                        <TableCell className={cn("text-right", mov.uscita > 0 ? "text-red-600" : "text-green-600")}>
+                                            {formatCurrency(mov.uscita > 0 ? -mov.uscita : mov.entrata)}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="outline" size="sm" onClick={() => {
+                                                handleOpenAddDialog(mov);
+                                                setIsReviewDialogOpen(false);
+                                            }}>
+                                                <Pencil className="mr-2 h-4 w-4" />
+                                                Revisiona
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </DialogContent>
+        </Dialog>
         <AlertDialog open={!!movementToDelete} onOpenChange={(open) => !open && setMovementToDelete(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -555,6 +625,10 @@ export default function MovimentiPage() {
                 </Select>
             )}
             <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
+                <Button variant={movimentiDaRevisionare.length > 0 ? 'destructive' : 'outline'} onClick={() => setIsReviewDialogOpen(true)}>
+                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                    Da Revisionare ({movimentiDaRevisionare.length})
+                </Button>
                 {user?.role === 'admin' && selectedIds.length > 0 && (
                      <Button variant="destructive" onClick={() => setIsBulkDeleteAlertOpen(true)}>
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -714,7 +788,7 @@ export default function MovimentiPage() {
                             const ivaUscita = uscitaLorda > 0 ? calculateIva(uscitaLorda, movimento.iva) : 0;
 
                         return (
-                        <TableRow key={movimento.id} data-state={isSelected ? "selected" : ""}>
+                        <TableRow key={movimento.id} data-state={isSelected ? "selected" : ""} className={movimento.status === 'manual_review' ? 'bg-amber-50 dark:bg-amber-950' : ''}>
                             {user?.role === 'admin' && (
                                 <TableCell padding="checkbox">
                                     <Checkbox
