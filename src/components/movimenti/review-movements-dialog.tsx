@@ -159,47 +159,47 @@ export function ReviewMovementsDialog({
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="h-[60vh]">
-          <Table>
+          <Table className="table-fixed w-full">
             <TableHeader>
               <TableRow>
-                <TableHead><Checkbox onCheckedChange={(e) => handleSelectAll(e as boolean)} checked={selectedIds.length > 0 && selectedIds.length === editedMovements.length && editedMovements.length > 0} /></TableHead>
-                <TableHead>Data</TableHead>
+                <TableHead className="w-12"><Checkbox onCheckedChange={(e) => handleSelectAll(e as boolean)} checked={selectedIds.length > 0 && selectedIds.length === editedMovements.length && editedMovements.length > 0} /></TableHead>
+                <TableHead className="w-28">Data</TableHead>
                 <TableHead>Descrizione</TableHead>
-                <TableHead className="text-right">Importo</TableHead>
-                <TableHead className="w-[180px]">Categoria</TableHead>
-                <TableHead className="w-[180px]">Sottocategoria</TableHead>
-                <TableHead className="w-[100px]">% IVA</TableHead>
-                <TableHead className="w-[150px]">Operatore</TableHead>
+                <TableHead className="w-32 text-right">Importo</TableHead>
+                <TableHead className="w-48">Categoria</TableHead>
+                <TableHead className="w-48">Sottocategoria</TableHead>
+                <TableHead className="w-24">% IVA</TableHead>
+                <TableHead className="w-44">Operatore</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {editedMovements.map(mov => {
                 const subcategories = appSettings?.categories?.[mov.categoria] || CATEGORIE[mov.categoria as keyof typeof CATEGORIE] || [];
                 return (
-                  <TableRow key={mov.id}>
-                    <TableCell><Checkbox onCheckedChange={(checked) => handleSelectRow(mov.id, checked as boolean)} checked={selectedIds.includes(mov.id)} /></TableCell>
-                    <TableCell>{formatDate(mov.data)}</TableCell>
-                    <TableCell>{mov.descrizione}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(mov.entrata > 0 ? mov.entrata : mov.uscita)}</TableCell>
-                    <TableCell>
+                  <TableRow key={mov.id} className="text-sm">
+                    <TableCell className="p-2"><Checkbox onCheckedChange={(checked) => handleSelectRow(mov.id, checked as boolean)} checked={selectedIds.includes(mov.id)} /></TableCell>
+                    <TableCell className="p-2 whitespace-nowrap">{formatDate(mov.data)}</TableCell>
+                    <TableCell className="p-2 break-words">{mov.descrizione}</TableCell>
+                    <TableCell className="p-2 text-right whitespace-nowrap">{formatCurrency(mov.entrata > 0 ? mov.entrata : mov.uscita)}</TableCell>
+                    <TableCell className="p-2">
                       <Select value={mov.categoria} onValueChange={(value) => handleFieldChange(mov.id, 'categoria', value)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{allCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-2">
                       <Select value={mov.sottocategoria} onValueChange={(value) => handleFieldChange(mov.id, 'sottocategoria', value)} disabled={subcategories.length === 0}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{subcategories.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
-                     <TableCell>
+                     <TableCell className="p-2">
                       <Select value={String(mov.iva)} onValueChange={(value) => handleFieldChange(mov.id, 'iva', parseFloat(value))}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{IVA_PERCENTAGES.map(iva => <SelectItem key={iva.value} value={String(iva.value)}>{iva.label}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
-                     <TableCell>
+                     <TableCell className="p-2">
                       <Select value={mov.operatore} onValueChange={(value) => handleFieldChange(mov.id, 'operatore', value)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{allOperators.map(op => <SelectItem key={op} value={op}>{op}</SelectItem>)}</SelectContent>
