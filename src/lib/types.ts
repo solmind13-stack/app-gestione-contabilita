@@ -222,6 +222,8 @@ export type LinkableItem = {
     date: string;
     amount: number;
     societa: string;
+    category: string;
+    subcategory: string;
 };
 
 export type TrainingFeedback = {
