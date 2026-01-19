@@ -300,13 +300,22 @@ export function ImportMovementsDialog({
         try {
             const result = await categorizeTransaction({ description: movement.descrizione });
             if (result && result.category && result.category !== 'Da categorizzare') {
-                const updatedMov = { ...movement, categoria: result.category, sottocategoria: result.subcategory, status: 'ok' as const };
+                const updatedMov = { 
+                    ...movement, 
+                    categoria: result.category, 
+                    sottocategoria: result.subcategory,
+                    iva: result.ivaPercentage,
+                    metodoPag: result.metodoPag,
+                    status: 'ok' as const 
+                };
                 updatedMovements[i] = updatedMov;
                 
                 const movRef = doc(firestore, 'movements', movement.id);
                 batch.update(movRef, {
                     categoria: result.category,
                     sottocategoria: result.subcategory,
+                    iva: result.ivaPercentage,
+                    metodoPag: result.metodoPag,
                     status: 'ok'
                 });
             }
@@ -385,7 +394,7 @@ export function ImportMovementsDialog({
         <ScrollArea className="h-[60vh] border rounded-md">
             <Table>
                 <TableHeader><TableRow>
-                    <TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Categoria</TableHead><TableHead>Entrata</TableHead><TableHead>Uscita</TableHead><TableHead>Società</TableHead><TableHead>Stato</TableHead>
+                    <TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Categoria</TableHead><TableHead>Metodo Pag.</TableHead><TableHead>Entrata</TableHead><TableHead>Uscita</TableHead><TableHead>Società</TableHead><TableHead>Stato</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                     {movements.map((row, index) => (
@@ -398,6 +407,7 @@ export function ImportMovementsDialog({
                               {row.descrizione}
                             </TableCell>
                             <TableCell><Badge variant="outline">{row.categoria}</Badge></TableCell>
+                            <TableCell>{row.metodoPag}</TableCell>
                             <TableCell className="text-green-600">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
                             <TableCell className="text-red-600">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>
                             <TableCell><Badge variant={row.societa === 'LNC' ? 'default' : 'secondary'}>{row.societa}</Badge></TableCell>

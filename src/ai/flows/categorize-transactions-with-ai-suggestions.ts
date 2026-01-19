@@ -20,6 +20,7 @@ const CategorizeTransactionOutputSchema = z.object({
   category: z.string().describe('The suggested category for the transaction.'),
   subcategory: z.string().describe('The suggested subcategory for the transaction.'),
   ivaPercentage: z.number().describe('The suggested IVA percentage for the transaction.'),
+  metodoPag: z.string().describe('The suggested payment method for the transaction.'),
   isRecurring: z.boolean().describe('Whether the transaction is likely to be recurring.'),
 });
 export type CategorizeTransactionOutput = z.infer<typeof CategorizeTransactionOutputSchema>;
@@ -34,11 +35,11 @@ const prompt = ai.definePrompt({
   output: {schema: CategorizeTransactionOutputSchema},
   prompt: `You are an expert financial assistant specializing in categorizing transactions for Italian companies.
 
-  Given the following transaction description, suggest the most appropriate category, subcategory, IVA percentage, and whether it's a recurring transaction.
+  Given the following transaction description, suggest the most appropriate category, subcategory, IVA percentage, payment method, and whether it's a recurring transaction.
 
   Description: {{{description}}}
 
-  Respond in JSON format. Categories, subcategories and IVA percentages must be selected from the lists that follow.
+  Respond in JSON format. Categories, subcategories, IVA percentages, and payment methods must be selected from the lists that follow.
 
   Categories: Immobiliare, Energia, Fornitori, Gestione Immobili, Gestione Generale, Tasse, Finanziamenti, Movimenti Interni
   Subcategories (per Immobiliare): Affitti, Depositi Cauzionali, Recupero Spese, Immobili
@@ -50,6 +51,7 @@ const prompt = ai.definePrompt({
   Subcategories (per Finanziamenti): Rate Mutuo, Rate Prestito, Rimborso
   Subcategories (per Movimenti Interni): Giroconto, Trasferimento
   IVA Percentages: 0.22, 0.10, 0.04, 0.00
+  Payment Methods: Bonifico, Contanti, Assegno, Carta di Credito, Addebito Diretto (SDD), Altro
   `,
 });
 
