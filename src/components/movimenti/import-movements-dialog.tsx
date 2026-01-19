@@ -37,6 +37,7 @@ export function ImportMovementsDialog({
   defaultCompany,
   currentUser,
   companies,
+  allMovements,
 }: {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -45,10 +46,11 @@ export function ImportMovementsDialog({
   currentUser: AppUser | null;
   companies: CompanyProfile[];
   categories: any;
+  allMovements: Movimento[];
 }) {
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [processedRows, setProcessedRows] = useState<Omit<Movimento, 'id'>[]>([]);
+  const [processedRows, setProcessedRows] = useState<(Omit<Movimento, 'id'> & { isDuplicate?: boolean })[]>([]);
   const [importedMovements, setImportedMovements] = useState<Movimento[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -199,6 +201,16 @@ export function ImportMovementsDialog({
     }
     setIsProcessing(true);
 
+    if (!file.type.includes('spreadsheetml')) {
+      toast({
+        title: "Funzionalità in Sviluppo",
+        description: "L'importazione da PDF e immagini è in fase di sviluppo e sarà disponibile a breve.",
+        duration: 6000,
+      });
+      setIsProcessing(false);
+      return;
+    }
+
     try {
         const fileData = await file.arrayBuffer();
         const workbook = XLSX.read(fileData, { type: 'buffer' });
@@ -211,9 +223,29 @@ export function ImportMovementsDialog({
         }
 
         const processed = processExcelDataClientSide(jsonData);
-        setProcessedRows(processed);
+
+        const existingMovementKeys = new Set(
+            (allMovements || []).map(mov => `${mov.data}_${mov.descrizione.trim().toLowerCase()}_${mov.entrata}_${mov.uscita}`)
+        );
+
+        const checkedRows = processed.map(row => {
+            const key = `${row.data}_${row.descrizione.trim().toLowerCase()}_${row.entrata}_${row.uscita}`;
+            return {
+              ...row,
+              isDuplicate: existingMovementKeys.has(key),
+            };
+        });
+
+        setProcessedRows(checkedRows);
         setStage('review');
-        toast({ title: 'Lettura Completata', description: `${processed.length} movimenti pronti per la revisione.` });
+
+        const duplicateCount = checkedRows.filter(r => r.isDuplicate).length;
+        
+        toast({
+            title: 'Lettura Completata',
+            description: `${processed.length} movimenti pronti per la revisione.` + (duplicateCount > 0 ? ` Attenzione: ${duplicateCount} possibili duplicati trovati ed evidenziati.` : ''),
+            duration: 7000
+        });
 
     } catch (error: any) {
         console.error("Error reading file:", error);
@@ -326,7 +358,7 @@ export function ImportMovementsDialog({
     </div>
   );
   
-  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> | Movimento)[], isFinal: boolean) => (
+  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> & { isDuplicate?: boolean })[], isFinal: boolean) => (
      <div className="py-4 space-y-4">
         <h3 className="text-lg font-medium">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -337,9 +369,15 @@ export function ImportMovementsDialog({
                 </TableRow></TableHeader>
                 <TableBody>
                     {movements.map((row, index) => (
-                        <TableRow key={index} className={cn(row.status === 'manual_review' && 'bg-amber-50 dark:bg-amber-900/20')}>
+                        <TableRow key={index} className={cn(
+                          row.status === 'manual_review' && 'bg-amber-50 dark:bg-amber-900/20',
+                          row.isDuplicate && 'bg-red-50 dark:bg-red-900/20'
+                        )}>
                             <TableCell>{formatDate(row.data)}</TableCell>
-                            <TableCell>{row.descrizione}</TableCell>
+                            <TableCell>
+                              {row.descrizione}
+                              {row.isDuplicate && <Badge variant="destructive" className="ml-2">Duplicato?</Badge>}
+                            </TableCell>
                             <TableCell><Badge variant="outline">{row.categoria}</Badge></TableCell>
                             <TableCell className="text-green-600">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
                             <TableCell className="text-red-600">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>

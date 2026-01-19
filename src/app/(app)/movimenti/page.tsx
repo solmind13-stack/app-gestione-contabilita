@@ -536,6 +536,7 @@ export default function MovimentiPage() {
             currentUser={user}
             companies={companies || []}
             categories={appSettings?.categories || {}}
+            allMovements={movimentiData || []}
         />
         <ReviewMovementsDialog
             isOpen={isReviewDialogOpen}
