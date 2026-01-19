@@ -12,6 +12,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -60,6 +70,8 @@ export function ImportMovementsDialog({
   const { toast } = useToast();
   const firestore = useFirestore();
 
+  const [isDuplicateFileAlertOpen, setIsDuplicateFileAlertOpen] = useState(false);
+
   const SUPPORTED_MIME_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/pdf', 'image/png', 'image/jpeg'];
   const ACCEPTED_FILES = ".xlsx, .pdf, .png, .jpg, .jpeg";
   
@@ -70,6 +82,7 @@ export function ImportMovementsDialog({
     setImportedMovements([]);
     setIsProcessing(false);
     setIsDragging(false);
+    setIsDuplicateFileAlertOpen(false);
   };
   
   const handleClose = (open: boolean) => {
@@ -104,11 +117,11 @@ export function ImportMovementsDialog({
   }, [selectedCompany, companies]);
   
   const validateFile = (file: File) => {
-    if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
+    if (!file.type.includes('spreadsheetml')) { // Temporarily only allow excel
         toast({
             variant: 'destructive',
             title: 'Formato File Non Supportato',
-            description: `Per favore, carica un file Excel, PDF, PNG, o JPG.`,
+            description: `Per favore, carica un file Excel (.xlsx). PDF e immagini saranno supportati a breve.`,
         });
         return false;
     }
@@ -138,6 +151,67 @@ export function ImportMovementsDialog({
       }
   };
 
+  const processFileContent = async () => {
+    if (!file) return;
+    setIsProcessing(true);
+    try {
+        const fileData = await file.arrayBuffer();
+        const workbook = XLSX.read(fileData, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData: { [key: string]: any }[] = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+        
+        if (!jsonData || jsonData.length === 0) {
+            throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
+        }
+
+        const processed = processExcelDataClientSide(jsonData);
+
+        const existingMovementKeys = new Set(
+            (allMovements || []).map(mov => `${mov.data}_${mov.descrizione.trim().toLowerCase()}_${mov.entrata}_${mov.uscita}`)
+        );
+
+        const checkedRows = processed.map(row => {
+            const key = `${row.data}_${row.descrizione.trim().toLowerCase()}_${row.entrata}_${row.uscita}`;
+            return {
+              ...row,
+              isDuplicate: existingMovementKeys.has(key),
+            };
+        });
+
+        setProcessedRows(checkedRows);
+        setStage('review');
+
+        const duplicateCount = checkedRows.filter(r => r.isDuplicate).length;
+        
+        toast({
+            title: 'Lettura Completata',
+            description: `${processed.length} movimenti pronti per la revisione.` + (duplicateCount > 0 ? ` Attenzione: ${duplicateCount} possibili duplicati trovati.` : ''),
+            duration: 7000
+        });
+
+    } catch (error: any) {
+        console.error("Error reading file:", error);
+        toast({ variant: 'destructive', title: 'Errore Lettura File', description: error.message || 'Impossibile leggere il file.' });
+    } finally {
+        setIsProcessing(false);
+    }
+  }
+
+  const handleStartProcessing = async () => {
+    if (!file) {
+      toast({ variant: 'destructive', title: 'Nessun file selezionato' });
+      return;
+    }
+
+    const wasFileImported = allMovements.some(mov => mov.note === `Importato da file: ${file.name}`);
+    if (wasFileImported) {
+        setIsDuplicateFileAlertOpen(true);
+    } else {
+        await processFileContent();
+    }
+  };
+  
   const processExcelDataClientSide = (rows: { [key: string]: any }[]): Omit<Movimento, 'id'>[] => {
     if (!currentUser) return [];
 
@@ -194,75 +268,14 @@ export function ImportMovementsDialog({
     }).filter((mov): mov is NonNullable<typeof mov> => mov !== null);
   };
   
-  const handleProceed = async () => {
-    if (!file) {
-      toast({ variant: 'destructive', title: 'Nessun file selezionato' });
-      return;
-    }
-    setIsProcessing(true);
-
-    if (!file.type.includes('spreadsheetml')) {
-      toast({
-        title: "Funzionalità in Sviluppo",
-        description: "L'importazione da PDF e immagini è in fase di sviluppo e sarà disponibile a breve.",
-        duration: 6000,
-      });
-      setIsProcessing(false);
-      return;
-    }
-
-    try {
-        const fileData = await file.arrayBuffer();
-        const workbook = XLSX.read(fileData, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData: { [key: string]: any }[] = XLSX.utils.sheet_to_json(worksheet, { raw: false });
-        
-        if (!jsonData || jsonData.length === 0) {
-            throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
-        }
-
-        const processed = processExcelDataClientSide(jsonData);
-
-        const existingMovementKeys = new Set(
-            (allMovements || []).map(mov => `${mov.data}_${mov.descrizione.trim().toLowerCase()}_${mov.entrata}_${mov.uscita}`)
-        );
-
-        const checkedRows = processed.map(row => {
-            const key = `${row.data}_${row.descrizione.trim().toLowerCase()}_${row.entrata}_${row.uscita}`;
-            return {
-              ...row,
-              isDuplicate: existingMovementKeys.has(key),
-            };
-        });
-
-        setProcessedRows(checkedRows);
-        setStage('review');
-
-        const duplicateCount = checkedRows.filter(r => r.isDuplicate).length;
-        
-        toast({
-            title: 'Lettura Completata',
-            description: `${processed.length} movimenti pronti per la revisione.` + (duplicateCount > 0 ? ` Attenzione: ${duplicateCount} possibili duplicati trovati ed evidenziati.` : ''),
-            duration: 7000
-        });
-
-    } catch (error: any) {
-        console.error("Error reading file:", error);
-        toast({ variant: 'destructive', title: 'Errore Lettura File', description: error.message || 'Impossibile leggere il file.' });
-    } finally {
-        setIsProcessing(false);
-    }
-  };
-  
-  const handleConfirmAndImport = async () => {
-    if (processedRows.length === 0) {
+  const handleImport = async (movementsToImport: typeof processedRows) => {
+    if (movementsToImport.length === 0) {
       toast({ variant: 'destructive', title: 'Nessun movimento da importare' });
       return;
     }
     setIsProcessing(true);
     try {
-      const newMovements = await onImport(processedRows);
+      const newMovements = await onImport(movementsToImport);
       setImportedMovements(newMovements);
       setStage('ai_progress');
       toast({ title: "Importazione Riuscita", description: "Ora puoi avviare l'analisi AI per la categorizzazione." });
@@ -319,6 +332,13 @@ export function ImportMovementsDialog({
   const currentCompanyDetails = companies.find(c => c.sigla === selectedCompany);
   const companyAccounts = currentCompanyDetails?.conti || [];
   
+  const { nonDuplicateRows, duplicateRows } = useMemo(() => {
+    return {
+        nonDuplicateRows: processedRows.filter(r => !r.isDuplicate),
+        duplicateRows: processedRows.filter(r => r.isDuplicate),
+    }
+  }, [processedRows]);
+
   const renderUploadStage = () => (
      <div className="py-8 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -370,22 +390,25 @@ export function ImportMovementsDialog({
                 <TableBody>
                     {movements.map((row, index) => (
                         <TableRow key={index} className={cn(
-                          row.status === 'manual_review' && 'bg-amber-50 dark:bg-amber-900/20',
+                          row.status === 'manual_review' && !row.isDuplicate && 'bg-amber-50 dark:bg-amber-900/20',
                           row.isDuplicate && 'bg-red-50 dark:bg-red-900/20'
                         )}>
                             <TableCell>{formatDate(row.data)}</TableCell>
                             <TableCell>
                               {row.descrizione}
-                              {row.isDuplicate && <Badge variant="destructive" className="ml-2">Duplicato?</Badge>}
                             </TableCell>
                             <TableCell><Badge variant="outline">{row.categoria}</Badge></TableCell>
                             <TableCell className="text-green-600">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
                             <TableCell className="text-red-600">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>
                             <TableCell><Badge variant={row.societa === 'LNC' ? 'default' : 'secondary'}>{row.societa}</Badge></TableCell>
                             <TableCell>
-                              <Badge variant={row.status === 'manual_review' ? 'destructive' : 'default'} className={cn(row.status === 'ok' && 'bg-green-600')}>
-                                {row.status === 'manual_review' ? 'Da Revisionare' : 'OK'}
-                              </Badge>
+                              {row.isDuplicate ? (
+                                <Badge variant="destructive">Duplicato</Badge>
+                              ) : (
+                                <Badge variant={row.status === 'manual_review' ? 'destructive' : 'default'} className={cn(row.status === 'ok' && 'bg-green-600')}>
+                                    {row.status === 'manual_review' ? 'Da Revisionare' : 'OK'}
+                                </Badge>
+                              )}
                             </TableCell>
                         </TableRow>
                     ))}
@@ -398,6 +421,26 @@ export function ImportMovementsDialog({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-7xl">
+         <AlertDialog open={isDuplicateFileAlertOpen} onOpenChange={setIsDuplicateFileAlertOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>File Già Importato?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Un file con nome "{file?.name}" sembra essere già stato importato. Importarlo di nuovo potrebbe creare movimenti duplicati. Vuoi procedere comunque?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={async () => {
+                        setIsDuplicateFileAlertOpen(false);
+                        await processFileContent();
+                    }}>
+                        Procedi Comunque
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
            <DialogDescription>
@@ -409,22 +452,27 @@ export function ImportMovementsDialog({
         </DialogHeader>
         
         {stage === 'upload' && renderUploadStage()}
-        {stage === 'review' && renderReviewStage("Dati Estratti - Verifica e Conferma", "Controlla i movimenti estratti. Verranno tutti importati e potranno essere modificati in seguito nella pagina 'Da Revisionare'.", processedRows, false)}
+        {stage === 'review' && renderReviewStage("Dati Estratti - Verifica e Conferma", "Controlla i movimenti estratti. I duplicati sono evidenziati in rosso. Scegli se importare tutto o solo i nuovi movimenti.", processedRows, false)}
         {stage === 'ai_progress' && renderReviewStage("Analisi AI", "Clicca su 'Avvia Analisi AI' per categorizzare automaticamente i movimenti importati.", importedMovements, false)}
         {stage === 'final_review' && renderReviewStage("Risultati Analisi", "L'AI ha aggiornato le categorie. I movimenti non classificati restano 'Da Revisionare'.", importedMovements, true)}
 
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           {stage !== 'final_review' && <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={isProcessing}>Annulla</Button>}
            
            {stage === 'upload' && (
-              <Button type="button" onClick={handleProceed} disabled={isProcessing || !file}>
+              <Button type="button" onClick={handleStartProcessing} disabled={isProcessing || !file}>
                 {isProcessing ? <Loader2 className="animate-spin" /> : <>Procedi alla revisione</>}
               </Button>
            )}
            {stage === 'review' && (
-               <Button type="button" onClick={handleConfirmAndImport} disabled={isProcessing || processedRows.length === 0}>
-                {isProcessing ? <Loader2 className="animate-spin" /> : <><Check className="mr-2 h-4 w-4" />Conferma e Importa ({processedRows.length})</>}
-              </Button>
+               <>
+                <Button type="button" variant="secondary" onClick={() => handleImport(nonDuplicateRows)} disabled={isProcessing || nonDuplicateRows.length === 0}>
+                    {isProcessing ? <Loader2 className="animate-spin" /> : <>Importa solo Nuovi ({nonDuplicateRows.length})</>}
+                </Button>
+                 <Button type="button" onClick={() => handleImport(processedRows)} disabled={isProcessing || processedRows.length === 0}>
+                    {isProcessing ? <Loader2 className="animate-spin" /> : <><Check className="mr-2 h-4 w-4" />Importa Tutti ({processedRows.length})</>}
+                </Button>
+               </>
            )}
            {stage === 'ai_progress' && (
                <Button type="button" onClick={handleStartAiAnalysis} disabled={isProcessing}>

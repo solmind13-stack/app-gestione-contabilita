@@ -446,11 +446,12 @@ export default function MovimentiPage() {
         let data = movimentiData || [];
         
         const inReview = data.filter(m => m.status === 'manual_review');
+        const approved = data.filter(m => m.status !== 'manual_review');
         
-        const categories = [...new Set(data.map(m => m.categoria))].sort();
-        const operators = [...new Set(data.map(m => m.operatore).filter(Boolean))].sort();
+        const categories = [...new Set(approved.map(m => m.categoria))].sort();
+        const operators = [...new Set(approved.map(m => m.operatore).filter(Boolean))].sort();
         
-        let filtered = data
+        let filtered = approved
             .filter(m => !selectedYear || m.anno === Number(selectedYear))
             .filter(m => selectedCategory === 'Tutti' || m.categoria === selectedCategory)
             .filter(m => selectedSubCategory === 'Tutti' || m.sottocategoria === selectedSubCategory)
