@@ -288,7 +288,7 @@ export default function ScadenzePage() {
         const recurrences = [...new Set(data.map(item => item.ricorrenza))].sort();
         
         let filtered = data
-            .filter(s => selectedYear === null || s.anno === Number(selectedYear))
+            .filter(s => selectedYear === 'Tutti' || s.anno === Number(selectedYear))
             .filter(s => selectedCategory === 'Tutti' || s.categoria === selectedCategory)
             .filter(s => selectedStatus === 'Tutti' || s.stato === selectedStatus)
             .filter(s => selectedRecurrence === 'Tutti' || s.ricorrenza === selectedRecurrence)
@@ -547,10 +547,11 @@ export default function ScadenzePage() {
              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Anno:</label>
                 <Select value={selectedYear} onValueChange={(value) => setSelectedYear(value)}>
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[150px]">
                         <SelectValue placeholder="Anno" />
                     </SelectTrigger>
                     <SelectContent>
+                        <SelectItem value="Tutti">Tutti gli anni</SelectItem>
                         {YEARS.map(year => (
                             <SelectItem key={year} value={String(year)}>{year}</SelectItem>
                         ))}
@@ -593,7 +594,7 @@ export default function ScadenzePage() {
             <CardHeader>
                 <CardTitle>{getPageTitle()}</CardTitle>
                 <CardDescription>
-                Visualizza, aggiungi e gestisci le tue scadenze fiscali e pagamenti per l'anno {selectedYear}.
+                Visualizza, aggiungi e gestisci le tue scadenze fiscali e pagamenti {selectedYear === 'Tutti' ? 'per tutti gli anni' : `per l'anno ${selectedYear}`}.
                 </CardDescription>
             </CardHeader>
             <CardContent>
