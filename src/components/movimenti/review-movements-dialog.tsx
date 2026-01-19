@@ -22,7 +22,7 @@ import { useFirestore, useUser } from '@/firebase';
 import { writeBatch, doc } from 'firebase/firestore';
 import type { Movimento, AppSettings, TrainingFeedback } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { CATEGORIE, IVA_PERCENTAGES } from '@/lib/constants';
+import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
 
 interface ReviewMovementsDialogProps {
   isOpen: boolean;
@@ -148,6 +148,7 @@ export function ReviewMovementsDialog({
 
   const allCategories = appSettings?.categories ? Object.keys(appSettings.categories) : Object.keys(CATEGORIE);
   const allOperators = appSettings?.operators || [];
+  const allPaymentMethods = appSettings?.paymentMethods || METODI_PAGAMENTO;
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -169,6 +170,7 @@ export function ReviewMovementsDialog({
                 <TableHead className="w-48">Categoria</TableHead>
                 <TableHead className="w-48">Sottocategoria</TableHead>
                 <TableHead className="w-24">% IVA</TableHead>
+                <TableHead className="w-44">Metodo Pag.</TableHead>
                 <TableHead className="w-44">Operatore</TableHead>
               </TableRow>
             </TableHeader>
@@ -199,9 +201,15 @@ export function ReviewMovementsDialog({
                         <SelectContent>{IVA_PERCENTAGES.map(iva => <SelectItem key={iva.value} value={String(iva.value)}>{iva.label}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
+                    <TableCell className="p-2">
+                      <Select value={mov.metodoPag || ''} onValueChange={(value) => handleFieldChange(mov.id, 'metodoPag', value)}>
+                        <SelectTrigger><SelectValue placeholder="Seleziona..."/></SelectTrigger>
+                        <SelectContent>{allPaymentMethods.map(mp => <SelectItem key={mp} value={mp}>{mp}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </TableCell>
                      <TableCell className="p-2">
-                      <Select value={mov.operatore} onValueChange={(value) => handleFieldChange(mov.id, 'operatore', value)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                      <Select value={mov.operatore || ''} onValueChange={(value) => handleFieldChange(mov.id, 'operatore', value)}>
+                        <SelectTrigger><SelectValue placeholder="Seleziona..."/></SelectTrigger>
                         <SelectContent>{allOperators.map(op => <SelectItem key={op} value={op}>{op}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
