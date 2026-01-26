@@ -106,10 +106,15 @@ const suggestDeadlinesFlow = ai.defineFlow(
             return { suggestions: [] };
         }
         return output;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error in suggestDeadlinesFlow:', error);
-        // In case of AI error, return an empty list to avoid breaking the UI
-        return { suggestions: [] };
+        // Throw an error with a user-friendly message.
+        // This will be caught by the client-side `handleSuggestDeadlines` function,
+        // which will then display a toast notification with the error.
+        // This is much better than silently failing and returning no suggestions.
+        throw new Error(
+            'L\'analisi AI non è riuscita. Ciò potrebbe essere dovuto a un volume di dati troppo elevato o a un errore temporaneo del servizio. Riprova più tardi.'
+        );
     }
   }
 );
