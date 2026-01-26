@@ -228,7 +228,7 @@ export default function ScadenzePage() {
             const result = await suggestDeadlines({ movements: movimenti, existingDeadlines: scadenze || [] });
             
             if (result.suggestions.length === 0) {
-                 toast({ title: 'Nessun Suggerimento', description: 'Nessuna nuova scadenza potenziale trovata dai movimenti.' });
+                 toast({ title: 'Nessun Suggerimento', description: 'L\'analisi AI non ha trovato nuove scadenze ricorrenti.' });
             } else {
                 setDeadlineSuggestions(result.suggestions);
                 setSelectedSuggestions(result.suggestions.filter(s => s.confidence === 'Alta'));
@@ -236,7 +236,7 @@ export default function ScadenzePage() {
             }
         } catch (error) {
             console.error("Error suggesting deadlines:", error);
-            toast({ variant: 'destructive', title: 'Errore Suggerimento', description: 'Impossibile ottenere suggerimenti.' });
+            toast({ variant: 'destructive', title: 'Errore Suggerimento', description: 'Impossibile ottenere suggerimenti dall\'AI.' });
         } finally {
             setIsSuggestionLoading(false);
         }

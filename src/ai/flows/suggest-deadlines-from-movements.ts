@@ -1,158 +1,115 @@
 // src/ai/flows/suggest-deadlines-from-movements.ts
 'use server';
 /**
- * @fileOverview This file defines a heuristic-based function for suggesting deadlines from transaction movements.
+ * @fileOverview This file defines a Genkit flow for suggesting recurring deadlines from transaction movements using AI, guided by specific business rules.
  *
- * suggestDeadlines - A function that takes a list of transaction movements and returns potential deadlines.
+ * suggestDeadlines - A function that takes transaction movements and returns potential recurring deadlines.
  * SuggestDeadlinesInput - The input type for the suggestDeadlines function.
  * SuggestDeadlinesOutput - The return type for the suggestDeadlines function.
  */
 
-import type { Movimento, Scadenza, DeadlineSuggestion } from '@/lib/types';
-import { differenceInDays } from 'date-fns';
-import { formatCurrency } from '@/lib/utils';
+import { ai } from '@/ai/genkit';
+import { z } from 'zod';
+import type { Movimento, Scadenza } from '@/lib/types';
 
-// Define input/output types directly
-export type SuggestDeadlinesInput = {
-  movements: Movimento[];
-  existingDeadlines: Scadenza[];
-};
+const DeadlineSuggestionSchema = z.object({
+  description: z.string().describe('The clear, normalized description for the suggested deadline.'),
+  category: z.string().describe('The suggested category based on the provided mapping.'),
+  subcategory: z.string().describe('The suggested subcategory based on the provided mapping.'),
+  recurrence: z.enum(['Nessuna', 'Mensile', 'Trimestrale', 'Annuale']).describe('The detected recurrence pattern.'),
+  amount: z.number().describe('The average amount of the recurring payment.'),
+  confidence: z.enum(['Alta', 'Media', 'Bassa']).describe('The confidence level of the suggestion.'),
+  reason: z.string().describe('A brief, non-technical explanation for the suggestion.'),
+  movements: z.array(z.object({ id: z.string(), data: z.string(), importo: z.number() })).describe('A list of the source movements used for this suggestion.'),
+  originalMovementDescription: z.string().describe('The original, un-normalized description from one of the source movements.'),
+});
 
-export type SuggestDeadlinesOutput = {
-  suggestions: DeadlineSuggestion[];
-};
+const SuggestDeadlinesInputSchema = z.object({
+  movements: z.custom<Movimento[]>(),
+  existingDeadlines: z.custom<Scadenza[]>(),
+});
 
-// --- Helper Functions ---
+const SuggestDeadlinesOutputSchema = z.object({
+  suggestions: z.array(DeadlineSuggestionSchema),
+});
 
-// 1. Normalize counterparty/description
-const normalizeText = (text: string): string => {
-  if (!text) return '';
-  return text
-    .toLowerCase()
-    .replace(/s\.r\.l|srls|s\.p\.a|s\.a\.s|srl|spa|sas/g, '') // remove company suffixes
-    .replace(/[^\w\s]/g, '') // remove punctuation
-    .replace(/\s+/g, ' ') // collapse multiple spaces
-    .trim();
-};
-
-// 2. Keyword mapping for classification
-const CLASSIFICATION_RULES = [
-    { keywords: ['f24', 'tributi', 'imposte', 'ravvedimento'], category: 'Tasse', subcategory: 'F24 Vari' },
-    { keywords: ['iva', 'liquidazione iva'], category: 'Tasse', subcategory: 'IVA Trimestrale' },
-    { keywords: ['inps', 'contributi'], category: 'Tasse', subcategory: 'F24 Vari' },
-    { keywords: ['assicurazione', 'polizza', 'rca'], category: 'Gestione Generale', subcategory: 'Altre Spese' },
-    { keywords: ['canone', 'locazione', 'affitto'], category: 'Gestione Immobili', subcategory: 'Manutenzione' }, // Assuming expense
-    { keywords: ['leasing'], category: 'Finanziamenti', subcategory: 'Rate Prestito' },
-    { keywords: ['abbonamento', 'rinnovo', 'subscription', 'saas', 'hosting', 'canone software'], category: 'Gestione Generale', subcategory: 'Altre Spese' },
-    { keywords: ['telecom', 'tim', 'vodafone', 'wind', 'iliad', 'telefonia'], category: 'Gestione Generale', subcategory: 'Telefonia' },
-    { keywords: ['enel', 'servizio elettrico', 'energia', 'luce', 'gas', 'acqua'], category: 'Gestione Immobili', subcategory: 'Utenze' },
-    { keywords: ['rata', 'finanziamento', 'mutuo'], category: 'Finanziamenti', subcategory: 'Rate Mutuo' },
-];
-
-
-// --- Main Heuristic Function ---
+export type SuggestDeadlinesInput = z.infer<typeof SuggestDeadlinesInputSchema>;
+export type SuggestDeadlinesOutput = z.infer<typeof SuggestDeadlinesOutputSchema>;
 
 export async function suggestDeadlines(input: SuggestDeadlinesInput): Promise<SuggestDeadlinesOutput> {
-  const { movements, existingDeadlines } = input;
-  const MIN_OCCURRENCES = 3;
-
-  // 1. Group movements by normalized description
-  const groupedMovements = movements
-    .filter(m => m.uscita > 0) // Only consider expenses
-    .reduce((acc, mov) => {
-        const key = `${mov.societa}_${normalizeText(mov.descrizione)}`;
-        if (!acc[key]) {
-            acc[key] = [];
-        }
-        acc[key].push(mov);
-        return acc;
-    }, {} as Record<string, Movimento[]>);
-
-  const suggestions: DeadlineSuggestion[] = [];
-
-  // 2. Analyze each group
-  for (const key in groupedMovements) {
-    const group = groupedMovements[key].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
-
-    if (group.length < MIN_OCCURRENCES) {
-      continue;
-    }
-
-    // 3. Analyze Periodicity
-    const intervals = [];
-    for (let i = 1; i < group.length; i++) {
-        intervals.push(differenceInDays(new Date(group[i].data), new Date(group[i - 1].data)));
-    }
-    
-    const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-    let recurrence: DeadlineSuggestion['recurrence'] = 'Nessuna';
-    let periodicityScore = 0;
-    
-    if (avgInterval > 27 && avgInterval < 34) {
-        recurrence = 'Mensile';
-        periodicityScore = intervals.filter(i => i > 27 && i < 34).length / intervals.length > 0.6 ? 2 : 1;
-    } else if (avgInterval > 85 && avgInterval < 97) {
-        recurrence = 'Trimestrale';
-        periodicityScore = intervals.filter(i => i > 85 && i < 97).length / intervals.length > 0.6 ? 2 : 1;
-    } else if (avgInterval > 350 && avgInterval < 380) {
-        recurrence = 'Annuale';
-        periodicityScore = intervals.filter(i => i > 350 && i < 380).length / intervals.length > 0.6 ? 2 : 1;
-    }
-
-    if (recurrence === 'Nessuna') continue;
-
-    // 4. Analyze Amount
-    const amounts = group.map(m => m.uscita);
-    const avgAmount = amounts.reduce((sum, val) => sum + val, 0) / amounts.length;
-    const amountVariation = Math.max(...amounts) - Math.min(...amounts);
-    const isAmountStable = (amountVariation / avgAmount) < 0.15; // 15% tolerance
-    const amountScore = isAmountStable ? 1 : 0;
-    
-    // 5. Analyze Description for Keywords
-    const descriptionSample = normalizeText(group[0].descrizione);
-    let classification = { category: 'Da categorizzare', subcategory: 'Da categorizzare' };
-    let keywordScore = 0;
-    for (const rule of CLASSIFICATION_RULES) {
-        if (rule.keywords.some(kw => descriptionSample.includes(kw))) {
-            classification = { category: rule.category, subcategory: rule.subcategory };
-            keywordScore = 2; // Strong match
-            break;
-        }
-    }
-    
-    // 6. Calculate Confidence
-    let confidenceScore = periodicityScore + amountScore + keywordScore + (group.length >= 4 ? 1 : 0);
-    let confidence: DeadlineSuggestion['confidence'] = 'Bassa';
-    if (confidenceScore >= 5) confidence = 'Alta';
-    else if (confidenceScore >= 3) confidence = 'Media';
-
-    // 7. Generate Reason
-    let reason = `Rilevati ${group.length} pagamenti ${recurrence.toLowerCase()} a "${group[0].descrizione.substring(0, 25)}..." per un importo ${isAmountStable ? 'stabile' : 'variabile'} di circa ${formatCurrency(avgAmount)}.`;
-    if (keywordScore > 0) reason += ` Classificato come '${classification.category}' per la presenza di parole chiave.`;
-
-    // 8. Deduplication check
-    const isDuplicate = existingDeadlines.some(d => 
-        normalizeText(d.descrizione) === normalizeText(group[0].descrizione) &&
-        d.societa === group[0].societa &&
-        d.ricorrenza === recurrence
-    );
-
-    if (isDuplicate) continue;
-
-    suggestions.push({
-      description: group[0].descrizione,
-      category: classification.category,
-      subcategory: classification.subcategory,
-      recurrence: recurrence,
-      amount: avgAmount,
-      originalMovementDescription: group[0].descrizione,
-      confidence: confidence,
-      reason: reason,
-      movements: group.map(m => ({ id: m.id, data: m.data, importo: m.uscita })),
-    });
-  }
-
-  // Sort by confidence
-  const confidenceOrder = { 'Alta': 3, 'Media': 2, 'Bassa': 1 };
-  return { suggestions: suggestions.sort((a,b) => confidenceOrder[b.confidence] - confidenceOrder[a.confidence]) };
+    return suggestDeadlinesFlow(input);
 }
+
+
+const prompt = ai.definePrompt({
+  name: 'suggestDeadlinesPrompt',
+  input: { schema: SuggestDeadlinesInputSchema },
+  output: { schema: SuggestDeadlinesOutputSchema },
+  prompt: `You are an expert financial analyst. Your task is to identify potential recurring deadlines from a list of past bank movements. Follow these rules precisely:
+
+**A) Recognition of Recurrences (from movements)**
+1.  **Grouping**:
+    -   Only consider outgoing movements ('uscita' > 0).
+    -   First, group movements by company ('societa').
+    -   Then, group them by a *normalized* counterparty/description. To normalize, convert to lowercase, remove punctuation and legal suffixes (like 'srl', 'spa'), and collapse multiple spaces.
+2.  **Minimum Requirement**:
+    -   A group is a candidate for a recurring deadline only if it contains at least 3 movements.
+3.  **Periodicity**:
+    -   Calculate the days between consecutive movements in a sorted group.
+    -   **Mensile**: Average interval is 28-31 days (with a tolerance of ±3 days for individual intervals).
+    -   **Trimestrale**: Average interval is 85-97 days.
+    -   **Annuale**: Average interval is 350-380 days.
+    -   A group has a valid periodicity if at least 2/3 of its intervals fall within the tolerance window.
+4.  **Amount**:
+    -   Assess if the amount is stable. A small variation (e.g., ±10%) is considered stable.
+    -   For typical variable expenses like utilities or taxes, a larger variation is acceptable if other signals (periodicity, keywords) are strong.
+5.  **Deduplication**:
+    -   Before suggesting a new deadline, check the list of \`existingDeadlines\`. If a similar deadline already exists (same company, similar normalized description, and same recurrence), DO NOT create a duplicate suggestion.
+
+**B) Classification of Deadline Type (use this mapping)**
+-   Keywords: 'f24', 'tributi', 'imposte', 'ravvedimento' -> Category: 'Tasse', Subcategory: 'F24 Vari'
+-   Keywords: 'iva', 'liquidazione iva' -> Category: 'Tasse', Subcategory: 'IVA Trimestrale'
+-   Keywords: 'inps', 'contributi' -> Category: 'Tasse', Subcategory: 'F24 Vari'
+-   Keywords: 'assicurazione', 'polizza', 'rca' -> Category: 'Gestione Generale', Subcategory: 'Altre Spese'
+-   Keywords: 'canone', 'locazione', 'affitto' -> Category: 'Gestione Immobili', Subcategory: 'Manutenzione'
+-   Keywords: 'leasing' -> Category: 'Finanziamenti', Subcategory: 'Rate Prestito'
+-   Keywords: 'abbonamento', 'rinnovo', 'subscription', 'saas', 'hosting' -> Category: 'Gestione Generale', Subcategory: 'Altre Spese'
+-   Keywords: 'telecom', 'tim', 'vodafone', 'wind', 'iliad', 'telefonia' -> Category: 'Gestione Generale', Subcategory: 'Telefonia'
+-   Keywords: 'enel', 'servizio elettrico', 'energia', 'luce', 'gas', 'acqua' -> Category: 'Gestione Immobili', Subcategory: 'Utenze'
+-   Keywords: 'rata', 'finanziamento', 'mutuo' -> Category: 'Finanziamenti', Subcategory: 'Rate Mutuo'
+
+**C) Confidence and Action**
+-   Calculate a confidence level ('Alta', 'Media', 'Bassa') for each suggestion based on: strength of periodicity, stability of amount, and presence of strong keywords.
+    -   **Alta**: Strong periodicity, stable amount, clear keyword match.
+    -   **Media**: Good periodicity, some amount variation OR weak/no keyword match.
+    -   **Bassa**: Weak periodicity, variable amount.
+-   For each valid suggestion, generate a concise, non-technical \`reason\` explaining the finding. E.g., "Rilevati 4 pagamenti mensili a 'Telecom' per un importo stabile di circa €25,00."
+
+**Input Data:**
+-   Existing Deadlines: {{{json existingDeadlines}}}
+-   Movements to Analyze: {{{json movements}}}
+
+**Your Final Output MUST be a JSON object matching the defined output schema.**`,
+});
+
+
+const suggestDeadlinesFlow = ai.defineFlow(
+  {
+    name: 'suggestDeadlinesFlow',
+    inputSchema: SuggestDeadlinesInputSchema,
+    outputSchema: SuggestDeadlinesOutputSchema,
+  },
+  async (input) => {
+    try {
+        const { output } = await prompt(input);
+        if (!output) {
+            return { suggestions: [] };
+        }
+        return output;
+    } catch (error) {
+        console.error('Error in suggestDeadlinesFlow:', error);
+        // In case of AI error, return an empty list to avoid breaking the UI
+        return { suggestions: [] };
+    }
+  }
+);
