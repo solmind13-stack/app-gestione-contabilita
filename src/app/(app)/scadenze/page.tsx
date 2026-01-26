@@ -225,7 +225,18 @@ export default function ScadenzePage() {
         }
         setIsSuggestionLoading(true);
         try {
-            const result = await suggestDeadlines({ movements: movimenti, existingDeadlines: scadenze || [] });
+            const twoYearsAgo = new Date();
+            twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+
+            const recentMovements = movimenti.filter(m => new Date(m.data) >= twoYearsAgo);
+
+            if (recentMovements.length === 0) {
+                toast({ title: 'Nessun movimento recente', description: 'Non ci sono movimenti negli ultimi 2 anni da analizzare.' });
+                setIsSuggestionLoading(false);
+                return;
+            }
+
+            const result = await suggestDeadlines({ movements: recentMovements, existingDeadlines: scadenze || [] });
             
             if (result.suggestions.length === 0) {
                  toast({ title: 'Nessun Suggerimento', description: 'L\'analisi AI non ha trovato nuove scadenze ricorrenti.' });
@@ -234,9 +245,13 @@ export default function ScadenzePage() {
                 setSelectedSuggestions(result.suggestions.filter(s => s.confidence === 'Alta'));
                 setIsSuggestionDialogOpen(true);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error suggesting deadlines:", error);
-            toast({ variant: 'destructive', title: 'Errore Suggerimento', description: 'Impossibile ottenere suggerimenti dall\'AI.' });
+            toast({ 
+                variant: 'destructive', 
+                title: 'Errore Suggerimento', 
+                description: error.message || 'Impossibile ottenere suggerimenti dall\'AI.' 
+            });
         } finally {
             setIsSuggestionLoading(false);
         }
