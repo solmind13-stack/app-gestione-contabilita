@@ -237,7 +237,7 @@ export default function ScadenzePage() {
             intervals.push(diffDays);
         }
         
-        if (intervals.length < 2) return { recurrence: null, avgInterval: 0 };
+        if (intervals.length < 1) return { recurrence: null, avgInterval: 0 };
 
         const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
 
@@ -299,7 +299,7 @@ export default function ScadenzePage() {
 
             for (const key in groupedByCompanyAndDesc) {
                 const group = groupedByCompanyAndDesc[key];
-                if (group.length < 3) continue;
+                if (group.length < 2) continue;
 
                 const dates = group.map(m => new Date(m.data));
                 const amounts = group.map(m => m.uscita);
@@ -459,8 +459,8 @@ export default function ScadenzePage() {
         let data = scadenze || [];
         
         const categories = [...new Set(data.map(item => item.categoria).filter(Boolean))].sort();
-        const statuses = [...new Set(data.map(item => item.stato))].sort();
-        const recurrences = [...new Set(data.map(item => item.ricorrenza))].sort();
+        const statuses = [...new Set(data.map(item => item.stato).filter(Boolean))].sort();
+        const recurrences = [...new Set(data.map(item => item.ricorrenza).filter(Boolean))].sort();
         
         let filtered = data
             .filter(s => selectedYear === 'Tutti' || s.anno === Number(selectedYear))
