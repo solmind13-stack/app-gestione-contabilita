@@ -43,6 +43,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { suggestDeadlines } from '@/ai/flows/suggest-deadlines-from-movements';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-dialog';
 
 
 const getScadenzeQuery = (firestore: any, user: AppUser | null, company: string) => {
@@ -68,6 +69,7 @@ export default function ScadenzePage() {
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
     const [deadlineToDelete, setDeadlineToDelete] = useState<Scadenza | null>(null);
     const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
@@ -178,6 +180,39 @@ export default function ScadenzePage() {
             toast({ variant: 'destructive', title: 'Errore Eliminazione Multipla', description: 'Impossibile eliminare le scadenze selezionate.' });
         } finally {
             setIsBulkDeleteAlertOpen(false);
+        }
+    };
+
+    const handleImportDeadlines = async (importedDeadlines: Omit<Scadenza, 'id'>[]): Promise<Scadenza[]> => {
+        if (!user || !firestore) return [];
+        const newDeadlinesWithIds: Scadenza[] = [];
+        try {
+            const batch = writeBatch(firestore);
+            
+            importedDeadlines.forEach(deadline => {
+                const docRef = doc(collection(firestore, 'deadlines'));
+                const newDeadline: Scadenza = {
+                    id: docRef.id,
+                    ...deadline,
+                    createdBy: user.uid,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                };
+                batch.set(docRef, newDeadline);
+                newDeadlinesWithIds.push(newDeadline);
+            });
+    
+            await batch.commit();
+            toast({
+                title: "Importazione completata",
+                description: `${newDeadlinesWithIds.length} scadenze sono state salvate nel database.`
+            });
+            return newDeadlinesWithIds;
+    
+        } catch (error: any) {
+             console.error("Error importing deadlines: ", error);
+             toast({ variant: 'destructive', title: 'Errore Importazione', description: `Impossibile salvare le scadenze importate. ${error.message}` });
+             return []; // Return empty array on failure
         }
     };
     
@@ -369,6 +404,16 @@ export default function ScadenzePage() {
         defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany as 'LNC' | 'STG' : user?.company as 'LNC' | 'STG'}
         currentUser={user!}
       />
+
+        <ImportDeadlinesDialog
+            isOpen={isImportDialogOpen}
+            setIsOpen={setIsImportDialogOpen}
+            onImport={handleImportDeadlines}
+            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+            currentUser={user}
+            companies={companies || []}
+            allDeadlines={scadenze || []}
+        />
       
       <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
         <DialogContent className="max-w-3xl">
@@ -543,20 +588,10 @@ export default function ScadenzePage() {
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Aggiungi
             </Button>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="flex-shrink-0" disabled>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Importa
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuItem>
-                        <FileSpreadsheet className="mr-2 h-4 w-4" />
-                        <span>Importa da Excel</span>
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <Button variant="outline" className="flex-shrink-0" onClick={() => setIsImportDialogOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Importa
+            </Button>
         </div>
     </div>
 
