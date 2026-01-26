@@ -80,7 +80,7 @@ export default function ScadenzePage() {
     const [selectedSuggestions, setSelectedSuggestions] = useState<DeadlineSuggestion[]>([]);
 
     // Filters
-    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+    const [selectedYear, setSelectedYear] = useState<string>('Tutti');
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
     const [selectedStatus, setSelectedStatus] = useState<string>('Tutti');
     const [selectedRecurrence, setSelectedRecurrence] = useState<string>('Tutti');

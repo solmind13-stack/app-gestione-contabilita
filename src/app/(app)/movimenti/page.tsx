@@ -97,7 +97,7 @@ export default function MovimentiPage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     
     // Filters state
-    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+    const [selectedYear, setSelectedYear] = useState<string>('Tutti');
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
     const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Tutti');
     const [selectedOperator, setSelectedOperator] = useState<string>('Tutti');
