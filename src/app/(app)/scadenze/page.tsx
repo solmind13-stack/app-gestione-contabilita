@@ -44,6 +44,8 @@ import { suggestDeadlines } from '@/ai/flows/suggest-deadlines-from-movements';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
 
 
 const getScadenzeQuery = (firestore: any, user: AppUser | null, company: string) => {
@@ -223,19 +225,18 @@ export default function ScadenzePage() {
         }
         setIsSuggestionLoading(true);
         try {
-            const recentMovements = movimenti.slice(0, 50).map(m => ({ description: m.descrizione, amount: m.uscita }));
-            const result = await suggestDeadlines({ movements: recentMovements });
+            const result = await suggestDeadlines({ movements: movimenti, existingDeadlines: scadenze || [] });
             
             if (result.suggestions.length === 0) {
-                 toast({ title: 'Nessun Suggerimento', description: 'L\'AI non ha trovato nuove scadenze potenziali dai movimenti recenti.' });
+                 toast({ title: 'Nessun Suggerimento', description: 'Nessuna nuova scadenza potenziale trovata dai movimenti.' });
             } else {
                 setDeadlineSuggestions(result.suggestions);
-                setSelectedSuggestions(result.suggestions); // Pre-select all
+                setSelectedSuggestions(result.suggestions.filter(s => s.confidence === 'Alta'));
                 setIsSuggestionDialogOpen(true);
             }
         } catch (error) {
             console.error("Error suggesting deadlines:", error);
-            toast({ variant: 'destructive', title: 'Errore AI', description: 'Impossibile ottenere suggerimenti.' });
+            toast({ variant: 'destructive', title: 'Errore Suggerimento', description: 'Impossibile ottenere suggerimenti.' });
         } finally {
             setIsSuggestionLoading(false);
         }
@@ -248,12 +249,23 @@ export default function ScadenzePage() {
             const batch = writeBatch(firestore);
             selectedSuggestions.forEach(suggestion => {
                 const newDeadlineRef = doc(collection(firestore, 'deadlines'));
+                
+                const lastMovementDate = new Date(suggestion.movements[suggestion.movements.length - 1].data);
+                let nextDueDate = new Date(lastMovementDate);
+
+                if (suggestion.recurrence === 'Mensile') nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+                else if (suggestion.recurrence === 'Trimestrale') nextDueDate.setMonth(nextDueDate.getMonth() + 3);
+                else if (suggestion.recurrence === 'Annuale') nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+                
+                const movSocieta = movimenti?.find(m => m.id === suggestion.movements[0].id)?.societa || 'LNC';
+
                 const newDeadline: Omit<Scadenza, 'id'> = {
-                    societa: 'LNC', // Default or make selectable
-                    anno: new Date().getFullYear(),
-                    dataScadenza: new Date().toISOString(), // Placeholder, should be improved
+                    societa: movSocieta as 'LNC' | 'STG',
+                    anno: nextDueDate.getFullYear(),
+                    dataScadenza: nextDueDate.toISOString().split('T')[0],
                     descrizione: suggestion.description,
                     categoria: suggestion.category,
+                    sottocategoria: suggestion.subcategory,
                     importoPrevisto: suggestion.amount,
                     importoPagato: 0,
                     stato: 'Da pagare',
@@ -416,54 +428,60 @@ export default function ScadenzePage() {
         />
       
       <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
-        <DialogContent className="max-w-3xl">
-            <DialogHeader>
-                <DialogTitle>Suggerimenti Scadenze dall'AI</DialogTitle>
-                <DialogDescription>
-                    L'AI ha analizzato i tuoi movimenti recenti e suggerisce di creare le seguenti scadenze ricorrenti. Seleziona quelle che vuoi aggiungere.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="max-h-[60vh] overflow-y-auto">
-                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead><Checkbox 
-                                checked={selectedSuggestions.length === deadlineSuggestions.length && deadlineSuggestions.length > 0}
-                                onCheckedChange={(checked) => setSelectedSuggestions(checked ? deadlineSuggestions : [])}
-                            />
-                            </TableHead>
-                            <TableHead>Nuova Descrizione</TableHead>
-                            <TableHead>Categoria</TableHead>
-                            <TableHead>Ricorrenza</TableHead>
-                            <TableHead className="text-right">Importo</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {deadlineSuggestions.map((suggestion, index) => (
-                            <TableRow key={index}>
-                                <TableCell>
-                                    <Checkbox 
-                                        checked={selectedSuggestions.some(s => s.originalMovementDescription === suggestion.originalMovementDescription)}
-                                        onCheckedChange={(checked) => handleSelectSuggestion(suggestion, checked as boolean)}
-                                    />
-                                </TableCell>
-                                <TableCell className="font-medium">{suggestion.description}</TableCell>
-                                <TableCell><Badge variant="outline">{suggestion.category}</Badge></TableCell>
-                                <TableCell>{suggestion.recurrence}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(suggestion.amount)}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </div>
-            <DialogFooter>
-                <Button variant="outline" onClick={() => setIsSuggestionDialogOpen(false)}>Annulla</Button>
-                <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedSuggestions.length === 0}>
-                    {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Crea ${selectedSuggestions.length} Scadenze`}
-                </Button>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                    <DialogTitle>Suggerimenti Scadenze Ricorrenti</DialogTitle>
+                    <DialogDescription>
+                        L'analisi dei movimenti ha identificato queste potenziali scadenze. Seleziona quelle da creare.
+                    </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="h-[60vh] p-1 pr-4">
+                    <div className="space-y-4">
+                        {deadlineSuggestions.map((suggestion, index) => {
+                            const isSelected = selectedSuggestions.some(s => s.originalMovementDescription === suggestion.originalMovementDescription);
+                            
+                            return (
+                                <Card key={index} className={cn("transition-all", isSelected ? "border-primary" : "")}>
+                                    <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
+                                        <Checkbox 
+                                            id={`suggestion-${index}`}
+                                            checked={isSelected}
+                                            onCheckedChange={(checked) => handleSelectSuggestion(suggestion, checked as boolean)}
+                                            className="mt-1"
+                                        />
+                                        <div className="grid gap-1 w-full">
+                                            <div className="flex items-center justify-between">
+                                                <Label htmlFor={`suggestion-${index}`} className="font-bold text-base cursor-pointer">{suggestion.description}</Label>
+                                                <Badge variant={
+                                                    suggestion.confidence === 'Alta' ? 'default' : suggestion.confidence === 'Media' ? 'secondary' : 'outline'
+                                                } className={cn(
+                                                    suggestion.confidence === 'Alta' && "bg-green-600",
+                                                    suggestion.confidence === 'Media' && "bg-yellow-500 text-black",
+                                                )}>
+                                                    Confidenza: {suggestion.confidence}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
+                                            <div className="flex gap-4 text-sm pt-2">
+                                                <span>Cat: <Badge variant="outline">{suggestion.category}</Badge></span>
+                                                <span>Ricorrenza: <Badge variant="outline">{suggestion.recurrence}</Badge></span>
+                                                <span>Importo: <Badge variant="outline">{formatCurrency(suggestion.amount)}</Badge></span>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                </Card>
+                            )
+                        })}
+                    </div>
+                </ScrollArea>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsSuggestionDialogOpen(false)}>Annulla</Button>
+                    <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedSuggestions.length === 0}>
+                        {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Crea ${selectedSuggestions.length} Scadenze`}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
 
       <AlertDialog open={!!deadlineToDelete} onOpenChange={(open) => !open && setDeadlineToDelete(null)}>
@@ -582,7 +600,7 @@ export default function ScadenzePage() {
             </div>
              <Button variant="outline" onClick={handleSuggestDeadlines} disabled={isSuggestionLoading}>
                 {isSuggestionLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <Sparkles className="mr-2 h-4 w-4" />}
-                Suggerisci Scadenze
+                Suggerisci
             </Button>
             <Button onClick={() => handleOpenDialog()} className="flex-shrink-0" disabled={!user}>
                 <PlusCircle className="mr-2 h-4 w-4" />

@@ -174,9 +174,13 @@ export type RiepilogoPrevisioniUscite = {
 export type DeadlineSuggestion = {
     description: string;
     category: string;
+    subcategory: string;
     recurrence: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
     amount: number;
     originalMovementDescription: string;
+    confidence: 'Alta' | 'Media' | 'Bassa';
+    reason: string;
+    movements: {id: string, data: string, importo: number}[];
 };
 
 export type CompanyProfile = {
