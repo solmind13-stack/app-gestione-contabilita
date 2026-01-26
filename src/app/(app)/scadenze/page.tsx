@@ -40,7 +40,6 @@ import { useToast } from '@/hooks/use-toast';
 import { YEARS, CATEGORIE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { suggestDeadlines } from '@/ai/flows/suggest-deadlines-from-movements';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-dialog';
@@ -217,45 +216,155 @@ export default function ScadenzePage() {
              return []; // Return empty array on failure
         }
     };
+
+    const normalizeDescription = (desc: string): string => {
+        if (!desc) return '';
+        return desc
+            .toLowerCase()
+            .replace(/\b(srl|spa|snc|sas|srls)\b/g, '')
+            .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    };
+
+    const getPeriodicity = (dates: Date[]): { recurrence: 'Mensile' | 'Trimestrale' | 'Annuale' | null, avgInterval: number } => {
+        if (dates.length < 2) return { recurrence: null, avgInterval: 0 };
+        dates.sort((a, b) => a.getTime() - b.getTime());
+        const intervals: number[] = [];
+        for (let i = 1; i < dates.length; i++) {
+            const diffTime = Math.abs(dates[i].getTime() - dates[i-1].getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            intervals.push(diffDays);
+        }
+        
+        if (intervals.length < 2) return { recurrence: null, avgInterval: 0 };
+
+        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+
+        const monthlyMatches = intervals.filter(d => d >= 27 && d <= 34).length;
+        if (monthlyMatches / intervals.length >= 2/3) return { recurrence: 'Mensile', avgInterval };
+        
+        const quarterlyMatches = intervals.filter(d => d >= 85 && d <= 97).length;
+        if (quarterlyMatches / intervals.length >= 2/3) return { recurrence: 'Trimestrale', avgInterval };
+
+        const annualMatches = intervals.filter(d => d >= 350 && d <= 380).length;
+        if (annualMatches / intervals.length >= 2/3) return { recurrence: 'Annuale', avgInterval };
+
+        return { recurrence: null, avgInterval };
+    };
+
+    const getCategoryFromDescription = (desc: string): { category: string, subcategory: string, match: boolean } => {
+        const lowerDesc = desc.toLowerCase();
+        if (lowerDesc.includes('f24') || lowerDesc.includes('tributi') || lowerDesc.includes('imposte') || lowerDesc.includes('ravvedimento')) return { category: 'Tasse', subcategory: 'F24 Vari', match: true };
+        if (lowerDesc.includes('iva') || lowerDesc.includes('liquidazione iva')) return { category: 'Tasse', subcategory: 'IVA Trimestrale', match: true };
+        if (lowerDesc.includes('inps') || lowerDesc.includes('contributi')) return { category: 'Tasse', subcategory: 'F24 Vari', match: true };
+        if (lowerDesc.includes('assicurazione') || lowerDesc.includes('polizza')) return { category: 'Gestione Generale', subcategory: 'Altre Spese', match: true };
+        if (lowerDesc.includes('canone') || lowerDesc.includes('locazione') || lowerDesc.includes('affitto')) return { category: 'Gestione Immobili', subcategory: 'Manutenzione', match: true };
+        if (lowerDesc.includes('leasing')) return { category: 'Finanziamenti', subcategory: 'Rate Prestito', match: true };
+        if (lowerDesc.includes('abbonamento') || lowerDesc.includes('rinnovo')) return { category: 'Gestione Generale', subcategory: 'Altre Spese', match: true };
+        if (lowerDesc.includes('telecom') || lowerDesc.includes('tim') || lowerDesc.includes('vodafone') || lowerDesc.includes('wind') || lowerDesc.includes('iliad')) return { category: 'Gestione Generale', subcategory: 'Telefonia', match: true };
+        if (lowerDesc.includes('enel') || lowerDesc.includes('servizio elettrico') || lowerDesc.includes('energia') || lowerDesc.includes('luce') || lowerDesc.includes('gas') || lowerDesc.includes('acqua')) return { category: 'Gestione Immobili', subcategory: 'Utenze', match: true };
+        if (lowerDesc.includes('rata') || lowerDesc.includes('finanziamento') || lowerDesc.includes('mutuo')) return { category: 'Finanziamenti', subcategory: 'Rate Mutuo', match: true };
+        
+        return { category: 'Da categorizzare', subcategory: 'Da categorizzare', match: false };
+    };
     
-    const handleSuggestDeadlines = async () => {
+    const handleSuggestDeadlines = useCallback(async () => {
         if (!movimenti || movimenti.length === 0) {
             toast({ variant: 'destructive', title: 'Nessun Movimento', description: 'Non ci sono movimenti da analizzare.' });
             return;
         }
         setIsSuggestionLoading(true);
+        
         try {
+            // Simulate async operation to allow UI to update
+            await new Promise(resolve => setTimeout(resolve, 50));
+
             const twoYearsAgo = new Date();
             twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
-            const recentMovements = movimenti.filter(m => new Date(m.data) >= twoYearsAgo);
-
-            if (recentMovements.length === 0) {
-                toast({ title: 'Nessun movimento recente', description: 'Non ci sono movimenti negli ultimi 2 anni da analizzare.' });
-                setIsSuggestionLoading(false);
-                return;
-            }
-
-            const result = await suggestDeadlines({ movements: recentMovements, existingDeadlines: scadenze || [] });
+            const outgoingMovements = (movimenti || []).filter(m => m.uscita > 0 && new Date(m.data) >= twoYearsAgo);
             
-            if (result.suggestions.length === 0) {
-                 toast({ title: 'Nessun Suggerimento', description: 'L\'analisi AI non ha trovato nuove scadenze ricorrenti.' });
+            const groupedByCompanyAndDesc = outgoingMovements.reduce((acc, mov) => {
+                const normalizedDesc = normalizeDescription(mov.descrizione);
+                const key = `${mov.societa}__${normalizedDesc}`;
+                if (!acc[key]) {
+                    acc[key] = [];
+                }
+                acc[key].push(mov);
+                return acc;
+            }, {} as Record<string, Movimento[]>);
+
+            const suggestions: DeadlineSuggestion[] = [];
+
+            for (const key in groupedByCompanyAndDesc) {
+                const group = groupedByCompanyAndDesc[key];
+                if (group.length < 3) continue;
+
+                const dates = group.map(m => new Date(m.data));
+                const amounts = group.map(m => m.uscita);
+                
+                const { recurrence } = getPeriodicity(dates);
+                if (!recurrence) continue;
+
+                const amountMean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+                const amountStdDev = Math.sqrt(amounts.map(x => Math.pow(x - amountMean, 2)).reduce((a, b) => a + b, 0) / amounts.length);
+                const amountVariation = amountMean > 0 ? (amountStdDev / amountMean) : 0;
+                
+                const isDuplicate = (scadenze || []).some(s => 
+                    s.societa === group[0].societa &&
+                    normalizeDescription(s.descrizione) === normalizeDescription(group[0].descrizione) &&
+                    s.ricorrenza === recurrence
+                );
+                if (isDuplicate) continue;
+
+                const { category, subcategory, match: keywordMatch } = getCategoryFromDescription(group[0].descrizione);
+                
+                let confidence: 'Alta' | 'Media' | 'Bassa' = 'Bassa';
+                if (recurrence && amountVariation < 0.1 && keywordMatch) {
+                    confidence = 'Alta';
+                } else if (recurrence && (amountVariation < 0.25 || keywordMatch)) {
+                    confidence = 'Media';
+                }
+                
+                const reason = `Rilevati ${group.length} pagamenti con ricorrenza ${recurrence.toLowerCase()} per un importo medio di ${formatCurrency(amountMean)}.`;
+                
+                suggestions.push({
+                    description: group[0].descrizione,
+                    category,
+                    subcategory,
+                    recurrence,
+                    amount: amountMean,
+                    confidence,
+                    reason,
+                    movements: group.map(m => ({ id: m.id, data: m.data, importo: m.uscita })),
+                    originalMovementDescription: key,
+                });
+            }
+            
+            if (suggestions.length === 0) {
+                toast({ title: 'Nessun Suggerimento', description: 'L\'analisi non ha trovato nuove scadenze ricorrenti.' });
             } else {
-                setDeadlineSuggestions(result.suggestions);
-                setSelectedSuggestions(result.suggestions.filter(s => s.confidence === 'Alta'));
+                setDeadlineSuggestions(suggestions.sort((a, b) => {
+                    const confOrder = { 'Alta': 0, 'Media': 1, 'Bassa': 2 };
+                    return confOrder[a.confidence] - confOrder[b.confidence];
+                }));
+                setSelectedSuggestions(suggestions.filter(s => s.confidence === 'Alta'));
                 setIsSuggestionDialogOpen(true);
             }
+
         } catch (error: any) {
             console.error("Error suggesting deadlines:", error);
             toast({ 
                 variant: 'destructive', 
                 title: 'Errore Suggerimento', 
-                description: error.message || 'Impossibile ottenere suggerimenti dall\'AI.' 
+                description: error.message || 'Impossibile completare l\'analisi.' 
             });
         } finally {
             setIsSuggestionLoading(false);
         }
-    };
+    }, [movimenti, scadenze, toast]);
+
 
     const handleCreateSuggestedDeadlines = async () => {
         if (!firestore || !user || selectedSuggestions.length === 0) return;
@@ -452,21 +561,21 @@ export default function ScadenzePage() {
                 </DialogHeader>
                 <ScrollArea className="h-[60vh] p-1 pr-4">
                     <div className="space-y-4">
-                        {deadlineSuggestions.map((suggestion, index) => {
+                        {deadlineSuggestions.map((suggestion) => {
                             const isSelected = selectedSuggestions.some(s => s.originalMovementDescription === suggestion.originalMovementDescription);
                             
                             return (
-                                <Card key={index} className={cn("transition-all", isSelected ? "border-primary" : "")}>
+                                <Card key={suggestion.originalMovementDescription} className={cn("transition-all", isSelected ? "border-primary" : "")}>
                                     <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
                                         <Checkbox 
-                                            id={`suggestion-${index}`}
+                                            id={`suggestion-${suggestion.originalMovementDescription}`}
                                             checked={isSelected}
                                             onCheckedChange={(checked) => handleSelectSuggestion(suggestion, checked as boolean)}
                                             className="mt-1"
                                         />
                                         <div className="grid gap-1 w-full">
                                             <div className="flex items-center justify-between">
-                                                <Label htmlFor={`suggestion-${index}`} className="font-bold text-base cursor-pointer">{suggestion.description}</Label>
+                                                <Label htmlFor={`suggestion-${suggestion.originalMovementDescription}`} className="font-bold text-base cursor-pointer">{suggestion.description}</Label>
                                                 <Badge variant={
                                                     suggestion.confidence === 'Alta' ? 'default' : suggestion.confidence === 'Media' ? 'secondary' : 'outline'
                                                 } className={cn(
