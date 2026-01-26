@@ -458,7 +458,7 @@ export default function ScadenzePage() {
     } = useMemo(() => {
         let data = scadenze || [];
         
-        const categories = [...new Set(data.map(item => item.categoria))].sort();
+        const categories = [...new Set(data.map(item => item.categoria).filter(Boolean))].sort();
         const statuses = [...new Set(data.map(item => item.stato))].sort();
         const recurrences = [...new Set(data.map(item => item.ricorrenza))].sort();
         

@@ -448,7 +448,7 @@ export default function MovimentiPage() {
         const inReview = data.filter(m => m.status === 'manual_review');
         const approved = data.filter(m => m.status !== 'manual_review');
         
-        const categories = [...new Set(approved.map(m => m.categoria))].sort();
+        const categories = [...new Set(approved.map(m => m.categoria).filter(Boolean))].sort();
         const operators = [...new Set(approved.map(m => m.operatore).filter(Boolean))].sort();
         
         let filtered = approved
@@ -458,7 +458,7 @@ export default function MovimentiPage() {
             .filter(m => selectedOperator === 'Tutti' || m.operatore === selectedOperator)
             .filter(m => m.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
         
-        const subCategories = [...new Set(filtered.map(m => m.sottocategoria))].sort();
+        const subCategories = [...new Set(filtered.map(m => m.sottocategoria).filter(Boolean))].sort();
 
         filtered = filtered.sort((a, b) => {
                 const dateA = new Date(a.data).getTime();
