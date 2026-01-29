@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2 } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, parseDate } from '@/lib/utils';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { startOfYear, endOfYear, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
@@ -26,7 +26,7 @@ export function MonthlySummaryTable({ allData, isLoading }: MonthlySummaryTableP
         const currentYear = new Date().getFullYear();
         
         let openingBalance = movements
-            .filter(m => new Date(m.data).getFullYear() < currentYear)
+            .filter(m => parseDate(m.data).getFullYear() < currentYear)
             .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
 
         const data = Array.from({ length: 12 }, (_, i) => {
@@ -40,7 +40,7 @@ export function MonthlySummaryTable({ allData, isLoading }: MonthlySummaryTableP
             // Historical data from movements for past months
             if (new Date() > monthEnd) {
                  movements.forEach(mov => {
-                    const movDate = new Date(mov.data);
+                    const movDate = parseDate(mov.data);
                     if (isWithinInterval(movDate, {start: monthStart, end: monthEnd})) {
                         monthInflows += mov.entrata || 0;
                         monthOutflows += mov.uscita || 0;
@@ -49,19 +49,19 @@ export function MonthlySummaryTable({ allData, isLoading }: MonthlySummaryTableP
             } else {
                  // Forecasted data for current and future months
                  incomeForecasts.forEach(f => {
-                    const forecastDate = new Date(f.dataPrevista);
+                    const forecastDate = parseDate(f.dataPrevista);
                     if (isWithinInterval(forecastDate, {start: monthStart, end: monthEnd})) {
                         monthInflows += (f.importoLordo || 0) * f.probabilita;
                     }
                  });
                  expenseForecasts.forEach(f => {
-                    const forecastDate = new Date(f.dataScadenza);
+                    const forecastDate = parseDate(f.dataScadenza);
                     if (isWithinInterval(forecastDate, {start: monthStart, end: monthEnd})) {
                         monthOutflows += (f.importoLordo || 0) * f.probabilita;
                     }
                  });
                  deadlines.forEach(d => {
-                     const deadlineDate = new Date(d.dataScadenza);
+                     const deadlineDate = parseDate(d.dataScadenza);
                      if (isWithinInterval(deadlineDate, {start: monthStart, end: monthEnd}) && d.stato !== 'Pagato') {
                          monthOutflows += (d.importoPrevisto - d.importoPagato);
                      }
@@ -73,7 +73,7 @@ export function MonthlySummaryTable({ allData, isLoading }: MonthlySummaryTableP
                 starting: openingBalance,
                 inflows: monthInflows,
                 outflows: monthOutflows,
-                closing: openingBalance + monthInflows - monthOutflows,
+                closing: openingBalance + monthInflows - outflows,
             };
 
             openingBalance = monthResult.closing;

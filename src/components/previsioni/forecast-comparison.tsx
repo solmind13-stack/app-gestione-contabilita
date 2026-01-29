@@ -3,7 +3,7 @@
 
 import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, parseDate } from '@/lib/utils';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
@@ -94,75 +94,76 @@ export function ForecastComparison({
             monthData[`usciteConsuntivo${year}`] = 0;
             monthData[`entratePrevisto${year}`] = 0;
             monthData[`uscitePrevisto${year}`] = 0;
-
-            // --- CONSUNTIVO (ACTUALS) ---
-            // The single source of truth for actuals are the movements.
-            movements.forEach(mov => {
-                const [movYear, movMonth] = mov.data.split('-').map(Number);
-                if (movYear === year && (movMonth - 1) === monthIndex) {
-                    if (company === 'Tutte' || mov.societa === company) {
-                        const income = mov.entrata || 0;
-                        const expense = mov.uscita || 0;
-                        monthData[`entrateConsuntivo${year}`] += income;
-                        monthData[`usciteConsuntivo${year}`] += expense;
-                        if(income > 0) categoryIncomeTotals[year][mov.categoria] = (categoryIncomeTotals[year][mov.categoria] || 0) + income;
-                        if(expense > 0) categoryExpenseTotals[year][mov.categoria] = (categoryExpenseTotals[year][mov.categoria] || 0) + expense;
-                    }
-                }
-            });
-            
-            // --- PREVISTO (FORECASTS) ---
-            // Income forecasts
-            incomeForecasts.forEach(forecast => {
-                const [forecastYear, forecastMonth] = forecast.dataPrevista.split('-').map(Number);
-                if (forecastYear === year && (forecastMonth - 1) === monthIndex) {
-                    if (company === 'Tutte' || forecast.societa === company) {
-                         // Only count if not already realized
-                        if (forecast.stato !== 'Incassato') {
-                            const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
-                            monthData[`entratePrevisto${year}`] += weightedIncome;
-                            if(weightedIncome > 0) {
-                                categoryIncomeTotals[year][forecast.categoria] = (categoryIncomeTotals[year][forecast.categoria] || 0) + weightedIncome;
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Expense forecasts
-            expenseForecasts.forEach(forecast => {
-                const [forecastYear, forecastMonth] = forecast.dataScadenza.split('-').map(Number);
-                if (forecastYear === year && (forecastMonth - 1) === monthIndex) {
-                    if (company === 'Tutte' || forecast.societa === company) {
-                        // Only count if not already paid
-                         if (forecast.stato !== 'Pagato') {
-                            const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
-                            monthData[`uscitePrevisto${year}`] += weightedExpense;
-                            if(weightedExpense > 0){
-                               categoryExpenseTotals[year][forecast.categoria] = (categoryExpenseTotals[year][forecast.categoria] || 0) + weightedExpense;
-                            }
-                        }
-                    }
-                }
-            });
-            
-            // Unpaid/partial deadlines
-            (deadlines || []).forEach(scad => {
-                 const [scadenzaYear, scadenzaMonth] = scad.dataScadenza.split('-').map(Number);
-                 if (scadenzaYear === year && (scadenzaMonth - 1) === monthIndex) {
-                    if (scad.stato !== 'Pagato') {
-                         if (company === 'Tutte' || scad.societa === company) {
-                            const remainingAmount = (scad.importoPrevisto - scad.importoPagato);
-                            monthData[`uscitePrevisto${year}`] += remainingAmount;
-                            if(remainingAmount > 0) {
-                                categoryExpenseTotals[year][scad.categoria] = (categoryExpenseTotals[year][scad.categoria] || 0) + remainingAmount;
-                            }
-                         }
-                    }
-                 }
-            });
         });
         return monthData;
+    });
+
+    // --- AGGREGATE ALL DATA ---
+    yearsToProcess.forEach(year => {
+        // --- CONSUNTIVO (ACTUALS) from movements ---
+        movements.forEach(mov => {
+            const movDate = parseDate(mov.data);
+            if (movDate.getFullYear() === year) {
+                if (company === 'Tutte' || mov.societa === company) {
+                    const monthIndex = movDate.getMonth();
+                    const income = mov.entrata || 0;
+                    const expense = mov.uscita || 0;
+                    data[monthIndex][`entrateConsuntivo${year}`] += income;
+                    data[monthIndex][`usciteConsuntivo${year}`] += expense;
+                    if(income > 0) categoryIncomeTotals[year][mov.categoria] = (categoryIncomeTotals[year][mov.categoria] || 0) + income;
+                    if(expense > 0) categoryExpenseTotals[year][mov.categoria] = (categoryExpenseTotals[year][mov.categoria] || 0) + expense;
+                }
+            }
+        });
+
+        // --- PREVISTO (FORECASTS) ---
+        incomeForecasts.forEach(forecast => {
+            const forecastDate = parseDate(forecast.dataPrevista);
+            if (forecastDate.getFullYear() === year) {
+                if (company === 'Tutte' || forecast.societa === company) {
+                    if (forecast.stato !== 'Incassato') {
+                        const monthIndex = forecastDate.getMonth();
+                        const weightedIncome = (forecast.importoLordo || 0) * forecast.probabilita;
+                        data[monthIndex][`entratePrevisto${year}`] += weightedIncome;
+                        if(weightedIncome > 0) {
+                            categoryIncomeTotals[year][forecast.categoria] = (categoryIncomeTotals[year][forecast.categoria] || 0) + weightedIncome;
+                        }
+                    }
+                }
+            }
+        });
+
+        expenseForecasts.forEach(forecast => {
+            const forecastDate = parseDate(forecast.dataScadenza);
+            if (forecastDate.getFullYear() === year) {
+                if (company === 'Tutte' || forecast.societa === company) {
+                     if (forecast.stato !== 'Pagato') {
+                        const monthIndex = forecastDate.getMonth();
+                        const weightedExpense = (forecast.importoLordo || 0) * forecast.probabilita;
+                        data[monthIndex][`uscitePrevisto${year}`] += weightedExpense;
+                        if(weightedExpense > 0){
+                           categoryExpenseTotals[year][forecast.categoria] = (categoryExpenseTotals[year][forecast.categoria] || 0) + weightedExpense;
+                        }
+                    }
+                }
+            }
+        });
+        
+        deadlines.forEach(scad => {
+             const deadlineDate = parseDate(scad.dataScadenza);
+             if (deadlineDate.getFullYear() === year) {
+                if (scad.stato !== 'Pagato') {
+                     if (company === 'Tutte' || scad.societa === company) {
+                        const monthIndex = deadlineDate.getMonth();
+                        const remainingAmount = (scad.importoPrevisto - scad.importoPagato);
+                        data[monthIndex][`uscitePrevisto${year}`] += remainingAmount;
+                        if(remainingAmount > 0) {
+                            categoryExpenseTotals[year][scad.categoria] = (categoryExpenseTotals[year][scad.categoria] || 0) + remainingAmount;
+                        }
+                     }
+                }
+             }
+        });
     });
     
     const calculatedTotals = yearsToProcess.reduce((acc, year) => {

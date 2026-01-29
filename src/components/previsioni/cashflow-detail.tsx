@@ -5,10 +5,11 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2 } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, parseDate } from '@/lib/utils';
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
+import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 
 interface CashflowDetailProps {
     year: number;
@@ -26,17 +27,14 @@ export function CashflowDetail({ year, company, allData, isLoading }: CashflowDe
     const { monthlyData, startingBalance } = useMemo(() => {
         const { movements, incomeForecasts, expenseForecasts, deadlines } = allData;
 
-        // 1. Calculate Starting Balance from all movements before the selected year
+        // Calculate Starting Balance from all movements before the selected year
         let initialBalance = movements
-            .filter(m => new Date(m.data).getFullYear() < year && (company === 'Tutte' || m.societa === company))
+            .filter(m => {
+                const movYear = parseDate(m.data).getFullYear();
+                return movYear < year && (company === 'Tutte' || m.societa === company)
+            })
             .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
         
-        // Subtract paid deadlines from before this year as well
-        initialBalance -= deadlines
-            .filter(s => s.stato === 'Pagato' && s.dataPagamento && new Date(s.dataPagamento).getFullYear() < year && (company === 'Tutte' || s.societa === company))
-            .reduce((acc, s) => acc + s.importoPagato, 0);
-
-
         const data = Array.from({ length: 12 }, (_, i) => {
             const monthName = new Date(year, i).toLocaleString('it-IT', { month: 'long' });
             let inflows = 0;
@@ -48,39 +46,28 @@ export function CashflowDetail({ year, company, allData, isLoading }: CashflowDe
             if (isPastMonth) {
                 // Use historical data from movements
                  movements.forEach(mov => {
-                    const movDate = new Date(mov.data);
+                    const movDate = parseDate(mov.data);
                     if (movDate.getFullYear() === year && movDate.getMonth() === i && (company === 'Tutte' || mov.societa === company)) {
                         inflows += mov.entrata || 0;
                         outflows += mov.uscita || 0;
                     }
                 });
-                // Add historical paid deadlines
-                deadlines.forEach(scad => {
-                    if (scad.stato === 'Pagato' && scad.dataPagamento) {
-                        const paymentDate = new Date(scad.dataPagamento);
-                        if(paymentDate.getFullYear() === year && paymentDate.getMonth() === i && (company === 'Tutte' || scad.societa === company)) {
-                            outflows += scad.importoPagato;
-                        }
-                    }
-                });
-
             } else {
-                 // Use forecast data
+                 // Use forecast data for current and future months
                 incomeForecasts.forEach(f => {
-                    const forecastDate = new Date(f.dataPrevista);
+                    const forecastDate = parseDate(f.dataPrevista);
                     if (forecastDate.getFullYear() === year && forecastDate.getMonth() === i && (company === 'Tutte' || f.societa === company)) {
                         inflows += f.importoLordo * f.probabilita;
                     }
                 });
                 expenseForecasts.forEach(f => {
-                    const forecastDate = new Date(f.dataScadenza);
+                    const forecastDate = parseDate(f.dataScadenza);
                     if (forecastDate.getFullYear() === year && forecastDate.getMonth() === i && (company === 'Tutte' || f.societa === company)) {
                         outflows += f.importoLordo * f.probabilita;
                     }
                 });
-                // Add unpaid deadlines
                 deadlines.forEach(scad => {
-                    const deadlineDate = new Date(scad.dataScadenza);
+                    const deadlineDate = parseDate(scad.dataScadenza);
                     if (deadlineDate.getFullYear() === year && deadlineDate.getMonth() === i && scad.stato !== 'Pagato') {
                         if (company === 'Tutte' || scad.societa === company) {
                             outflows += (scad.importoPrevisto - scad.importoPagato);
@@ -97,7 +84,7 @@ export function CashflowDetail({ year, company, allData, isLoading }: CashflowDe
                 outflows,
                 closing: closingBalance,
             };
-            initialBalance = closingBalance; // Next month's starting balance is this month's closing
+            initialBalance = closingBalance;
             return monthResult;
         });
 

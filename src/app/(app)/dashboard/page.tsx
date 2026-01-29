@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, Kpi, CompanyProfile } from '@/lib/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, parseDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 type Period = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
@@ -109,17 +109,17 @@ export default function DashboardPage() {
     const liquidita = movimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
     
     const scadenzePeriodo = scadenze.filter(s => {
-        const dataScadenza = startOfDay(new Date(s.dataScadenza));
+        const dataScadenza = startOfDay(parseDate(s.dataScadenza));
         return isWithinInterval(dataScadenza, { start: startDate, end: endDate }) && s.stato !== 'Pagato';
     });
     const importoScadenzePeriodo = scadenzePeriodo.reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
 
     const previsioniEntratePeriodo = previsioniEntrate
-      .filter(p => isWithinInterval(new Date(p.dataPrevista), { start: startDate, end: endDate }))
+      .filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: startDate, end: endDate }))
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
 
     const previsioniUscitePeriodo = previsioniUscite
-      .filter(p => isWithinInterval(new Date(p.dataScadenza), { start: startDate, end: endDate }))
+      .filter(p => isWithinInterval(parseDate(p.dataScadenza), { start: startDate, end: endDate }))
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
 
     const cashFlowPrevisto = liquidita + previsioniEntratePeriodo - importoScadenzePeriodo - previsioniUscitePeriodo;
@@ -136,15 +136,15 @@ export default function DashboardPage() {
     const fineMeseCorrente = endOfMonth(today);
 
     const entrateMese = previsioniEntrate
-      .filter(p => isWithinInterval(new Date(p.dataPrevista), { start: inizioMeseCorrente, end: fineMeseCorrente }))
+      .filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: inizioMeseCorrente, end: fineMeseCorrente }))
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
 
     const scadenzeMese = scadenze
-      .filter(s => isWithinInterval(startOfDay(new Date(s.dataScadenza)), { start: inizioMeseCorrente, end: fineMeseCorrente }) && s.stato !== 'Pagato')
+      .filter(s => isWithinInterval(startOfDay(parseDate(s.dataScadenza)), { start: inizioMeseCorrente, end: fineMeseCorrente }) && s.stato !== 'Pagato')
       .reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
       
     const previsioniUsciteMese = previsioniUscite
-      .filter(p => isWithinInterval(new Date(p.dataScadenza), { start: inizioMeseCorrente, end: fineMeseCorrente }) && p.stato !== 'Pagato')
+      .filter(p => isWithinInterval(parseDate(p.dataScadenza), { start: inizioMeseCorrente, end: fineMeseCorrente }) && p.stato !== 'Pagato')
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
 
     const usciteMese = scadenzeMese + previsioniUsciteMese;
@@ -154,8 +154,8 @@ export default function DashboardPage() {
         { title: 'Uscite Previste (Mese)', value: formatCurrency(usciteMese) },
     ];
     
-    const cmDeadlines = scadenze.filter(s => isWithinInterval(startOfDay(new Date(s.dataScadenza)), { start: inizioMeseCorrente, end: fineMeseCorrente }));
-    const cmIncomes = previsioniEntrate.filter(p => isWithinInterval(new Date(p.dataPrevista), { start: inizioMeseCorrente, end: fineMeseCorrente }));
+    const cmDeadlines = scadenze.filter(s => isWithinInterval(startOfDay(parseDate(s.dataScadenza)), { start: inizioMeseCorrente, end: fineMeseCorrente }));
+    const cmIncomes = previsioniEntrate.filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: inizioMeseCorrente, end: fineMeseCorrente }));
 
 
     return { kpiData: kpiResult, currentMonthKpi: cmKpi, currentMonthDeadlines: cmDeadlines, currentMonthIncomes: cmIncomes };

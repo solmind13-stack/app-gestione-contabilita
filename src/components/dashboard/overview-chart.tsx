@@ -14,7 +14,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, parseDate } from "@/lib/utils";
 
 const chartConfig = {
   entrate: {
@@ -46,39 +46,42 @@ export function OverviewChart({ data }: OverviewChartProps) {
       uscite: 0,
     }));
 
-    const processData = (item: any, isForecast: boolean) => {
-      let date, income, expense, probability = 1;
-      if ('data' in item) { // Movimento
-        date = new Date(item.data);
-        income = item.entrata;
-        expense = item.uscita;
-      } else if ('dataPrevista' in item) { // PrevisioneEntrata
-        date = new Date(item.dataPrevista);
-        income = item.importoLordo;
-        expense = 0;
-        if(isForecast) probability = item.probabilita;
-      } else { // PrevisioneUscita or Scadenza
-        date = new Date(item.dataScadenza);
-        income = 0;
-        expense = item.importoPrevisto || item.importoLordo;
-        if(isForecast && 'probabilita' in item) probability = item.probabilita;
-      }
-
-      if (date.getFullYear() === year) {
-        const monthIndex = date.getMonth();
-        monthsData[monthIndex].entrate += (income || 0) * probability;
-        monthsData[monthIndex].uscite += (expense || 0) * probability;
-      }
-    };
-    
     const today = new Date();
-    // Process historical data
-    movements.filter(m => new Date(m.data) < today).forEach(m => processData(m, false));
     
-    // Process future data
-    incomeForecasts.filter(f => new Date(f.dataPrevista) >= today).forEach(f => processData(f, true));
-    expenseForecasts.filter(f => new Date(f.dataScadenza) >= today).forEach(f => processData(f, true));
-    deadlines.filter(d => new Date(d.dataScadenza) >= today && d.stato !== 'Pagato').forEach(d => processData(d, false)); // Deadlines are certain
+    // Process historical data from movements
+    movements.forEach(m => {
+        const movDate = parseDate(m.data);
+        if (movDate < today && movDate.getFullYear() === year) {
+            const monthIndex = movDate.getMonth();
+            monthsData[monthIndex].entrate += m.entrata || 0;
+            monthsData[monthIndex].uscite += m.uscita || 0;
+        }
+    });
+    
+    // Process future data from forecasts and deadlines
+    incomeForecasts.forEach(f => {
+        const forecastDate = parseDate(f.dataPrevista);
+        if (forecastDate >= today && forecastDate.getFullYear() === year) {
+            const monthIndex = forecastDate.getMonth();
+            monthsData[monthIndex].entrate += (f.importoLordo || 0) * f.probabilita;
+        }
+    });
+
+    expenseForecasts.forEach(f => {
+        const forecastDate = parseDate(f.dataScadenza);
+        if (forecastDate >= today && forecastDate.getFullYear() === year) {
+            const monthIndex = forecastDate.getMonth();
+            monthsData[monthIndex].uscite += (f.importoLordo || 0) * f.probabilita;
+        }
+    });
+
+    deadlines.forEach(d => {
+        const deadlineDate = parseDate(d.dataScadenza);
+        if (deadlineDate >= today && deadlineDate.getFullYear() === year && d.stato !== 'Pagato') {
+            const monthIndex = deadlineDate.getMonth();
+            monthsData[monthIndex].uscite += (d.importoPrevisto - d.importoPagato);
+        }
+    });
     
     return monthsData;
   }, [data]);
