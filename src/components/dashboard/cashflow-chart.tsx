@@ -5,6 +5,7 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContai
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { formatCurrency } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 
 const chartConfig = {
   saldo: {
@@ -22,6 +23,22 @@ interface CashflowChartProps {
 
 export function CashflowChart({ data: chartData }: CashflowChartProps) {
   
+  if (!chartData || !Array.isArray(chartData)) {
+    return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Andamento del Flusso di Cassa (12 Mesi)</CardTitle>
+            <CardDescription>
+              Proiezione del saldo di cassa per i prossimi 12 mesi basata su dati storici e previsionali.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex h-[250px] items-center justify-center">
+             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>

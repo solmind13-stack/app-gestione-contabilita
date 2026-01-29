@@ -102,7 +102,7 @@ export function ForecastComparison({
     // --- AGGREGATE ALL DATA ---
     yearsToProcess.forEach(year => {
         // --- CONSUNTIVO (ACTUALS) from movements ---
-        movements.forEach(mov => {
+        (movements || []).forEach(mov => {
             const movDate = parseDate(mov.data);
             if (movDate.getFullYear() === year) {
                 if (company === 'Tutte' || mov.societa === company) {
@@ -118,7 +118,7 @@ export function ForecastComparison({
         });
 
         // --- PREVISTO (FORECASTS) ---
-        incomeForecasts.forEach(forecast => {
+        (incomeForecasts || []).forEach(forecast => {
             const forecastDate = parseDate(forecast.dataPrevista);
             if (forecastDate.getFullYear() === year) {
                 if (company === 'Tutte' || forecast.societa === company) {
@@ -134,7 +134,7 @@ export function ForecastComparison({
             }
         });
 
-        expenseForecasts.forEach(forecast => {
+        (expenseForecasts || []).forEach(forecast => {
             const forecastDate = parseDate(forecast.dataScadenza);
             if (forecastDate.getFullYear() === year) {
                 if (company === 'Tutte' || forecast.societa === company) {
@@ -150,7 +150,7 @@ export function ForecastComparison({
             }
         });
         
-        deadlines.forEach(scad => {
+        (deadlines || []).forEach(scad => {
              const deadlineDate = parseDate(scad.dataScadenza);
              if (deadlineDate.getFullYear() === year) {
                 if (scad.stato !== 'Pagato') {
@@ -193,7 +193,7 @@ export function ForecastComparison({
 
     // --- CASHFLOW CHART ---
     const today = new Date();
-    let cashflowBalance = movements.filter(m => parseDate(m.data) < startOfMonth(today)).reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    let cashflowBalance = (movements || []).filter(m => parseDate(m.data) < startOfMonth(today)).reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
     const cashflowProjectionData = Array.from({ length: 12 }, (_, i) => {
         const monthDate = addMonths(today, i);
         const monthStart = startOfMonth(monthDate);
@@ -201,10 +201,10 @@ export function ForecastComparison({
         let monthInflows = 0;
         let monthOutflows = 0;
 
-        movements.forEach(m => { if (isWithinInterval(parseDate(m.data), { start: monthStart < today ? monthStart : today, end: today })) { monthInflows += m.entrata || 0; monthOutflows += m.uscita || 0; } });
-        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
-        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
-        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        (movements || []).forEach(m => { if (isWithinInterval(parseDate(m.data), { start: monthStart < today ? monthStart : today, end: today })) { monthInflows += m.entrata || 0; monthOutflows += m.uscita || 0; } });
+        (incomeForecasts || []).forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
+        (expenseForecasts || []).forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
+        (deadlines || []).forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
         
         cashflowBalance += monthInflows - monthOutflows;
         return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: cashflowBalance };
