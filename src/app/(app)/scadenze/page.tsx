@@ -45,6 +45,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
+import { classifyRecurringExpense } from '@/ai/flows/classify-recurring-expense-flow';
 
 
 const getScadenzeQuery = (firestore: any, user: AppUser | null, company: string) => {
@@ -217,67 +218,51 @@ export default function ScadenzePage() {
         }
     };
 
-    const normalizeDescription = (desc: string): string => {
-        if (!desc) return '';
-        return desc
-            .toLowerCase()
-            .replace(/\b(srl|spa|snc|sas|srls)\b/g, '')
-            .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-    };
-
-    const getPeriodicity = (dates: Date[]): { recurrence: 'Mensile' | 'Trimestrale' | 'Annuale' | null, avgInterval: number } => {
-        if (dates.length < 2) return { recurrence: null, avgInterval: 0 };
-        dates.sort((a, b) => a.getTime() - b.getTime());
-        const intervals: number[] = [];
-        for (let i = 1; i < dates.length; i++) {
-            const diffTime = Math.abs(dates[i].getTime() - dates[i-1].getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            intervals.push(diffDays);
-        }
-        
-        if (intervals.length < 1) return { recurrence: null, avgInterval: 0 };
-
-        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-
-        const monthlyMatches = intervals.filter(d => d >= 27 && d <= 34).length;
-        if (monthlyMatches / intervals.length >= 2/3) return { recurrence: 'Mensile', avgInterval };
-        
-        const quarterlyMatches = intervals.filter(d => d >= 85 && d <= 97).length;
-        if (quarterlyMatches / intervals.length >= 2/3) return { recurrence: 'Trimestrale', avgInterval };
-
-        const annualMatches = intervals.filter(d => d >= 350 && d <= 380).length;
-        if (annualMatches / intervals.length >= 2/3) return { recurrence: 'Annuale', avgInterval };
-
-        return { recurrence: null, avgInterval };
-    };
-
-    const getCategoryFromDescription = (desc: string): { category: string, subcategory: string, match: boolean } => {
-        const lowerDesc = desc.toLowerCase();
-        if (lowerDesc.includes('f24') || lowerDesc.includes('tributi') || lowerDesc.includes('imposte') || lowerDesc.includes('ravvedimento')) return { category: 'Tasse', subcategory: 'F24 Vari', match: true };
-        if (lowerDesc.includes('iva') || lowerDesc.includes('liquidazione iva')) return { category: 'Tasse', subcategory: 'IVA Trimestrale', match: true };
-        if (lowerDesc.includes('inps') || lowerDesc.includes('contributi')) return { category: 'Tasse', subcategory: 'F24 Vari', match: true };
-        if (lowerDesc.includes('assicurazione') || lowerDesc.includes('polizza')) return { category: 'Gestione Generale', subcategory: 'Altre Spese', match: true };
-        if (lowerDesc.includes('canone') || lowerDesc.includes('locazione') || lowerDesc.includes('affitto')) return { category: 'Gestione Immobili', subcategory: 'Manutenzione', match: true };
-        if (lowerDesc.includes('leasing')) return { category: 'Finanziamenti', subcategory: 'Rate Prestito', match: true };
-        if (lowerDesc.includes('abbonamento') || lowerDesc.includes('rinnovo')) return { category: 'Gestione Generale', subcategory: 'Altre Spese', match: true };
-        if (lowerDesc.includes('telecom') || lowerDesc.includes('tim') || lowerDesc.includes('vodafone') || lowerDesc.includes('wind') || lowerDesc.includes('iliad')) return { category: 'Gestione Generale', subcategory: 'Telefonia', match: true };
-        if (lowerDesc.includes('enel') || lowerDesc.includes('servizio elettrico') || lowerDesc.includes('energia') || lowerDesc.includes('luce') || lowerDesc.includes('gas') || lowerDesc.includes('acqua')) return { category: 'Gestione Immobili', subcategory: 'Utenze', match: true };
-        if (lowerDesc.includes('rata') || lowerDesc.includes('finanziamento') || lowerDesc.includes('mutuo')) return { category: 'Finanziamenti', subcategory: 'Rate Mutuo', match: true };
-        
-        return { category: 'Da categorizzare', subcategory: 'Da categorizzare', match: false };
-    };
-    
     const handleSuggestDeadlines = useCallback(async () => {
+        const normalizeDescription = (desc: string): string => {
+            if (!desc) return '';
+            return desc
+                .toLowerCase()
+                .replace(/\b(srl|spa|snc|sas|srls|s.r.l.|s.p.a)\b/g, '')
+                .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
+
+        const getPeriodicity = (dates: Date[]): { recurrence: 'Mensile' | 'Trimestrale' | 'Annuale' | null, avgInterval: number } => {
+            if (dates.length < 2) return { recurrence: null, avgInterval: 0 };
+            dates.sort((a, b) => a.getTime() - b.getTime());
+            const intervals: number[] = [];
+            for (let i = 1; i < dates.length; i++) {
+                const diffTime = Math.abs(dates[i].getTime() - dates[i-1].getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                intervals.push(diffDays);
+            }
+            
+            if (intervals.length === 0) return { recurrence: null, avgInterval: 0 };
+    
+            const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    
+            const monthlyMatches = intervals.filter(d => d >= 27 && d <= 34).length;
+            if (monthlyMatches / intervals.length >= 0.5) return { recurrence: 'Mensile', avgInterval };
+            
+            const quarterlyMatches = intervals.filter(d => d >= 85 && d <= 97).length;
+            if (quarterlyMatches / intervals.length >= 0.5) return { recurrence: 'Trimestrale', avgInterval };
+    
+            const annualMatches = intervals.filter(d => d >= 350 && d <= 380).length;
+            if (annualMatches / intervals.length >= 0.5) return { recurrence: 'Annuale', avgInterval };
+    
+            return { recurrence: null, avgInterval: 0 };
+        };
+
         if (!movimenti || movimenti.length === 0) {
             toast({ variant: 'destructive', title: 'Nessun Movimento', description: 'Non ci sono movimenti da analizzare.' });
             return;
         }
         setIsSuggestionLoading(true);
+        setDeadlineSuggestions([]);
         
         try {
-            // Simulate async operation to allow UI to update
             await new Promise(resolve => setTimeout(resolve, 50));
 
             const twoYearsAgo = new Date();
@@ -295,61 +280,79 @@ export default function ScadenzePage() {
                 return acc;
             }, {} as Record<string, Movimento[]>);
 
-            const suggestions: DeadlineSuggestion[] = [];
+            const suggestionPromises: Promise<DeadlineSuggestion | null>[] = [];
 
             for (const key in groupedByCompanyAndDesc) {
                 const group = groupedByCompanyAndDesc[key];
                 if (group.length < 2) continue;
 
-                const dates = group.map(m => new Date(m.data));
-                const amounts = group.map(m => m.uscita);
-                
-                const { recurrence } = getPeriodicity(dates);
-                if (!recurrence) continue;
+                const promise = (async (): Promise<DeadlineSuggestion | null> => {
+                    const dates = group.map(m => new Date(m.data));
+                    const amounts = group.map(m => m.uscita);
+                    
+                    const { recurrence } = getPeriodicity(dates);
+                    if (!recurrence) return null;
 
-                const amountMean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-                const amountStdDev = Math.sqrt(amounts.map(x => Math.pow(x - amountMean, 2)).reduce((a, b) => a + b, 0) / amounts.length);
-                const amountVariation = amountMean > 0 ? (amountStdDev / amountMean) : 0;
-                
-                const isDuplicate = (scadenze || []).some(s => 
-                    s.societa === group[0].societa &&
-                    normalizeDescription(s.descrizione) === normalizeDescription(group[0].descrizione) &&
-                    s.ricorrenza === recurrence
-                );
-                if (isDuplicate) continue;
+                    const amountMean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+                    const amountStdDev = Math.sqrt(amounts.map(x => Math.pow(x - amountMean, 2)).reduce((a, b) => a + b, 0) / amounts.length);
+                    const amountVariation = amountMean > 0 ? (amountStdDev / amountMean) : 0;
+                    
+                    const isDuplicate = (scadenze || []).some(s => 
+                        s.societa === group[0].societa &&
+                        normalizeDescription(s.descrizione) === normalizeDescription(group[0].descrizione) &&
+                        s.ricorrenza === recurrence
+                    );
+                    if (isDuplicate) return null;
 
-                const { category, subcategory, match: keywordMatch } = getCategoryFromDescription(group[0].descrizione);
-                
-                let confidence: 'Alta' | 'Media' | 'Bassa' = 'Bassa';
-                if (recurrence && amountVariation < 0.1 && keywordMatch) {
-                    confidence = 'Alta';
-                } else if (recurrence && (amountVariation < 0.25 || keywordMatch)) {
-                    confidence = 'Media';
-                }
-                
-                const reason = `Rilevati ${group.length} pagamenti con ricorrenza ${recurrence.toLowerCase()} per un importo medio di ${formatCurrency(amountMean)}.`;
-                
-                suggestions.push({
-                    description: group[0].descrizione,
-                    category,
-                    subcategory,
-                    recurrence,
-                    amount: amountMean,
-                    confidence,
-                    reason,
-                    movements: group.map(m => ({ id: m.id, data: m.data, importo: m.uscita })),
-                    originalMovementDescription: key,
-                });
+                    try {
+                        const classification = await classifyRecurringExpense({
+                            descriptions: group.map(m => m.descrizione)
+                        });
+
+                        let confidence: 'Alta' | 'Media' | 'Bassa' = 'Bassa';
+                        if (recurrence && amountVariation < 0.1 && classification.category !== 'Da categorizzare') {
+                            confidence = 'Alta';
+                        } else if (recurrence && (amountVariation < 0.25 || classification.category !== 'Da categorizzare')) {
+                            confidence = 'Media';
+                        }
+                        
+                        const reason = `Rilevati ${group.length} pagamenti con ricorrenza ${recurrence.toLowerCase()} e importo medio di ${formatCurrency(amountMean)}. L'AI ha classificato la spesa come "${classification.commonDescription}".`;
+                        
+                        return {
+                            description: classification.commonDescription,
+                            category: classification.category,
+                            subcategory: classification.subcategory,
+                            recurrence,
+                            amount: amountMean,
+                            confidence,
+                            reason,
+                            movements: group.map(m => ({ id: m.id, data: m.data, importo: m.uscita })),
+                            originalMovementDescription: key,
+                        };
+
+                    } catch(aiError: any) {
+                        console.error(`AI classification failed for group ${key}:`, aiError);
+                        toast({
+                            variant: 'destructive',
+                            title: `Errore AI per un gruppo`,
+                            description: aiError.message || `Impossibile classificare il gruppo: ${key}`,
+                        });
+                        return null;
+                    }
+                })();
+                suggestionPromises.push(promise);
             }
             
-            if (suggestions.length === 0) {
+            const resolvedSuggestions = (await Promise.all(suggestionPromises)).filter((s): s is DeadlineSuggestion => s !== null);
+
+            if (resolvedSuggestions.length === 0) {
                 toast({ title: 'Nessun Suggerimento', description: 'L\'analisi non ha trovato nuove scadenze ricorrenti.' });
             } else {
-                setDeadlineSuggestions(suggestions.sort((a, b) => {
+                setDeadlineSuggestions(resolvedSuggestions.sort((a, b) => {
                     const confOrder = { 'Alta': 0, 'Media': 1, 'Bassa': 2 };
                     return confOrder[a.confidence] - confOrder[b.confidence];
                 }));
-                setSelectedSuggestions(suggestions.filter(s => s.confidence === 'Alta'));
+                setSelectedSuggestions(resolvedSuggestions.filter(s => s.confidence === 'Alta'));
                 setIsSuggestionDialogOpen(true);
             }
 
@@ -374,7 +377,8 @@ export default function ScadenzePage() {
             selectedSuggestions.forEach(suggestion => {
                 const newDeadlineRef = doc(collection(firestore, 'deadlines'));
                 
-                const lastMovementDate = new Date(suggestion.movements[suggestion.movements.length - 1].data);
+                const lastMovementDate = new Date(suggestion.movements.sort((a,b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0].data);
+                
                 let nextDueDate = new Date(lastMovementDate);
 
                 if (suggestion.recurrence === 'Mensile') nextDueDate.setMonth(nextDueDate.getMonth() + 1);

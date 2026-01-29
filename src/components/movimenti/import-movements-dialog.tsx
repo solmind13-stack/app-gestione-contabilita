@@ -392,30 +392,38 @@ export function ImportMovementsDialog({
         <h3 className="text-lg font-medium">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
         <ScrollArea className="h-[60vh] border rounded-md">
-            <Table>
+            <Table className="table-fixed w-full">
                 <TableHeader><TableRow>
-                    <TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Categoria</TableHead><TableHead>Metodo Pag.</TableHead><TableHead>Entrata</TableHead><TableHead>Uscita</TableHead><TableHead>Società</TableHead><TableHead>Stato</TableHead>
+                    <TableHead className="w-[10%]">Data</TableHead>
+                    <TableHead className="w-[35%]">Descrizione</TableHead>
+                    <TableHead className="w-[12%]">Categoria</TableHead>
+                    <TableHead className="w-[10%]">Metodo Pag.</TableHead>
+                    <TableHead className="w-[8%] text-right">Entrata</TableHead>
+                    <TableHead className="w-[8%] text-right">Uscita</TableHead>
+                    <TableHead className="w-[7%] text-center">Società</TableHead>
+                    <TableHead className="w-[10%] text-center">Stato</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                     {movements.map((row, index) => (
                         <TableRow key={index} className={cn(
+                          'text-sm',
                           row.status === 'manual_review' && !row.isDuplicate && 'bg-amber-50 dark:bg-amber-900/20',
                           row.isDuplicate && 'bg-red-50 dark:bg-red-900/20'
                         )}>
-                            <TableCell>{formatDate(row.data)}</TableCell>
-                            <TableCell>
+                            <TableCell className="whitespace-nowrap py-2 px-2">{formatDate(row.data)}</TableCell>
+                            <TableCell className="break-words py-2 px-2">
                               {row.descrizione}
                             </TableCell>
-                            <TableCell><Badge variant="outline">{row.categoria}</Badge></TableCell>
-                            <TableCell>{row.metodoPag}</TableCell>
-                            <TableCell className="text-green-600">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
-                            <TableCell className="text-red-600">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>
-                            <TableCell><Badge variant={row.societa === 'LNC' ? 'default' : 'secondary'}>{row.societa}</Badge></TableCell>
-                            <TableCell>
+                            <TableCell className="py-2 px-2"><Badge variant="outline" className="whitespace-nowrap">{row.categoria}</Badge></TableCell>
+                            <TableCell className="py-2 px-2">{row.metodoPag}</TableCell>
+                            <TableCell className="text-right text-green-600 whitespace-nowrap py-2 px-2">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
+                            <TableCell className="text-right text-red-600 whitespace-nowrap py-2 px-2">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>
+                            <TableCell className="text-center py-2 px-2"><Badge variant={row.societa === 'LNC' ? 'default' : 'secondary'}>{row.societa}</Badge></TableCell>
+                            <TableCell className="text-center py-2 px-2">
                               {row.isDuplicate ? (
                                 <Badge variant="destructive">Duplicato</Badge>
                               ) : (
-                                <Badge variant={row.status === 'manual_review' ? 'destructive' : 'default'} className={cn(row.status === 'ok' && 'bg-green-600')}>
+                                <Badge variant={row.status === 'manual_review' ? 'destructive' : 'default'} className={cn(row.status === 'ok' && 'bg-green-600', 'whitespace-nowrap')}>
                                     {row.status === 'manual_review' ? 'Da Revisionare' : 'OK'}
                                 </Badge>
                               )}
@@ -463,7 +471,7 @@ export function ImportMovementsDialog({
         
         {stage === 'upload' && renderUploadStage()}
         {stage === 'review' && renderReviewStage("Dati Estratti - Verifica e Conferma", "Controlla i movimenti estratti. I duplicati sono evidenziati in rosso. Scegli se importare tutto o solo i nuovi movimenti.", processedRows, false)}
-        {stage === 'ai_progress' && renderReviewStage("Analisi AI", "Clicca su 'Avvia Analisi AI' per categorizzare automaticamente i movimenti importati.", importedMovements, false)}
+        {stage === 'ai_progress' && renderReviewStage("Analisi AI", "I movimenti sono stati importati. Ora puoi avviare l'analisi AI.", importedMovements, false)}
         {stage === 'final_review' && renderReviewStage("Risultati Analisi", "L'AI ha aggiornato le categorie. I movimenti non classificati restano 'Da Revisionare'.", importedMovements, true)}
 
         <DialogFooter className="gap-2">
