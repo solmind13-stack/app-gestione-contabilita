@@ -10,6 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { CashflowChart } from '../dashboard/cashflow-chart';
+import { addMonths, endOfMonth, isWithinInterval, startOfMonth } from 'date-fns';
 
 interface ForecastComparisonProps {
   mainYear: number;
@@ -73,7 +74,7 @@ export function ForecastComparison({
   isLoading,
 }: ForecastComparisonProps) {
 
-  const { chartData, totals, categoryTotals, comparisonChartData } = useMemo(() => {
+  const { chartData, totals, categoryTotals, comparisonChartData, cashflowChartData } = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => i);
     const yearsToProcess = [mainYear, comparisonYear].filter(Boolean) as number[];
     
@@ -190,6 +191,25 @@ export function ForecastComparison({
         totalComparison: categoryExpenseTotals[comparisonYear]?.[cat] || 0,
     })).sort((a,b) => b.totalMain - a.totalMain);
 
+    // --- CASHFLOW CHART ---
+    const today = new Date();
+    let cashflowBalance = movements.filter(m => parseDate(m.data) < startOfMonth(today)).reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    const cashflowProjectionData = Array.from({ length: 12 }, (_, i) => {
+        const monthDate = addMonths(today, i);
+        const monthStart = startOfMonth(monthDate);
+        const monthEnd = endOfMonth(monthDate);
+        let monthInflows = 0;
+        let monthOutflows = 0;
+
+        movements.forEach(m => { if (isWithinInterval(parseDate(m.data), { start: monthStart < today ? monthStart : today, end: today })) { monthInflows += m.entrata || 0; monthOutflows += m.uscita || 0; } });
+        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
+        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
+        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        
+        cashflowBalance += monthInflows - monthOutflows;
+        return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: cashflowBalance };
+    });
+
 
     return { 
         chartData: data, 
@@ -204,20 +224,14 @@ export function ForecastComparison({
             [`uscite${mainYear}`]: month[`usciteConsuntivo${mainYear}`],
             [`entrate${comparisonYear}`]: month[`entrateConsuntivo${comparisonYear}`],
             [`uscite${comparisonYear}`]: month[`usciteConsuntivo${comparisonYear}`],
-        }))
+        })),
+        cashflowChartData: cashflowProjectionData,
     };
 
   }, [mainYear, comparisonYear, company, movements, incomeForecasts, expenseForecasts, deadlines]);
   
   const pieIncomeData = useMemo(() => categoryTotals.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.income]);
   const pieExpenseData = useMemo(() => categoryTotals.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.expense]);
-
-  const allData = useMemo(() => ({
-    movements,
-    incomeForecasts,
-    expenseForecasts,
-    deadlines,
-  }), [movements, incomeForecasts, expenseForecasts, deadlines]);
 
   return (
     <div className="space-y-6">
@@ -476,7 +490,7 @@ export function ForecastComparison({
       </div>
 
        <div className="grid grid-cols-1 gap-6">
-         <CashflowChart data={allData} />
+         <CashflowChart data={cashflowChartData} />
       </div>
     </div>
   );
