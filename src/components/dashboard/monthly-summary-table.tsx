@@ -73,7 +73,7 @@ export function MonthlySummaryTable({ allData, isLoading }: MonthlySummaryTableP
                 starting: openingBalance,
                 inflows: monthInflows,
                 outflows: monthOutflows,
-                closing: openingBalance + monthInflows - outflows,
+                closing: openingBalance + monthInflows - monthOutflows,
             };
 
             openingBalance = monthResult.closing;
