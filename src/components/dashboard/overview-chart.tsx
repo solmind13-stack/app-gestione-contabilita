@@ -1,6 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import {
   Card,
@@ -13,8 +12,7 @@ import {
   ChartContainer,
   ChartTooltipContent,
 } from "@/components/ui/chart"
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
-import { formatCurrency, parseDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 const chartConfig = {
   entrate: {
@@ -29,68 +27,19 @@ const chartConfig = {
 
 interface OverviewChartProps {
   data: {
-    movements: Movimento[];
-    incomeForecasts: PrevisioneEntrata[];
-    expenseForecasts: PrevisioneUscita[];
-    deadlines: Scadenza[];
-  }
+    month: string;
+    entrate: number;
+    uscite: number;
+  }[];
 }
 
-export function OverviewChart({ data }: OverviewChartProps) {
-  const chartData = useMemo(() => {
-    const { movements, incomeForecasts, expenseForecasts, deadlines } = data;
-    const year = new Date().getFullYear();
-    const monthsData = Array.from({ length: 12 }, (_, i) => ({
-      month: new Date(year, i).toLocaleString('it-IT', { month: 'short' }),
-      entrate: 0,
-      uscite: 0,
-    }));
-
-    const today = new Date();
-    
-    // Process historical data from movements
-    movements.forEach(m => {
-        const movDate = parseDate(m.data);
-        if (movDate < today && movDate.getFullYear() === year) {
-            const monthIndex = movDate.getMonth();
-            monthsData[monthIndex].entrate += m.entrata || 0;
-            monthsData[monthIndex].uscite += m.uscita || 0;
-        }
-    });
-    
-    // Process future data from forecasts and deadlines
-    incomeForecasts.forEach(f => {
-        const forecastDate = parseDate(f.dataPrevista);
-        if (forecastDate >= today && forecastDate.getFullYear() === year) {
-            const monthIndex = forecastDate.getMonth();
-            monthsData[monthIndex].entrate += (f.importoLordo || 0) * f.probabilita;
-        }
-    });
-
-    expenseForecasts.forEach(f => {
-        const forecastDate = parseDate(f.dataScadenza);
-        if (forecastDate >= today && forecastDate.getFullYear() === year) {
-            const monthIndex = forecastDate.getMonth();
-            monthsData[monthIndex].uscite += (f.importoLordo || 0) * f.probabilita;
-        }
-    });
-
-    deadlines.forEach(d => {
-        const deadlineDate = parseDate(d.dataScadenza);
-        if (deadlineDate >= today && deadlineDate.getFullYear() === year && d.stato !== 'Pagato') {
-            const monthIndex = deadlineDate.getMonth();
-            monthsData[monthIndex].uscite += (d.importoPrevisto - d.importoPagato);
-        }
-    });
-    
-    return monthsData;
-  }, [data]);
+export function OverviewChart({ data: chartData }: OverviewChartProps) {
 
   return (
     <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
       <CardHeader>
         <CardTitle>Andamento Entrate/Uscite</CardTitle>
-        <CardDescription>Dati per l'anno in corso (storici e previsionali ponderati)</CardDescription>
+        <CardDescription>Dati per l'anno in corso (reali per il passato, previsionali per il futuro)</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-[250px] w-full">

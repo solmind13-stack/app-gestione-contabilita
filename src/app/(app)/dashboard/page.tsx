@@ -4,7 +4,7 @@
 import { useMemo, useEffect, useState } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
-import { endOfMonth, startOfMonth, addDays, isWithinInterval, startOfDay, addMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns';
+import { endOfMonth, startOfMonth, addMonths, isWithinInterval, startOfQuarter, endOfQuarter, startOfYear, endOfYear, startOfDay } from 'date-fns';
 
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { OverviewChart } from "@/components/dashboard/overview-chart";
@@ -12,14 +12,12 @@ import { CashflowChart } from '@/components/dashboard/cashflow-chart';
 import DashboardLoading from './loading';
 import { MonthlySummaryTable } from '@/components/dashboard/monthly-summary-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-
+import { Card, CardContent } from '@/components/ui/card';
 
 import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, Kpi, CompanyProfile } from '@/lib/types';
-import { formatCurrency, formatDate, parseDate } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import { formatCurrency, parseDate } from '@/lib/utils';
+import { UpcomingDeadlines } from '@/components/dashboard/upcoming-deadlines';
+
 
 type Period = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 
@@ -65,112 +63,161 @@ export default function DashboardPage() {
 
   const {
     kpiData,
-    currentMonthKpi,
-    currentMonthDeadlines,
-    currentMonthIncomes
+    upcomingDeadlines,
+    overviewChartData,
+    monthlySummaryData,
+    cashflowChartData
   } = useMemo(() => {
     const today = new Date();
-    let startDate, endDate;
+    const filterByCompany = (item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany;
 
+    const movements = (allMovements || []).filter(filterByCompany);
+    const deadlines = (allScadenze || []).filter(filterByCompany);
+    const incomeForecasts = (allPrevisioniEntrate || []).filter(filterByCompany);
+    const expenseForecasts = (allPrevisioniUscite || []).filter(filterByCompany);
+
+    // --- KPI CALCULATION (for selected period) ---
+    const liquiditaAttuale = movements.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    
+    let kpiStartDate, kpiEndDate;
     switch (selectedPeriod) {
         case 'quarterly':
-            startDate = startOfQuarter(today);
-            endDate = endOfQuarter(today);
+            kpiStartDate = startOfQuarter(today);
+            kpiEndDate = endOfQuarter(today);
             break;
         case 'semiannual':
-            const currentMonth = today.getMonth(); // 0-11
-            if (currentMonth < 6) { // First half
-                startDate = startOfYear(today);
-                endDate = endOfMonth(addMonths(startOfYear(today), 5)); // End of June
-            } else { // Second half
-                startDate = startOfMonth(addMonths(startOfYear(today), 6)); // Start of July
-                endDate = endOfYear(today);
-            }
+            kpiStartDate = today.getMonth() < 6 ? startOfYear(today) : startOfMonth(addMonths(startOfYear(today), 6));
+            kpiEndDate = today.getMonth() < 6 ? endOfMonth(addMonths(startOfYear(today), 5)) : endOfYear(today);
             break;
         case 'annual':
-            startDate = startOfYear(today);
-            endDate = endOfYear(today);
+            kpiStartDate = startOfYear(today);
+            kpiEndDate = endOfYear(today);
             break;
         case 'monthly':
         default:
-            startDate = startOfMonth(today);
-            endDate = endOfMonth(today);
+            kpiStartDate = startOfMonth(today);
+            kpiEndDate = endOfMonth(today);
             break;
     }
     
-    const filterByCompany = (item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany;
+    const scadenzeNelPeriodo = deadlines.filter(s => isWithinInterval(parseDate(s.dataScadenza), { start: kpiStartDate, end: kpiEndDate }) && s.stato !== 'Pagato');
+    const importoScadenze = scadenzeNelPeriodo.reduce((acc, s) => acc + (s.importoPrevisto - s.importoPagato), 0);
 
-    const movimenti = (allMovements || []).filter(filterByCompany);
-    const scadenze = (allScadenze || []).filter(filterByCompany);
-    const previsioniEntrate = (allPrevisioniEntrate || []).filter(filterByCompany);
-    const previsioniUscite = (allPrevisioniUscite || []).filter(filterByCompany);
-    
-    // --- GENERAL KPI CALCULATION (for selected period) ---
-    const liquidita = movimenti.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
-    
-    const scadenzePeriodo = scadenze.filter(s => {
-        const dataScadenza = startOfDay(parseDate(s.dataScadenza));
-        return isWithinInterval(dataScadenza, { start: startDate, end: endDate }) && s.stato !== 'Pagato';
-    });
-    const importoScadenzePeriodo = scadenzePeriodo.reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
+    const entratePreviste = incomeForecasts
+      .filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: kpiStartDate, end: kpiEndDate }))
+      .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
+      
+    const uscitePreviste = expenseForecasts
+      .filter(p => isWithinInterval(parseDate(p.dataScadenza), { start: kpiStartDate, end: kpiEndDate }))
+      .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
 
-    const previsioniEntratePeriodo = previsioniEntrate
-      .filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: startDate, end: endDate }))
-      .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
-
-    const previsioniUscitePeriodo = previsioniUscite
-      .filter(p => isWithinInterval(parseDate(p.dataScadenza), { start: startDate, end: endDate }))
-      .reduce((acc, p) => acc + ((p.importoLordo || 0) * (p.probabilita || 0)), 0);
-
-    const cashFlowPrevisto = liquidita + previsioniEntratePeriodo - importoScadenzePeriodo - previsioniUscitePeriodo;
+    const cashFlowPrevisto = liquiditaAttuale + entratePreviste - (importoScadenze + uscitePreviste);
 
     const kpiResult: Kpi[] = [
-        { title: 'Liquidità Attuale', value: formatCurrency(liquidita), icon: 'Wallet', color: 'bg-green-100 dark:bg-green-900', textColor: 'text-green-800 dark:text-green-200' },
-        { title: `Scadenze (${selectedPeriod})`, value: formatCurrency(importoScadenzePeriodo), icon: 'AlertTriangle', color: 'bg-orange-100 dark:bg-orange-900', textColor: 'text-orange-800 dark:text-orange-200' },
-        { title: `Entrate Previste (${selectedPeriod})`, value: formatCurrency(previsioniEntratePeriodo), icon: 'ArrowUp', color: 'bg-blue-100 dark:bg-blue-900', textColor: 'text-blue-800 dark:text-blue-200' },
+        { title: 'Liquidità Attuale', value: formatCurrency(liquiditaAttuale), icon: 'Wallet', color: 'bg-green-100 dark:bg-green-900', textColor: 'text-green-800 dark:text-green-200' },
+        { title: `Uscite Previste (${selectedPeriod})`, value: formatCurrency(importoScadenze + uscitePreviste), icon: 'AlertTriangle', color: 'bg-orange-100 dark:bg-orange-900', textColor: 'text-orange-800 dark:text-orange-200' },
+        { title: `Entrate Previste (${selectedPeriod})`, value: formatCurrency(entratePreviste), icon: 'ArrowUp', color: 'bg-blue-100 dark:bg-blue-900', textColor: 'text-blue-800 dark:text-blue-200' },
         { title: `Cash Flow Previsto (${selectedPeriod})`, value: formatCurrency(cashFlowPrevisto), icon: 'TrendingUp', color: 'bg-indigo-100 dark:bg-indigo-900', textColor: 'text-indigo-800 dark:text-indigo-200' }
     ];
+
+    // --- UPCOMING DEADLINES ---
+    const sevenDaysFromNow = addMonths(today, 3);
+    const upcomingDeadlinesData = deadlines
+        .filter(d => d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: startOfDay(today), end: sevenDaysFromNow }))
+        .sort((a,b) => parseDate(a.dataScadenza).getTime() - parseDate(b.dataScadenza).getTime())
+        .slice(0, 5);
+
+    // --- OVERVIEW CHART DATA (Current Year) ---
+    const overviewData = Array.from({ length: 12 }, (_, i) => {
+        const monthStart = startOfMonth(new Date(today.getFullYear(), i));
+        const isPastMonth = monthStart < startOfMonth(today);
+        let entrate = 0;
+        let uscite = 0;
+
+        if (isPastMonth) {
+            movements.forEach(m => {
+                const movDate = parseDate(m.data);
+                if (movDate.getFullYear() === today.getFullYear() && movDate.getMonth() === i) {
+                    entrate += m.entrata || 0;
+                    uscite += m.uscita || 0;
+                }
+            });
+        } else {
+            incomeForecasts.forEach(f => {
+                const forecastDate = parseDate(f.dataPrevista);
+                if (forecastDate.getFullYear() === today.getFullYear() && forecastDate.getMonth() === i) entrate += (f.importoLordo || 0) * f.probabilita;
+            });
+            expenseForecasts.forEach(f => {
+                const forecastDate = parseDate(f.dataScadenza);
+                if (forecastDate.getFullYear() === today.getFullYear() && forecastDate.getMonth() === i) uscite += (f.importoLordo || 0) * f.probabilita;
+            });
+            deadlines.forEach(d => {
+                const deadlineDate = parseDate(d.dataScadenza);
+                if (d.stato !== 'Pagato' && deadlineDate.getFullYear() === today.getFullYear() && deadlineDate.getMonth() === i) uscite += (d.importoPrevisto - d.importoPagato);
+            });
+        }
+        return { month: new Date(today.getFullYear(), i).toLocaleString('it-IT', { month: 'short' }), entrate, uscite };
+    });
     
-    // --- CURRENT MONTH CALCULATION ---
-    const inizioMeseCorrente = startOfMonth(today);
-    const fineMeseCorrente = endOfMonth(today);
+    // --- MONTHLY SUMMARY TABLE ---
+    const yearForSummary = today.getFullYear();
+    let openingBalance = movements
+        .filter(m => parseDate(m.data).getFullYear() < yearForSummary)
+        .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
 
-    const entrateMese = previsioniEntrate
-      .filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: inizioMeseCorrente, end: fineMeseCorrente }))
-      .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
+    const summaryData = Array.from({ length: 12 }, (_, i) => {
+        const monthStart = startOfMonth(new Date(yearForSummary, i));
+        const isPastMonth = monthStart < startOfMonth(today);
+        let monthInflows = 0;
+        let monthOutflows = 0;
 
-    const scadenzeMese = scadenze
-      .filter(s => isWithinInterval(startOfDay(parseDate(s.dataScadenza)), { start: inizioMeseCorrente, end: fineMeseCorrente }) && s.stato !== 'Pagato')
-      .reduce((acc, s) => acc + (s.importoPrevisto || 0) - (s.importoPagato || 0), 0);
-      
-    const previsioniUsciteMese = previsioniUscite
-      .filter(p => isWithinInterval(parseDate(p.dataScadenza), { start: inizioMeseCorrente, end: fineMeseCorrente }) && p.stato !== 'Pagato')
-      .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
+        if (isPastMonth) {
+            movements.forEach(mov => {
+                const movDate = parseDate(mov.data);
+                if (movDate.getFullYear() === yearForSummary && movDate.getMonth() === i) {
+                    monthInflows += mov.entrata || 0;
+                    monthOutflows += mov.uscita || 0;
+                }
+            });
+        } else {
+            incomeForecasts.forEach(f => { if (parseDate(f.dataPrevista).getFullYear() === yearForSummary && parseDate(f.dataPrevista).getMonth() === i) monthInflows += (f.importoLordo || 0) * f.probabilita; });
+            expenseForecasts.forEach(f => { if (parseDate(f.dataScadenza).getFullYear() === yearForSummary && parseDate(f.dataScadenza).getMonth() === i) monthOutflows += (f.importoLordo || 0) * f.probabilita; });
+            deadlines.forEach(d => { if (d.stato !== 'Pagato' && parseDate(d.dataScadenza).getFullYear() === yearForSummary && parseDate(d.dataScadenza).getMonth() === i) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        }
+        
+        const closingBalance = openingBalance + monthInflows - monthOutflows;
+        const result = { month: new Date(yearForSummary, i).toLocaleString('it-IT', { month: 'long' }), starting: openingBalance, inflows: monthInflows, outflows: monthOutflows, closing: closingBalance };
+        openingBalance = closingBalance;
+        return result;
+    });
 
-    const usciteMese = scadenzeMese + previsioniUsciteMese;
+    // --- CASHFLOW CHART ---
+    let cashflowBalance = movements.filter(m => parseDate(m.data) < startOfMonth(today)).reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    const cashflowProjectionData = Array.from({ length: 12 }, (_, i) => {
+        const monthDate = addMonths(today, i);
+        const monthStart = startOfMonth(monthDate);
+        const monthEnd = endOfMonth(monthDate);
+        let monthInflows = 0;
+        let monthOutflows = 0;
 
-    const cmKpi = [
-        { title: 'Entrate Previste (Mese)', value: formatCurrency(entrateMese) },
-        { title: 'Uscite Previste (Mese)', value: formatCurrency(usciteMese) },
-    ];
-    
-    const cmDeadlines = scadenze.filter(s => isWithinInterval(startOfDay(parseDate(s.dataScadenza)), { start: inizioMeseCorrente, end: fineMeseCorrente }));
-    const cmIncomes = previsioniEntrate.filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: inizioMeseCorrente, end: fineMeseCorrente }));
+        movements.forEach(m => { if (isWithinInterval(parseDate(m.data), { start: monthStart < today ? monthStart : today, end: today })) { monthInflows += m.entrata || 0; monthOutflows += m.uscita || 0; } });
+        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
+        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
+        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        
+        cashflowBalance += monthInflows - monthOutflows;
+        return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: cashflowBalance };
+    });
 
+    return { 
+        kpiData: kpiResult,
+        upcomingDeadlines: upcomingDeadlinesData,
+        overviewChartData: overviewData, 
+        monthlySummaryData: summaryData,
+        cashflowChartData: cashflowProjectionData
+    };
 
-    return { kpiData: kpiResult, currentMonthKpi: cmKpi, currentMonthDeadlines: cmDeadlines, currentMonthIncomes: cmIncomes };
   }, [selectedCompany, selectedPeriod, allMovements, allScadenze, allPrevisioniEntrate, allPrevisioniUscite]);
-
-
-  const allDataFiltered = useMemo(() => {
-    const filterByCompany = (item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany;
-    return {
-        movements: (allMovements || []).filter(filterByCompany),
-        incomeForecasts: (allPrevisioniEntrate || []).filter(filterByCompany),
-        expenseForecasts: (allPrevisioniUscite || []).filter(filterByCompany),
-        deadlines: (allScadenze || []).filter(filterByCompany),
-    }
-  }, [selectedCompany, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze]);
 
 
   if (isLoading) {
@@ -216,82 +263,19 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* --- CURRENT MONTH FOCUS --- */}
-      <Card>
-        <CardHeader>
-            <CardTitle>Focus Mese Corrente</CardTitle>
-            <CardDescription>Riepilogo e dettagli per il mese in corso.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-                {currentMonthKpi.map(kpi => (
-                    <div key={kpi.title} className="p-4 border rounded-lg">
-                        <p className="text-sm font-medium text-muted-foreground">{kpi.title}</p>
-                        <p className="text-2xl font-bold">{kpi.value}</p>
-                    </div>
-                ))}
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-                <div>
-                    <h3 className="font-semibold mb-2">Scadenze del Mese</h3>
-                    <div className="border rounded-lg max-h-60 overflow-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Stato</TableHead><TableHead className="text-right">Importo</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {currentMonthDeadlines.length > 0 ? currentMonthDeadlines.map(d => (
-                                    <TableRow key={d.id}>
-                                        <TableCell>{formatDate(d.dataScadenza)}</TableCell>
-                                        <TableCell>{d.descrizione}</TableCell>
-                                        <TableCell><Badge variant={d.stato === 'Pagato' ? 'secondary' : 'default'}>{d.stato}</Badge></TableCell>
-                                        <TableCell className="text-right">{formatCurrency(d.importoPrevisto - d.importoPagato)}</TableCell>
-                                    </TableRow>
-                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24">Nessuna scadenza questo mese.</TableCell></TableRow>}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
-                 <div>
-                    <h3 className="font-semibold mb-2">Incassi Previsti del Mese</h3>
-                     <div className="border rounded-lg max-h-60 overflow-auto">
-                        <Table>
-                             <TableHeader>
-                                <TableRow>
-                                    <TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Stato</TableHead><TableHead className="text-right">Importo</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {currentMonthIncomes.length > 0 ? currentMonthIncomes.map(i => (
-                                    <TableRow key={i.id}>
-                                        <TableCell>{formatDate(i.dataPrevista)}</TableCell>
-                                        <TableCell>{i.descrizione}</TableCell>
-                                        <TableCell><Badge variant={i.stato === 'Incassato' ? 'secondary' : 'default'}>{i.stato}</Badge></TableCell>
-                                        <TableCell className="text-right">{formatCurrency(i.importoLordo)}</TableCell>
-                                    </TableRow>
-                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24">Nessun incasso previsto questo mese.</TableCell></TableRow>}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
-            </div>
-        </CardContent>
-      </Card>
-
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-3">
-          <OverviewChart data={allDataFiltered} />
+        <div className="lg:col-span-2">
+          <OverviewChart data={overviewChartData} />
+        </div>
+        <div className="lg:col-span-1">
+          <UpcomingDeadlines deadlines={upcomingDeadlines} />
         </div>
       </div>
        <div className="grid grid-cols-1 gap-6">
-         <MonthlySummaryTable allData={allDataFiltered} isLoading={isLoading} />
+         <MonthlySummaryTable data={monthlySummaryData} isLoading={isLoading} />
       </div>
        <div className="grid grid-cols-1 gap-6">
-         <CashflowChart data={allDataFiltered} />
+         <CashflowChart data={cashflowChartData} />
       </div>
     </div>
   );

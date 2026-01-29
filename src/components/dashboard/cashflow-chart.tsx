@@ -1,13 +1,10 @@
 // src/components/dashboard/cashflow-chart.tsx
 "use client";
 
-import { useMemo } from 'react';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita, Scadenza } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
-import { addMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 
 const chartConfig = {
   saldo: {
@@ -18,91 +15,13 @@ const chartConfig = {
 
 interface CashflowChartProps {
   data: {
-    movements: Movimento[];
-    incomeForecasts: PrevisioneEntrata[];
-    expenseForecasts: PrevisioneUscita[];
-    deadlines: Scadenza[];
-  };
+    month: string;
+    saldo: number;
+  }[];
 }
 
-export function CashflowChart({ data }: CashflowChartProps) {
-  const chartData = useMemo(() => {
-    const { movements, incomeForecasts, expenseForecasts, deadlines } = data;
-    const today = new Date();
-    
-    // Calculate starting balance from all historical movements before this month
-    const startOfCurrentMonth = startOfMonth(today);
-    let saldo = movements
-      .filter(m => new Date(m.data) < startOfCurrentMonth)
-      .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
-      
-
-    const monthsData = Array.from({ length: 12 }, (_, i) => {
-        const targetMonthDate = addMonths(startOfCurrentMonth, i);
-        const monthStart = startOfMonth(targetMonthDate);
-        const monthEnd = endOfMonth(targetMonthDate);
-        const monthName = new Date(monthStart).toLocaleString('it-IT', { month: 'short' });
-
-        let inflows = 0;
-        let outflows = 0;
-        
-        // Use historical data for the current month up to today
-        if (i === 0) {
-            movements.forEach(mov => {
-                const movDate = new Date(mov.data);
-                if (isWithinInterval(movDate, { start: monthStart, end: today })) {
-                    inflows += mov.entrata || 0;
-                    outflows += mov.uscita || 0;
-                }
-            });
-        }
-        
-        // Add forecasts for the future part of the current month and all future months
-        incomeForecasts.forEach(f => {
-            const forecastDate = new Date(f.dataPrevista);
-             if (isWithinInterval(forecastDate, { start: (i === 0 ? today : monthStart), end: monthEnd })) {
-                inflows += f.importoLordo * f.probabilita;
-            }
-        });
-        
-        expenseForecasts.forEach(f => {
-            const forecastDate = new Date(f.dataScadenza);
-             if (isWithinInterval(forecastDate, { start: (i === 0 ? today : monthStart), end: monthEnd })) {
-                outflows += f.importoLordo * f.probabilita;
-            }
-        });
-        
-        deadlines.forEach(s => {
-            const deadlineDate = new Date(s.dataScadenza);
-            if (s.stato !== 'Pagato' && isWithinInterval(deadlineDate, { start: (i === 0 ? today : monthStart), end: monthEnd })) {
-                outflows += (s.importoPrevisto - (s.importoPagato || 0));
-            }
-        })
-
-        // For past months, use actual movements instead of forecasts
-        if (targetMonthDate < startOfCurrentMonth) {
-            inflows = 0;
-            outflows = 0;
-            movements.forEach(mov => {
-                const movDate = new Date(mov.data);
-                if (isWithinInterval(movDate, { start: monthStart, end: monthEnd })) {
-                    inflows += mov.entrata || 0;
-                    outflows += mov.uscita || 0;
-                }
-            });
-        }
-
-
-        saldo = saldo + inflows - outflows;
-        return {
-            month: monthName,
-            saldo: saldo
-        }
-    });
-
-    return monthsData;
-  }, [data]);
-
+export function CashflowChart({ data: chartData }: CashflowChartProps) {
+  
   return (
     <Card>
       <CardHeader>
