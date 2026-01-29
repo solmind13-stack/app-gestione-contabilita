@@ -98,8 +98,8 @@ export function ForecastComparison({
             // --- CONSUNTIVO (ACTUALS) ---
             // The single source of truth for actuals are the movements.
             movements.forEach(mov => {
-                const movDate = new Date(mov.data);
-                if (movDate.getFullYear() === year && movDate.getMonth() === monthIndex) {
+                const [movYear, movMonth] = mov.data.split('-').map(Number);
+                if (movYear === year && (movMonth - 1) === monthIndex) {
                     if (company === 'Tutte' || mov.societa === company) {
                         const income = mov.entrata || 0;
                         const expense = mov.uscita || 0;
@@ -114,8 +114,8 @@ export function ForecastComparison({
             // --- PREVISTO (FORECASTS) ---
             // Income forecasts
             incomeForecasts.forEach(forecast => {
-                const forecastDate = new Date(forecast.dataPrevista);
-                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
+                const [forecastYear, forecastMonth] = forecast.dataPrevista.split('-').map(Number);
+                if (forecastYear === year && (forecastMonth - 1) === monthIndex) {
                     if (company === 'Tutte' || forecast.societa === company) {
                          // Only count if not already realized
                         if (forecast.stato !== 'Incassato') {
@@ -131,8 +131,8 @@ export function ForecastComparison({
 
             // Expense forecasts
             expenseForecasts.forEach(forecast => {
-                const forecastDate = new Date(forecast.dataScadenza);
-                if (forecastDate.getFullYear() === year && forecastDate.getMonth() === monthIndex) {
+                const [forecastYear, forecastMonth] = forecast.dataScadenza.split('-').map(Number);
+                if (forecastYear === year && (forecastMonth - 1) === monthIndex) {
                     if (company === 'Tutte' || forecast.societa === company) {
                         // Only count if not already paid
                          if (forecast.stato !== 'Pagato') {
@@ -148,8 +148,8 @@ export function ForecastComparison({
             
             // Unpaid/partial deadlines
             (deadlines || []).forEach(scad => {
-                 const scadenzaDate = new Date(scad.dataScadenza);
-                 if (scadenzaDate.getFullYear() === year && scadenzaDate.getMonth() === monthIndex) {
+                 const [scadenzaYear, scadenzaMonth] = scad.dataScadenza.split('-').map(Number);
+                 if (scadenzaYear === year && (scadenzaMonth - 1) === monthIndex) {
                     if (scad.stato !== 'Pagato') {
                          if (company === 'Tutte' || scad.societa === company) {
                             const remainingAmount = (scad.importoPrevisto - scad.importoPagato);
