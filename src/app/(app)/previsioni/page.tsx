@@ -1,7 +1,7 @@
 // src/app/(app)/previsioni/page.tsx
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -227,7 +227,7 @@ export default function PrevisioniPage() {
             const monthOutflows = month.usciteConsuntivo + month.uscitePrevisto;
             const closingBalance = openingBalance + monthInflows - monthOutflows;
             const result = {
-                month: new Date(mainYear, mainYearCalculatedData.monthlyData.indexOf(month)).toLocaleString('it-IT', { month: 'long' }),
+                month: new Date(mainYear, (mainYearCalculatedData?.monthlyData || []).indexOf(month)).toLocaleString('it-IT', { month: 'long' }),
                 starting: openingBalance,
                 inflows: monthInflows,
                 outflows: monthOutflows,
