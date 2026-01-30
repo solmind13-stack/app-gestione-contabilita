@@ -42,7 +42,7 @@ export default function PrevisioniPage() {
   const [comparisonYear, setComparisonYear] = useState<number | null>(availableYears.includes(currentYear - 1) ? currentYear - 1 : null);
 
   useEffect(() => {
-    if (user?.role === 'company' || user.role === 'company-editor') {
+    if (user?.role === 'company' || user?.role === 'company-editor') {
       setSelectedCompany(user.company!);
     }
   }, [user]);
@@ -83,14 +83,17 @@ export default function PrevisioniPage() {
     cashflowDetailData,
   } = useMemo(() => {
     const getYearData = (year: number | null) => {
-        if (year === null) return null;
+        if (year === null) return {
+            incomeConsuntivo: 0, expenseConsuntivo: 0, incomePrevisto: 0, expensePrevisto: 0,
+            monthlyData: Array(12).fill({}), categoryIncome: {}, categoryExpense: {}
+        };
 
         const yearMovements = (allMovements || []).filter(filterByCompany).filter(mov => mov.anno === year);
         const yearIncomeForecasts = (allPrevisioniEntrate || []).filter(filterByCompany).filter(f => f.anno === year);
         const yearExpenseForecasts = (allPrevisioniUscite || []).filter(filterByCompany).filter(f => f.anno === year);
         const yearDeadlines = (allScadenze || []).filter(filterByCompany).filter(d => d.anno === year);
 
-        // --- CONSUNTIVO (ACTUALS) ---
+        // --- CONSUNTIVO (ACTUALS) from MOVIMENTI ---
         const incomeConsuntivo = yearMovements.reduce((acc, mov) => acc + (mov.entrata || 0), 0);
         const expenseConsuntivo = yearMovements.reduce((acc, mov) => acc + (mov.uscita || 0), 0);
 
@@ -110,10 +113,11 @@ export default function PrevisioniPage() {
 
         // --- MONTHLY DATA ---
         const monthlyData = Array.from({ length: 12 }, (_, i) => {
-            const isPastMonth = new Date(year, i) < startOfMonth(new Date());
+            const isPastMonth = new Date(year, i, 1) < startOfMonth(new Date());
             
             let entrateConsuntivo = 0;
             let usciteConsuntivo = 0;
+            // For past months, consuntivo is from movements
             if (isPastMonth || year < new Date().getFullYear()) {
                  entrateConsuntivo = yearMovements
                     .filter(m => parseDate(m.data).getMonth() === i)
@@ -123,7 +127,8 @@ export default function PrevisioniPage() {
                     .filter(m => parseDate(m.data).getMonth() === i)
                     .reduce((acc, m) => acc + (m.uscita || 0), 0);
             }
-
+            
+            // Previsto is always calculated from forecasts and deadlines for future cashflow
             const entratePrevisto = yearIncomeForecasts
                 .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && parseDate(f.dataPrevista).getMonth() === i)
                 .reduce((acc, f) => acc + ((f.importoLordo || 0) * f.probabilita), 0);
@@ -170,17 +175,17 @@ export default function PrevisioniPage() {
 
     // --- Data for KPI Cards ---
     const totals = {
-        [`entrateConsuntivo${mainYear}`]: mainYearCalculatedData?.incomeConsuntivo || 0,
-        [`usciteConsuntivo${mainYear}`]: mainYearCalculatedData?.expenseConsuntivo || 0,
-        [`entratePrevisto${mainYear}`]: mainYearCalculatedData?.incomePrevisto || 0,
-        [`uscitePrevisto${mainYear}`]: mainYearCalculatedData?.expensePrevisto || 0,
-        [`entrateConsuntivo${comparisonYear}`]: comparisonYearCalculatedData?.incomeConsuntivo || 0,
-        [`usciteConsuntivo${comparisonYear}`]: comparisonYearCalculatedData?.expenseConsuntivo || 0,
+        [`entrateConsuntivo${mainYear}`]: mainYearCalculatedData.incomeConsuntivo,
+        [`usciteConsuntivo${mainYear}`]: mainYearCalculatedData.expenseConsuntivo,
+        [`entratePrevisto${mainYear}`]: mainYearCalculatedData.incomePrevisto,
+        [`uscitePrevisto${mainYear}`]: mainYearCalculatedData.expensePrevisto,
+        [`entrateConsuntivo${comparisonYear}`]: comparisonYearCalculatedData.incomeConsuntivo,
+        [`usciteConsuntivo${comparisonYear}`]: comparisonYearCalculatedData.expenseConsuntivo,
     };
     
     // --- Data for Monthly Bar Chart ---
-    const monthlyComparisonData = mainYearCalculatedData?.monthlyData.map((mainMonth, i) => {
-      const compMonth = comparisonYearCalculatedData?.monthlyData[i];
+    const monthlyComparisonData = mainYearCalculatedData.monthlyData.map((mainMonth, i) => {
+      const compMonth = comparisonYearCalculatedData.monthlyData[i];
       return {
         month: mainMonth.month,
         [`entrate${mainYear}`]: mainMonth.entrateConsuntivo,
@@ -189,28 +194,28 @@ export default function PrevisioniPage() {
         [`uscite${comparisonYear}`]: compMonth?.usciteConsuntivo || 0,
         ...mainMonth
       }
-    }) || [];
+    });
 
     // --- Data for Category Tables and Pie Charts ---
     const allIncomeCategories = new Set([
-        ...Object.keys(mainYearCalculatedData?.categoryIncome || {}), 
-        ...Object.keys(comparisonYearCalculatedData?.categoryIncome || {})
+        ...Object.keys(mainYearCalculatedData.categoryIncome || {}), 
+        ...Object.keys(comparisonYearCalculatedData.categoryIncome || {})
     ]);
     const allExpenseCategories = new Set([
-        ...Object.keys(mainYearCalculatedData?.categoryExpense || {}), 
-        ...Object.keys(comparisonYearCalculatedData?.categoryExpense || {})
+        ...Object.keys(mainYearCalculatedData.categoryExpense || {}), 
+        ...Object.keys(comparisonYearCalculatedData.categoryExpense || {})
     ]);
 
     const categoryComparisonData = {
         income: Array.from(allIncomeCategories).map(cat => ({
             category: cat,
-            totalMain: mainYearCalculatedData?.categoryIncome[cat] || 0,
-            totalComparison: comparisonYearCalculatedData?.categoryIncome[cat] || 0,
+            totalMain: mainYearCalculatedData.categoryIncome[cat] || 0,
+            totalComparison: comparisonYearCalculatedData.categoryIncome[cat] || 0,
         })).sort((a,b) => b.totalMain - a.totalMain),
         expense: Array.from(allExpenseCategories).map(cat => ({
             category: cat,
-            totalMain: mainYearCalculatedData?.categoryExpense[cat] || 0,
-            totalComparison: comparisonYearCalculatedData?.categoryExpense[cat] || 0,
+            totalMain: mainYearCalculatedData.categoryExpense[cat] || 0,
+            totalComparison: comparisonYearCalculatedData.categoryExpense[cat] || 0,
         })).sort((a,b) => b.totalMain - a.totalMain),
     };
     
@@ -221,12 +226,12 @@ export default function PrevisioniPage() {
             .filter(m => (m.anno < mainYear))
             .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
         
-        return (mainYearCalculatedData?.monthlyData || []).map(month => {
+        return (mainYearCalculatedData.monthlyData || []).map(month => {
             const monthInflows = month.entrateConsuntivo + month.entratePrevisto;
             const monthOutflows = month.usciteConsuntivo + month.uscitePrevisto;
             const closingBalance = openingBalance + monthInflows - monthOutflows;
             const result = {
-                month: new Date(mainYear, (mainYearCalculatedData?.monthlyData || []).indexOf(month)).toLocaleString('it-IT', { month: 'long' }),
+                month: new Date(mainYear, (mainYearCalculatedData.monthlyData).indexOf(month)).toLocaleString('it-IT', { month: 'long' }),
                 starting: openingBalance,
                 inflows: monthInflows,
                 outflows: monthOutflows,
@@ -248,6 +253,28 @@ export default function PrevisioniPage() {
         deadlines: (allScadenze || []).filter(filterByCompany),
     }
   }, [allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, filterByCompany]);
+
+  const combinedExpenseData = useMemo(() => {
+    const fromForecasts = (allPrevisioniUscite || []).filter(filterByCompany).map(f => ({ ...f, type: 'previsione' as const }));
+    
+    const fromDeadlines = (allScadenze || [])
+        .filter(filterByCompany)
+        .filter(s => s.stato !== 'Pagato')
+        .map(s => ({
+            id: s.id,
+            type: 'scadenza' as const,
+            societa: s.societa,
+            anno: s.anno,
+            descrizione: s.descrizione,
+            dataScadenza: s.dataScadenza,
+            importoLordo: s.importoPrevisto - s.importoPagato,
+            probabilita: 1.0, 
+            stato: s.stato,
+            categoria: s.categoria
+        }));
+
+    return [...fromForecasts, ...fromDeadlines];
+  }, [allPrevisioniUscite, allScadenze, filterByCompany]);
   
   // CRUD Handlers
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
@@ -329,29 +356,6 @@ export default function PrevisioniPage() {
         console.error(e);
     }
   };
-  
-
-  const combinedExpenseData = useMemo(() => {
-    const fromForecasts = (allPrevisioniUscite || []).filter(filterByCompany).map(f => ({ ...f, type: 'previsione' as const }));
-    
-    const fromDeadlines = (allScadenze || [])
-        .filter(filterByCompany)
-        .filter(s => s.stato !== 'Pagato')
-        .map(s => ({
-            id: s.id,
-            type: 'scadenza' as const,
-            societa: s.societa,
-            anno: s.anno,
-            descrizione: s.descrizione,
-            dataScadenza: s.dataScadenza,
-            importoLordo: s.importoPrevisto - s.importoPagato,
-            probabilita: 1.0, 
-            stato: s.stato,
-            categoria: s.categoria
-        }));
-
-    return [...fromForecasts, ...fromDeadlines];
-  }, [allPrevisioniUscite, allScadenze, filterByCompany]);
 
   return (
     <div className="space-y-6">

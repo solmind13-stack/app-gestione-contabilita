@@ -8,9 +8,6 @@ import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { CashflowChart } from '../dashboard/cashflow-chart';
-import { isWithinInterval, startOfMonth, addMonths, endOfMonth, parseISO } from 'date-fns';
-import { parseDate } from '@/lib/utils';
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -73,45 +70,10 @@ export function ForecastComparison({
   totals,
   monthlyComparisonData,
   categoryComparisonData,
-  allData,
 }: ForecastComparisonProps) {
   
   const pieIncomeData = useMemo(() => categoryComparisonData.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryComparisonData.income]);
   const pieExpenseData = useMemo(() => categoryComparisonData.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryComparisonData.expense]);
-
-  const cashflowChartData = useMemo(() => {
-      if (!allData || !allData.movements) return [];
-      const today = new Date();
-      const liquiditaAttuale = (allData.movements || [])
-        .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
-
-      let runningBalance = liquiditaAttuale;
-      return Array.from({ length: 12 }, (_, i) => {
-          const monthDate = addMonths(today, i);
-          const monthStart = startOfMonth(monthDate);
-          const monthEnd = endOfMonth(monthDate);
-          const isCurrentMonth = monthStart.getFullYear() === today.getFullYear() && monthStart.getMonth() === today.getMonth();
-
-          const filterDateRange = { start: isCurrentMonth ? today : monthStart, end: monthEnd };
-
-          const monthInflows = (allData.incomeForecasts || [])
-              .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataPrevista), filterDateRange))
-              .reduce((acc, f) => acc + (f.importoLordo * f.probabilita), 0);
-          
-          const monthOutflows = 
-              (allData.expenseForecasts || [])
-                  .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataScadenza), filterDateRange))
-                  .reduce((acc, f) => acc + (f.importoLordo * f.probabilita), 0)
-              +
-              (allData.deadlines || [])
-                  .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato' && isWithinInterval(parseDate(d.dataScadenza), filterDateRange))
-                  .reduce((acc, d) => acc + (d.importoPrevisto - (d.importoPagato || 0)), 0);
-          
-          runningBalance += monthInflows - monthOutflows;
-          return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: runningBalance };
-      });
-  }, [allData]);
-
 
   return (
     <div className="space-y-6">
@@ -372,10 +334,6 @@ export function ForecastComparison({
             </Card>
         </div>
       )}
-
-       <div className="grid grid-cols-1 gap-6">
-         <CashflowChart data={cashflowChartData} />
-      </div>
     </div>
   );
 }
