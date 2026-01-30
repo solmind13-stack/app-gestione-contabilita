@@ -56,7 +56,7 @@ Analyze the movements for {{company}} and identify patterns for the following It
 For each distinct recurring tax payment you identify:
 - Determine the recurrence (Mensile, Trimestrale, Semestrale, Annuale).
 - Calculate the next legal due date based on the last payment's date and recurrence.
-- Create a clean `descrizione`, `tipoTassa`, and `periodoRiferimento` (e.g., "Pagamento IVA 2° Trimestre 2025", tipo: "IVA", periodo: "Q2 2025").
+- Create a clean \`descrizione\`, \`tipoTassa\`, and \`periodoRiferimento\` (e.g., "Pagamento IVA 2° Trimestre 2025", tipo: "IVA", periodo: "Q2 2025").
 - Check if a similar deadline (same description pattern and recurrence) already exists in 'existingDeadlines'. **If it exists, DO NOT include it in your output.**
 - Use the 'Tasse' category and the most appropriate subcategory.
 
