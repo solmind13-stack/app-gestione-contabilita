@@ -80,6 +80,7 @@ export function ForecastComparison({
   const pieExpenseData = useMemo(() => categoryComparisonData.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryComparisonData.expense]);
 
   const cashflowChartData = useMemo(() => {
+      if (!allData || !allData.movements) return [];
       const today = new Date();
       const liquiditaAttuale = (allData.movements || [])
         .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);

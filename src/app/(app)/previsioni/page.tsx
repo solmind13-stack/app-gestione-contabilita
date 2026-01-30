@@ -71,7 +71,7 @@ export default function PrevisioniPage() {
   
   const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze || isLoadingCompanies;
 
-  const filterByCompany = (item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany;
+  const filterByCompany = useCallback((item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany, [selectedCompany]);
 
   const {
     totals,
@@ -239,9 +239,9 @@ export default function PrevisioniPage() {
     })();
     
     return { totals, monthlyComparisonData, categoryComparisonData, cashflowDetailData };
-  }, [mainYear, comparisonYear, selectedCompany, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze]);
+  }, [mainYear, comparisonYear, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, filterByCompany]);
 
-  const allDataForAI = useMemo(() => {
+  const allData = useMemo(() => {
     return {
         movements: (allMovements || []).filter(filterByCompany),
         incomeForecasts: (allPrevisioniEntrate || []).filter(filterByCompany),
@@ -352,7 +352,7 @@ export default function PrevisioniPage() {
         }));
 
     return [...fromForecasts, ...fromDeadlines];
-  }, [allPrevisioniUscite, allScadenze, selectedCompany, filterByCompany]);
+  }, [allPrevisioniUscite, allScadenze, filterByCompany]);
 
   return (
     <div className="space-y-6">
@@ -414,6 +414,7 @@ export default function PrevisioniPage() {
             totals={totals}
             monthlyComparisonData={monthlyComparisonData}
             categoryComparisonData={categoryComparisonData}
+            allData={allData}
           />
         </TabsContent>
         <TabsContent value="cashflow">
@@ -450,7 +451,7 @@ export default function PrevisioniPage() {
         <TabsContent value="agente-ai">
             <AiCashflowAgent 
                 company={selectedCompany as 'LNC' | 'STG' | 'Tutte'}
-                allData={allDataForAI}
+                allData={allData}
             />
         </TabsContent>
       </Tabs>
