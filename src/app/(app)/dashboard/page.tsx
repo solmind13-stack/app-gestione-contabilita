@@ -38,14 +38,12 @@ export default function DashboardPage() {
   const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('monthly');
 
-  // Firestore Queries
   const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
   const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
   const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
   const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
 
-  // Data fetching hooks
   const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
   const { data: allScadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
   const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
@@ -76,28 +74,14 @@ export default function DashboardPage() {
     const incomeForecasts = (allPrevisioniEntrate || []).filter(filterByCompany);
     const expenseForecasts = (allPrevisioniUscite || []).filter(filterByCompany);
 
-    // --- KPI CALCULATION (for selected period) ---
     const liquiditaAttuale = movements.reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
     
     let kpiStartDate, kpiEndDate;
     switch (selectedPeriod) {
-        case 'quarterly':
-            kpiStartDate = startOfQuarter(today);
-            kpiEndDate = endOfQuarter(today);
-            break;
-        case 'semiannual':
-            kpiStartDate = today.getMonth() < 6 ? startOfYear(today) : startOfMonth(addMonths(startOfYear(today), 6));
-            kpiEndDate = today.getMonth() < 6 ? endOfMonth(addMonths(startOfYear(today), 5)) : endOfYear(today);
-            break;
-        case 'annual':
-            kpiStartDate = startOfYear(today);
-            kpiEndDate = endOfYear(today);
-            break;
-        case 'monthly':
-        default:
-            kpiStartDate = startOfMonth(today);
-            kpiEndDate = endOfMonth(today);
-            break;
+        case 'quarterly': kpiStartDate = startOfQuarter(today); kpiEndDate = endOfQuarter(today); break;
+        case 'semiannual': kpiStartDate = today.getMonth() < 6 ? startOfYear(today) : startOfMonth(addMonths(startOfYear(today), 6)); kpiEndDate = today.getMonth() < 6 ? endOfMonth(addMonths(startOfYear(today), 5)) : endOfYear(today); break;
+        case 'annual': kpiStartDate = startOfYear(today); kpiEndDate = endOfYear(today); break;
+        default: kpiStartDate = startOfMonth(today); kpiEndDate = endOfMonth(today); break;
     }
     
     const scadenzeNelPeriodo = deadlines.filter(s => isWithinInterval(parseDate(s.dataScadenza), { start: kpiStartDate, end: kpiEndDate }) && s.stato !== 'Pagato');
@@ -111,7 +95,7 @@ export default function DashboardPage() {
       .filter(p => isWithinInterval(parseDate(p.dataScadenza), { start: kpiStartDate, end: kpiEndDate }))
       .reduce((acc, p) => acc + ((p.importoLordo || 0) * p.probabilita), 0);
 
-    const cashFlowPrevisto = liquiditaAttuale + entratePreviste - (importoScadenze + uscitePreviste);
+    const cashFlowPrevisto = entratePreviste - (importoScadenze + uscitePreviste);
 
     const kpiResult: Kpi[] = [
         { title: 'Liquidità Attuale', value: formatCurrency(liquiditaAttuale), icon: 'Wallet', color: 'bg-green-100 dark:bg-green-900', textColor: 'text-green-800 dark:text-green-200' },
@@ -120,17 +104,17 @@ export default function DashboardPage() {
         { title: `Cash Flow Previsto (${selectedPeriod})`, value: formatCurrency(cashFlowPrevisto), icon: 'TrendingUp', color: 'bg-indigo-100 dark:bg-indigo-900', textColor: 'text-indigo-800 dark:text-indigo-200' }
     ];
 
-    // --- UPCOMING DEADLINES ---
     const sevenDaysFromNow = addMonths(today, 3);
     const upcomingDeadlinesData = deadlines
         .filter(d => d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: startOfDay(today), end: sevenDaysFromNow }))
         .sort((a,b) => parseDate(a.dataScadenza).getTime() - parseDate(b.dataScadenza).getTime())
         .slice(0, 5);
 
-    // --- OVERVIEW CHART DATA (Current Year) ---
     const overviewData = Array.from({ length: 12 }, (_, i) => {
         const monthStart = startOfMonth(new Date(today.getFullYear(), i));
+        const monthEnd = endOfMonth(monthStart);
         const isPastMonth = monthStart < startOfMonth(today);
+        
         let entrate = 0;
         let uscite = 0;
 
@@ -155,7 +139,6 @@ export default function DashboardPage() {
         return { month: new Date(today.getFullYear(), i).toLocaleString('it-IT', { month: 'short' }), entrate, uscite };
     });
     
-    // --- MONTHLY SUMMARY TABLE ---
     const yearForSummary = today.getFullYear();
     let openingBalance = movements
         .filter(m => m.anno < yearForSummary)
@@ -164,6 +147,7 @@ export default function DashboardPage() {
     const summaryData = Array.from({ length: 12 }, (_, i) => {
         const monthStart = startOfMonth(new Date(yearForSummary, i));
         const isPastMonth = monthStart < startOfMonth(today);
+        
         let monthInflows = 0;
         let monthOutflows = 0;
 
@@ -186,22 +170,18 @@ export default function DashboardPage() {
         return result;
     });
 
-    // --- CASHFLOW CHART ---
-    let cashflowBalance = movements.filter(m => m.anno < today.getFullYear() || (m.anno === today.getFullYear() && parseDate(m.data) < startOfMonth(today)))
-                                          .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    let cashflowBalance = liquiditaAttuale;
     const cashflowProjectionData = Array.from({ length: 12 }, (_, i) => {
         const monthDate = addMonths(today, i);
         const monthStart = startOfMonth(monthDate);
         const monthEnd = endOfMonth(monthDate);
         let monthInflows = 0;
         let monthOutflows = 0;
-        
         const isCurrentMonth = monthStart.getFullYear() === today.getFullYear() && monthStart.getMonth() === today.getMonth();
 
-        // For current month, add past movements
         if (isCurrentMonth) {
              movements.forEach(m => { 
-                if (isWithinInterval(parseDate(m.data), { start: monthStart, end: today })) { 
+                if (isWithinInterval(parseDate(m.data), { start: today, end: monthEnd })) { 
                     monthInflows += m.entrata || 0; 
                     monthOutflows += m.uscita || 0; 
                 } 
@@ -212,16 +192,41 @@ export default function DashboardPage() {
         expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
         deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
         
-        cashflowBalance += monthInflows - monthOutflows;
+        if (i > 0) { // For subsequent months, cashflowBalance is already the opening balance
+            cashflowBalance += monthInflows - monthOutflows;
+        } else { // For the first month, the change is from today's balance
+             cashflowBalance = liquiditaAttuale + monthInflows - monthOutflows;
+        }
+
         return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: cashflowBalance };
     });
+    
+    // Recalculate cashflow balances sequentially
+    let runningBalance = liquiditaAttuale;
+    const finalCashflowProjection = Array.from({ length: 12 }, (_, i) => {
+        const monthDate = addMonths(today, i);
+        const monthStart = startOfMonth(monthDate);
+        const monthEnd = endOfMonth(monthDate);
+        const isCurrentMonth = monthStart.getFullYear() === today.getFullYear() && monthStart.getMonth() === today.getMonth();
+
+        let monthInflows = 0;
+        let monthOutflows = 0;
+
+        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
+        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
+        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        
+        runningBalance += monthInflows - monthOutflows;
+        return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: runningBalance };
+    });
+
 
     return { 
         kpiData: kpiResult,
         upcomingDeadlines: upcomingDeadlinesData,
         overviewChartData: overviewData, 
         monthlySummaryData: summaryData,
-        cashflowChartData: cashflowProjectionData
+        cashflowChartData: finalCashflowProjection
     };
 
   }, [selectedCompany, selectedPeriod, allMovements, allScadenze, allPrevisioniEntrate, allPrevisioniUscite]);
@@ -233,7 +238,6 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-        {/* --- FILTERS --- */}
         <Card>
             <CardContent className="pt-6 flex flex-col md:flex-row gap-4 items-center justify-between">
                 <div className="flex gap-4 w-full md:w-auto">
@@ -263,7 +267,6 @@ export default function DashboardPage() {
             </CardContent>
         </Card>
 
-      {/* --- PERIOD KPI CARDS --- */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {kpiData.map((kpi) => (
           <KpiCard key={kpi.title} data={kpi} />
