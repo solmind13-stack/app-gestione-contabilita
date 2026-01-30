@@ -45,7 +45,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
-import { classifyRecurringExpense } from '@/ai/flows/classify-recurring-expense-flow';
+import { suggestFiscalDeadlines } from '@/ai/flows/suggest-fiscal-deadlines';
 
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
@@ -208,43 +208,7 @@ export default function ScadenzePage() {
         }
     };
 
-    const handleSuggestDeadlines = useCallback(async () => {
-        const normalizeDescription = (desc: string): string => {
-            if (!desc) return '';
-            return desc
-                .toLowerCase()
-                .replace(/\b(srl|spa|snc|sas|srls|s.r.l.|s.p.a)\b/g, '')
-                .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-        };
-
-        const getPeriodicity = (dates: Date[]): { recurrence: 'Mensile' | 'Trimestrale' | 'Annuale' | null, avgInterval: number } => {
-            if (dates.length < 2) return { recurrence: null, avgInterval: 0 };
-            dates.sort((a, b) => a.getTime() - b.getTime());
-            const intervals: number[] = [];
-            for (let i = 1; i < dates.length; i++) {
-                const diffTime = Math.abs(dates[i].getTime() - dates[i-1].getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                intervals.push(diffDays);
-            }
-            
-            if (intervals.length === 0) return { recurrence: null, avgInterval: 0 };
-    
-            const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    
-            const monthlyMatches = intervals.filter(d => d >= 27 && d <= 34).length;
-            if (monthlyMatches / intervals.length >= 0.5) return { recurrence: 'Mensile', avgInterval };
-            
-            const quarterlyMatches = intervals.filter(d => d >= 85 && d <= 97).length;
-            if (quarterlyMatches / intervals.length >= 0.5) return { recurrence: 'Trimestrale', avgInterval };
-    
-            const annualMatches = intervals.filter(d => d >= 350 && d <= 380).length;
-            if (annualMatches / intervals.length >= 0.5) return { recurrence: 'Annuale', avgInterval };
-    
-            return { recurrence: null, avgInterval: 0 };
-        };
-
+   const handleSuggestDeadlines = useCallback(async () => {
         if (!movimenti || movimenti.length === 0) {
             toast({ variant: 'destructive', title: 'Nessun Movimento', description: 'Non ci sono movimenti da analizzare.' });
             return;
@@ -253,96 +217,22 @@ export default function ScadenzePage() {
         setDeadlineSuggestions([]);
         
         try {
-            await new Promise(resolve => setTimeout(resolve, 50));
+            const result = await suggestFiscalDeadlines({
+                company: selectedCompany as 'LNC' | 'STG' | 'Tutte',
+                movements: JSON.stringify(movimenti),
+                existingDeadlines: JSON.stringify(scadenze || []),
+            });
 
-            const twoYearsAgo = new Date();
-            twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+            const suggestionsWithIds = result.suggestions.map((s, index) => ({
+                ...s,
+                id: `${s.descrizione}-${index}` // Simple unique ID for the session
+            }));
 
-            const outgoingMovements = (movimenti || []).filter(m => m.uscita > 0 && new Date(m.data) >= twoYearsAgo);
-            
-            const groupedByCompanyAndDesc = outgoingMovements.reduce((acc, mov) => {
-                const normalizedDesc = normalizeDescription(mov.descrizione);
-                const key = `${mov.societa}__${normalizedDesc}`;
-                if (!acc[key]) {
-                    acc[key] = [];
-                }
-                acc[key].push(mov);
-                return acc;
-            }, {} as Record<string, Movimento[]>);
-
-            const suggestionPromises: Promise<DeadlineSuggestion | null>[] = [];
-
-            for (const key in groupedByCompanyAndDesc) {
-                const group = groupedByCompanyAndDesc[key];
-                if (group.length < 2) continue;
-
-                const promise = (async (): Promise<DeadlineSuggestion | null> => {
-                    const dates = group.map(m => new Date(m.data));
-                    const amounts = group.map(m => m.uscita);
-                    
-                    const { recurrence } = getPeriodicity(dates);
-                    if (!recurrence) return null;
-
-                    const amountMean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-                    const amountStdDev = Math.sqrt(amounts.map(x => Math.pow(x - amountMean, 2)).reduce((a, b) => a + b, 0) / amounts.length);
-                    const amountVariation = amountMean > 0 ? (amountStdDev / amountMean) : 0;
-                    
-                    const isDuplicate = (scadenze || []).some(s => 
-                        s.societa === group[0].societa &&
-                        normalizeDescription(s.descrizione) === normalizeDescription(group[0].descrizione) &&
-                        s.ricorrenza === recurrence
-                    );
-                    if (isDuplicate) return null;
-
-                    try {
-                        const classification = await classifyRecurringExpense({
-                            descriptions: group.map(m => m.descrizione)
-                        });
-
-                        let confidence: 'Alta' | 'Media' | 'Bassa' = 'Bassa';
-                        if (recurrence && amountVariation < 0.1 && classification.category !== 'Da categorizzare') {
-                            confidence = 'Alta';
-                        } else if (recurrence && (amountVariation < 0.25 || classification.category !== 'Da categorizzare')) {
-                            confidence = 'Media';
-                        }
-                        
-                        const reason = `Rilevati ${group.length} pagamenti con ricorrenza ${recurrence.toLowerCase()} e importo medio di ${formatCurrency(amountMean)}. L'AI ha classificato la spesa come "${classification.commonDescription}".`;
-                        
-                        return {
-                            description: classification.commonDescription,
-                            category: classification.category,
-                            subcategory: classification.subcategory,
-                            recurrence,
-                            amount: amountMean,
-                            confidence,
-                            reason,
-                            movements: group.map(m => ({ id: m.id, data: m.data, importo: m.uscita })),
-                            originalMovementDescription: key,
-                        };
-
-                    } catch(aiError: any) {
-                        console.error(`AI classification failed for group ${key}:`, aiError);
-                        toast({
-                            variant: 'destructive',
-                            title: `Errore AI per un gruppo`,
-                            description: aiError.message || `Impossibile classificare il gruppo: ${key}`,
-                        });
-                        return null;
-                    }
-                })();
-                suggestionPromises.push(promise);
-            }
-            
-            const resolvedSuggestions = (await Promise.all(suggestionPromises)).filter((s): s is DeadlineSuggestion => s !== null);
-
-            if (resolvedSuggestions.length === 0) {
+            if (suggestionsWithIds.length === 0) {
                 toast({ title: 'Nessun Suggerimento', description: 'L\'analisi non ha trovato nuove scadenze ricorrenti.' });
             } else {
-                setDeadlineSuggestions(resolvedSuggestions.sort((a, b) => {
-                    const confOrder = { 'Alta': 0, 'Media': 1, 'Bassa': 2 };
-                    return confOrder[a.confidence] - confOrder[b.confidence];
-                }));
-                setSelectedSuggestions(resolvedSuggestions.filter(s => s.confidence === 'Alta'));
+                setDeadlineSuggestions(suggestionsWithIds);
+                setSelectedSuggestions(suggestionsWithIds); // Pre-select all suggestions
                 setIsSuggestionDialogOpen(true);
             }
 
@@ -356,7 +246,7 @@ export default function ScadenzePage() {
         } finally {
             setIsSuggestionLoading(false);
         }
-    }, [movimenti, scadenze, toast]);
+    }, [movimenti, scadenze, toast, selectedCompany]);
 
 
     const handleCreateSuggestedDeadlines = async () => {
@@ -367,35 +257,28 @@ export default function ScadenzePage() {
             selectedSuggestions.forEach(suggestion => {
                 const newDeadlineRef = doc(collection(firestore, 'deadlines'));
                 
-                const lastMovementDate = new Date(suggestion.movements.sort((a,b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0].data);
-                
-                let nextDueDate = new Date(lastMovementDate);
-
-                if (suggestion.recurrence === 'Mensile') nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-                else if (suggestion.recurrence === 'Trimestrale') nextDueDate.setMonth(nextDueDate.getMonth() + 3);
-                else if (suggestion.recurrence === 'Annuale') nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
-                
-                const movSocieta = movimenti?.find(m => m.id === suggestion.movements[0].id)?.societa || 'LNC';
-
                 const newDeadline: Omit<Scadenza, 'id'> = {
-                    societa: movSocieta as 'LNC' | 'STG',
-                    anno: nextDueDate.getFullYear(),
-                    dataScadenza: nextDueDate.toISOString().split('T')[0],
-                    descrizione: suggestion.description,
-                    categoria: suggestion.category,
-                    sottocategoria: suggestion.subcategory,
-                    importoPrevisto: suggestion.amount,
+                    societa: suggestion.societa,
+                    anno: new Date(suggestion.dataScadenza).getFullYear(),
+                    dataScadenza: suggestion.dataScadenza,
+                    descrizione: suggestion.descrizione,
+                    categoria: suggestion.categoria,
+                    sottocategoria: suggestion.sottocategoria,
+                    importoPrevisto: suggestion.importoPrevisto,
                     importoPagato: 0,
                     stato: 'Da pagare',
-                    ricorrenza: suggestion.recurrence,
+                    ricorrenza: suggestion.ricorrenza,
                     createdBy: user.uid,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
+                    tipoTassa: suggestion.tipoTassa,
+                    periodoRiferimento: suggestion.periodoRiferimento,
+                    source: 'ai-suggested',
                 };
                 batch.set(newDeadlineRef, newDeadline);
             });
             await batch.commit();
-            toast({ title: 'Scadenze Create', description: `${selectedSuggestions.length} nuove scadenze sono state aggiunte.` });
+            toast({ title: 'Scadenze Create', description: `${selectedSuggestions.length} nuove scadenze suggerite sono state aggiunte.` });
             setIsSuggestionDialogOpen(false);
             setDeadlineSuggestions([]);
             setSelectedSuggestions([]);
@@ -425,7 +308,7 @@ export default function ScadenzePage() {
         if (checked) {
             setSelectedSuggestions(prev => [...prev, suggestion]);
         } else {
-            setSelectedSuggestions(prev => prev.filter(s => s.originalMovementDescription !== suggestion.originalMovementDescription));
+            setSelectedSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
         }
     };
 
@@ -556,34 +439,28 @@ export default function ScadenzePage() {
                 <ScrollArea className="h-[60vh] p-1 pr-4">
                     <div className="space-y-4">
                         {deadlineSuggestions.map((suggestion) => {
-                            const isSelected = selectedSuggestions.some(s => s.originalMovementDescription === suggestion.originalMovementDescription);
+                            const isSelected = selectedSuggestions.some(s => s.id === suggestion.id);
                             
                             return (
-                                <Card key={suggestion.originalMovementDescription} className={cn("transition-all", isSelected ? "border-primary" : "")}>
+                                <Card key={suggestion.id} className={cn("transition-all", isSelected ? "border-primary" : "")}>
                                     <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
                                         <Checkbox 
-                                            id={`suggestion-${suggestion.originalMovementDescription}`}
+                                            id={`suggestion-${suggestion.id}`}
                                             checked={isSelected}
                                             onCheckedChange={(checked) => handleSelectSuggestion(suggestion, checked as boolean)}
                                             className="mt-1"
                                         />
                                         <div className="grid gap-1 w-full">
-                                            <div className="flex items-center justify-between">
-                                                <Label htmlFor={`suggestion-${suggestion.originalMovementDescription}`} className="font-bold text-base cursor-pointer">{suggestion.description}</Label>
-                                                <Badge variant={
-                                                    suggestion.confidence === 'Alta' ? 'default' : suggestion.confidence === 'Media' ? 'secondary' : 'outline'
-                                                } className={cn(
-                                                    suggestion.confidence === 'Alta' && "bg-green-600",
-                                                    suggestion.confidence === 'Media' && "bg-yellow-500 text-black",
-                                                )}>
-                                                    Confidenza: {suggestion.confidence}
-                                                </Badge>
-                                            </div>
+                                            <Label htmlFor={`suggestion-${suggestion.id}`} className="font-bold text-base cursor-pointer">{suggestion.descrizione}</Label>
                                             <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
-                                            <div className="flex gap-4 text-sm pt-2">
-                                                <span>Cat: <Badge variant="outline">{suggestion.category}</Badge></span>
-                                                <span>Ricorrenza: <Badge variant="outline">{suggestion.recurrence}</Badge></span>
-                                                <span>Importo: <Badge variant="outline">{formatCurrency(suggestion.amount)}</Badge></span>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
+                                                <span>Società: <Badge variant="secondary">{suggestion.societa}</Badge></span>
+                                                <span>Scadenza: <Badge variant="outline">{formatDate(suggestion.dataScadenza)}</Badge></span>
+                                                <span>Importo: <Badge variant="outline">{formatCurrency(suggestion.importoPrevisto)}</Badge></span>
+                                                <span>Ricorrenza: <Badge variant="outline">{suggestion.ricorrenza}</Badge></span>
+                                                <span>Tipo: <Badge variant="outline">{suggestion.tipoTassa}</Badge></span>
+                                                <span>Periodo: <Badge variant="outline">{suggestion.periodoRiferimento}</Badge></span>
+                                                <span>Cat: <Badge variant="outline">{suggestion.categoria}</Badge></span>
                                             </div>
                                         </div>
                                     </CardHeader>

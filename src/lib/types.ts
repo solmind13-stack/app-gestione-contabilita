@@ -176,16 +176,19 @@ export type RiepilogoPrevisioniUscite = {
 };
 
 export type DeadlineSuggestion = {
-    description: string;
-    category: string;
-    subcategory: string;
-    recurrence: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
-    amount: number;
-    originalMovementDescription: string;
-    confidence: 'Alta' | 'Media' | 'Bassa';
+    id: string; // Client-generated
+    societa: 'LNC' | 'STG';
+    descrizione: string;
+    importoPrevisto: number;
+    dataScadenza: string;
+    ricorrenza: 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
+    tipoTassa: string;
+    periodoRiferimento: string;
+    categoria: string;
+    sottocategoria: string;
     reason: string;
-    movements: {id: string, data: string, importo: number}[];
 };
+
 
 export type CompanyProfile = {
   id: string;
