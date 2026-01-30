@@ -24,71 +24,75 @@ interface CashflowDetailProps {
 }
 
 export function CashflowDetail({ year, company, allData, isLoading }: CashflowDetailProps) {
-    const { monthlyData, startingBalance } = useMemo(() => {
+    const { monthlyData } = useMemo(() => {
         const { movements, incomeForecasts, expenseForecasts, deadlines } = allData;
+        
+        const today = new Date();
+        const currentYear = today.getFullYear();
+
+        const companyMovements = (movements || []).filter(m => company === 'Tutte' || m.societa === company);
+        const companyIncomeForecasts = (incomeForecasts || []).filter(f => company === 'Tutte' || f.societa === company);
+        const companyExpenseForecasts = (expenseForecasts || []).filter(f => company === 'Tutte' || f.societa === company);
+        const companyDeadlines = (deadlines || []).filter(d => company === 'Tutte' || d.societa === company);
 
         // Calculate Starting Balance from all movements before the selected year
-        let initialBalance = movements
-            .filter(m => {
-                const movYear = parseDate(m.data).getFullYear();
-                return movYear < year && (company === 'Tutte' || m.societa === company)
-            })
+        let openingBalance = companyMovements
+            .filter(m => parseDate(m.data).getFullYear() < year)
             .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
         
         const data = Array.from({ length: 12 }, (_, i) => {
             const monthName = new Date(year, i).toLocaleString('it-IT', { month: 'long' });
-            let inflows = 0;
-            let outflows = 0;
-
-            const today = new Date();
-            const isPastMonth = year < today.getFullYear() || (year === today.getFullYear() && i < today.getMonth());
+            let monthInflows = 0;
+            let monthOutflows = 0;
+            
+            const monthStart = startOfMonth(new Date(year, i));
+            const monthEnd = endOfMonth(monthStart);
+            const isPastMonth = year < currentYear || (year === currentYear && i < today.getMonth());
 
             if (isPastMonth) {
                 // Use historical data from movements
-                 movements.forEach(mov => {
+                 companyMovements.forEach(mov => {
                     const movDate = parseDate(mov.data);
-                    if (movDate.getFullYear() === year && movDate.getMonth() === i && (company === 'Tutte' || mov.societa === company)) {
-                        inflows += mov.entrata || 0;
-                        outflows += mov.uscita || 0;
+                    if (isWithinInterval(movDate, {start: monthStart, end: monthEnd})) {
+                        monthInflows += mov.entrata || 0;
+                        monthOutflows += mov.uscita || 0;
                     }
                 });
             } else {
                  // Use forecast data for current and future months
-                incomeForecasts.forEach(f => {
+                companyIncomeForecasts.forEach(f => {
                     const forecastDate = parseDate(f.dataPrevista);
-                    if (forecastDate.getFullYear() === year && forecastDate.getMonth() === i && (company === 'Tutte' || f.societa === company)) {
-                        inflows += f.importoLordo * f.probabilita;
+                    if (isWithinInterval(forecastDate, {start: monthStart, end: monthEnd}) && f.stato !== 'Incassato') {
+                        monthInflows += f.importoLordo * f.probabilita;
                     }
                 });
-                expenseForecasts.forEach(f => {
+                companyExpenseForecasts.forEach(f => {
                     const forecastDate = parseDate(f.dataScadenza);
-                    if (forecastDate.getFullYear() === year && forecastDate.getMonth() === i && (company === 'Tutte' || f.societa === company)) {
-                        outflows += f.importoLordo * f.probabilita;
+                    if (isWithinInterval(forecastDate, {start: monthStart, end: monthEnd}) && f.stato !== 'Pagato') {
+                        monthOutflows += f.importoLordo * f.probabilita;
                     }
                 });
-                deadlines.forEach(scad => {
+                companyDeadlines.forEach(scad => {
                     const deadlineDate = parseDate(scad.dataScadenza);
-                    if (deadlineDate.getFullYear() === year && deadlineDate.getMonth() === i && scad.stato !== 'Pagato') {
-                        if (company === 'Tutte' || scad.societa === company) {
-                            outflows += (scad.importoPrevisto - scad.importoPagato);
-                        }
+                    if (isWithinInterval(deadlineDate, {start: monthStart, end: monthEnd}) && scad.stato !== 'Pagato') {
+                        monthOutflows += (scad.importoPrevisto - scad.importoPagato);
                     }
                 })
             }
 
-            const closingBalance = initialBalance + inflows - outflows;
+            const closingBalance = openingBalance + monthInflows - monthOutflows;
             const monthResult = {
                 month: monthName.charAt(0).toUpperCase() + monthName.slice(1),
-                starting: initialBalance,
-                inflows,
-                outflows,
+                starting: openingBalance,
+                inflows: monthInflows,
+                outflows: monthOutflows,
                 closing: closingBalance,
             };
-            initialBalance = closingBalance;
+            openingBalance = closingBalance;
             return monthResult;
         });
 
-        return { monthlyData: data, startingBalance: initialBalance };
+        return { monthlyData: data };
 
     }, [year, company, allData]);
 
