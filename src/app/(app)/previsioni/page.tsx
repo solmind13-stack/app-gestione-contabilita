@@ -85,7 +85,160 @@ export default function PrevisioniPage() {
   const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
   
   const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze || isLoadingCompanies;
-  
+
+  const forecastComparisonData = useMemo(() => {
+    const getYearlyTotals = (year: number) => {
+      let totalIncomeConsuntivo = 0;
+      let totalExpenseConsuntivo = 0;
+      let totalIncomePrevisto = 0;
+      let totalExpensePrevisto = 0;
+
+      const categoryIncome: { [key: string]: number } = {};
+      const categoryExpense: { [key: string]: number } = {};
+
+      const monthlyData = Array.from({ length: 12 }, () => ({
+          entrateConsuntivo: 0,
+          usciteConsuntivo: 0,
+          entratePrevisto: 0,
+          uscitePrevisto: 0,
+      }));
+
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      
+      const yearMovements = (movimenti || []).filter(mov => mov.anno === year);
+      const yearIncomeForecasts = (previsioniEntrate || []).filter(f => f.anno === year);
+      const yearExpenseForecasts = (previsioniUscite || []).filter(f => f.anno === year);
+      const yearDeadlines = (scadenze || []).filter(d => d.anno === year);
+
+      // CALCOLO CONSUNTIVO
+      yearMovements.forEach(mov => {
+          const income = mov.entrata || 0;
+          const expense = mov.uscita || 0;
+          totalIncomeConsuntivo += income;
+          totalExpenseConsuntivo += expense;
+          if (income > 0) categoryIncome[mov.categoria] = (categoryIncome[mov.categoria] || 0) + income;
+          if (expense > 0) categoryExpense[mov.categoria] = (categoryExpense[mov.categoria] || 0) + expense;
+          
+          const movDate = parseDate(mov.data);
+          if (movDate.getFullYear() === year) {
+            const monthIndex = movDate.getMonth();
+            monthlyData[monthIndex].entrateConsuntivo += income;
+            monthlyData[monthIndex].usciteConsuntivo += expense;
+          }
+      });
+      
+      // CALCOLO PREVISTO
+      const calculateForecast = (monthIndex: number) => {
+          const monthStart = startOfMonth(new Date(year, monthIndex));
+          const monthEnd = endOfMonth(monthStart);
+          let monthIncome = 0;
+          let monthExpense = 0;
+          
+          // Future and current months use forecasts
+          if (year > currentYear || (year === currentYear && monthIndex >= today.getMonth())) {
+              yearIncomeForecasts.forEach(f => {
+                  if (parseDate(f.dataPrevista).getMonth() === monthIndex && f.stato !== 'Incassato') {
+                      const weightedIncome = (f.importoLordo || 0) * f.probabilita;
+                      monthIncome += weightedIncome;
+                      if (!categoryIncome[f.categoria]) categoryIncome[f.categoria] = 0;
+                      categoryIncome[f.categoria] += weightedIncome;
+                  }
+              });
+
+              yearExpenseForecasts.forEach(f => {
+                  if (parseDate(f.dataScadenza).getMonth() === monthIndex && f.stato !== 'Pagato') {
+                      const weightedExpense = (f.importoLordo || 0) * f.probabilita;
+                      monthExpense += weightedExpense;
+                      if (!categoryExpense[f.categoria]) categoryExpense[f.categoria] = 0;
+                      categoryExpense[f.categoria] += weightedExpense;
+                  }
+              });
+
+              yearDeadlines.forEach(d => {
+                  if (parseDate(d.dataScadenza).getMonth() === monthIndex && d.stato !== 'Pagato') {
+                      const remainingAmount = d.importoPrevisto - d.importoPagato;
+                      monthExpense += remainingAmount;
+                      if (!categoryExpense[d.categoria]) categoryExpense[d.categoria] = 0;
+                      categoryExpense[d.categoria] += remainingAmount;
+                  }
+              });
+          }
+          return { monthIncome, monthExpense };
+      };
+      
+      for (let i = 0; i < 12; i++) {
+        const { monthIncome, monthExpense } = calculateForecast(i);
+        monthlyData[i].entratePrevisto = monthIncome;
+        monthlyData[i].uscitePrevisto = monthExpense;
+        totalIncomePrevisto += monthIncome;
+        totalExpensePrevisto += monthExpense;
+      }
+      
+      return {
+          totalIncomeConsuntivo,
+          totalExpenseConsuntivo,
+          totalIncomePrevisto,
+          totalExpensePrevisto,
+          monthlyData,
+          categoryIncome,
+          categoryExpense,
+      };
+    };
+
+    const mainYearData = getYearlyTotals(mainYear);
+    const comparisonYearData = comparisonYear ? getYearlyTotals(comparisonYear) : null;
+
+    const totals: { [key: string]: number } = {
+        [`entrateConsuntivo${mainYear}`]: mainYearData.totalIncomeConsuntivo,
+        [`usciteConsuntivo${mainYear}`]: mainYearData.totalExpenseConsuntivo,
+        [`entratePrevisto${mainYear}`]: mainYearData.totalIncomePrevisto,
+        [`uscitePrevisto${mainYear}`]: mainYearData.totalExpensePrevisto,
+    };
+    if (comparisonYear && comparisonYearData) {
+        totals[`entrateConsuntivo${comparisonYear}`] = comparisonYearData.totalIncomeConsuntivo;
+        totals[`usciteConsuntivo${comparisonYear}`] = comparisonYearData.totalExpenseConsuntivo;
+    }
+
+    const chartData = mainYearData.monthlyData.map((month, i) => ({
+      month: new Date(mainYear, i).toLocaleString('it-IT', { month: 'short' }),
+      ...month
+    }));
+    
+    const comparisonChartData = mainYearData.monthlyData.map((month, i) => {
+      const compMonthData = comparisonYearData ? comparisonYearData.monthlyData[i] : {entrateConsuntivo: 0, usciteConsuntivo: 0};
+      return {
+        month: new Date(mainYear, i).toLocaleString('it-IT', { month: 'short' }),
+        [`entrate${mainYear}`]: month.entrateConsuntivo,
+        [`uscite${mainYear}`]: month.usciteConsuntivo,
+        [`entrate${comparisonYear}`]: compMonthData.entrateConsuntivo,
+        [`uscite${comparisonYear}`]: compMonthData.usciteConsuntivo,
+      }
+    });
+
+    const allIncomeCategories = new Set([...Object.keys(mainYearData.categoryIncome || {}), ...Object.keys(comparisonYearData?.categoryIncome || {})]);
+    const allExpenseCategories = new Set([...Object.keys(mainYearData.categoryExpense || {}), ...Object.keys(comparisonYearData?.categoryExpense || {})]);
+
+    const combinedIncomeTotals = Array.from(allIncomeCategories).map(cat => ({
+        category: cat,
+        totalMain: mainYearData.categoryIncome?.[cat] || 0,
+        totalComparison: comparisonYearData?.categoryIncome?.[cat] || 0,
+    })).sort((a,b) => b.totalMain - a.totalMain);
+
+    const combinedExpenseTotals = Array.from(allExpenseCategories).map(cat => ({
+        category: cat,
+        totalMain: mainYearData.categoryExpense?.[cat] || 0,
+        totalComparison: comparisonYearData?.categoryExpense?.[cat] || 0,
+    })).sort((a,b) => b.totalMain - a.totalMain);
+
+    return { 
+        chartData, 
+        totals,
+        categoryTotals: { income: combinedIncomeTotals, expense: combinedExpenseTotals },
+        comparisonChartData,
+    };
+  }, [mainYear, comparisonYear, movimenti, previsioniEntrate, previsioniUscite, scadenze]);
+
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
     if (!firestore || !user) return;
     try {
@@ -194,157 +347,6 @@ export default function PrevisioniPage() {
     return [...fromForecasts, ...fromDeadlines];
   }, [previsioniUscite, scadenze]);
 
-  const forecastComparisonData = useMemo(() => {
-    const getYearlyTotals = (year: number) => {
-        let totalIncomeConsuntivo = 0;
-        let totalExpenseConsuntivo = 0;
-        let totalIncomePrevisto = 0;
-        let totalExpensePrevisto = 0;
-        
-        const categoryIncome: { [key: string]: number } = {};
-        const categoryExpense: { [key: string]: number } = {};
-        
-        const monthlyData = Array.from({ length: 12 }, () => ({
-            entrateConsuntivo: 0, usciteConsuntivo: 0, entratePrevisto: 0, uscitePrevisto: 0,
-        }));
-
-        const yearMovements = (movimenti || []).filter(mov => mov.anno === year);
-        const yearIncomeForecasts = (previsioniEntrate || []).filter(f => f.anno === year);
-        const yearExpenseForecasts = (previsioniUscite || []).filter(f => f.anno === year);
-        const yearDeadlines = (scadenze || []).filter(d => d.anno === year);
-
-        yearMovements.forEach(mov => {
-            const income = mov.entrata || 0;
-            const expense = mov.uscita || 0;
-            totalIncomeConsuntivo += income;
-            totalExpenseConsuntivo += expense;
-            if (income > 0) categoryIncome[mov.categoria] = (categoryIncome[mov.categoria] || 0) + income;
-            if (expense > 0) categoryExpense[mov.categoria] = (categoryExpense[mov.categoria] || 0) + expense;
-            const monthIndex = parseDate(mov.data).getMonth();
-            if (monthIndex >= 0 && monthIndex < 12) {
-              monthlyData[monthIndex].entrateConsuntivo += income;
-              monthlyData[monthIndex].usciteConsuntivo += expense;
-            }
-        });
-
-        yearIncomeForecasts.forEach(f => {
-            if (f.stato !== 'Incassato') {
-                const weightedIncome = (f.importoLordo || 0) * f.probabilita;
-                totalIncomePrevisto += weightedIncome;
-                categoryIncome[f.categoria] = (categoryIncome[f.categoria] || 0) + weightedIncome;
-                const monthIndex = parseDate(f.dataPrevista).getMonth();
-                if (monthIndex >= 0 && monthIndex < 12) monthlyData[monthIndex].entratePrevisto += weightedIncome;
-            }
-        });
-
-        yearExpenseForecasts.forEach(f => {
-            if (f.stato !== 'Pagato') {
-                const weightedExpense = (f.importoLordo || 0) * f.probabilita;
-                totalExpensePrevisto += weightedExpense;
-                categoryExpense[f.categoria] = (categoryExpense[f.categoria] || 0) + weightedExpense;
-                const monthIndex = parseDate(f.dataScadenza).getMonth();
-                if (monthIndex >= 0 && monthIndex < 12) monthlyData[monthIndex].uscitePrevisto += weightedExpense;
-            }
-        });
-        
-        yearDeadlines.forEach(d => {
-            if (d.stato !== 'Pagato') {
-                const remainingAmount = (d.importoPrevisto - d.importoPagato);
-                totalExpensePrevisto += remainingAmount;
-                categoryExpense[d.categoria] = (categoryExpense[d.categoria] || 0) + remainingAmount;
-                const monthIndex = parseDate(d.dataScadenza).getMonth();
-                if (monthIndex >= 0 && monthIndex < 12) monthlyData[monthIndex].uscitePrevisto += remainingAmount;
-            }
-        });
-
-        return {
-            totalIncomeConsuntivo, totalExpenseConsuntivo, totalIncomePrevisto, totalExpensePrevisto,
-            monthlyData, categoryIncome, categoryExpense,
-        };
-    };
-
-    const mainYearData = getYearlyTotals(mainYear);
-    const comparisonYearData = comparisonYear ? getYearlyTotals(comparisonYear) : null;
-
-    const totals: { [key: string]: number } = {
-        [`entrateConsuntivo${mainYear}`]: mainYearData.totalIncomeConsuntivo,
-        [`usciteConsuntivo${mainYear}`]: mainYearData.totalExpenseConsuntivo,
-        [`entratePrevisto${mainYear}`]: mainYearData.totalIncomePrevisto,
-        [`uscitePrevisto${mainYear}`]: mainYearData.totalExpensePrevisto,
-    };
-    if (comparisonYear && comparisonYearData) {
-        totals[`entrateConsuntivo${comparisonYear}`] = comparisonYearData.totalIncomeConsuntivo;
-        totals[`usciteConsuntivo${comparisonYear}`] = comparisonYearData.totalExpenseConsuntivo;
-    }
-
-    const chartData = mainYearData.monthlyData.map((month, i) => ({
-      month: new Date(mainYear, i).toLocaleString('it-IT', { month: 'short' }),
-      ...month
-    }));
-    
-    const comparisonChartData = mainYearData.monthlyData.map((month, i) => {
-      const compMonthData = comparisonYearData ? comparisonYearData.monthlyData[i] : {entrateConsuntivo: 0, usciteConsuntivo: 0};
-      return {
-        month: new Date(mainYear, i).toLocaleString('it-IT', { month: 'short' }),
-        [`entrate${mainYear}`]: month.entrateConsuntivo,
-        [`uscite${mainYear}`]: month.usciteConsuntivo,
-        [`entrate${comparisonYear}`]: compMonthData.entrateConsuntivo,
-        [`uscite${comparisonYear}`]: compMonthData.usciteConsuntivo,
-      }
-    });
-
-    const allIncomeCategories = new Set([...Object.keys(mainYearData.categoryIncome || {}), ...Object.keys(comparisonYearData?.categoryIncome || {})]);
-    const allExpenseCategories = new Set([...Object.keys(mainYearData.categoryExpense || {}), ...Object.keys(comparisonYearData?.categoryExpense || {})]);
-
-    const combinedIncomeTotals = Array.from(allIncomeCategories).map(cat => ({
-        category: cat,
-        totalMain: mainYearData.categoryIncome?.[cat] || 0,
-        totalComparison: comparisonYearData?.categoryIncome?.[cat] || 0,
-    })).sort((a,b) => b.totalMain - a.totalMain);
-
-    const combinedExpenseTotals = Array.from(allExpenseCategories).map(cat => ({
-        category: cat,
-        totalMain: mainYearData.categoryExpense?.[cat] || 0,
-        totalComparison: comparisonYearData?.categoryExpense?.[cat] || 0,
-    })).sort((a,b) => b.totalMain - a.totalMain);
-    
-    const today = new Date();
-    let cashflowBalance = (movimenti || []).filter(m => parseDate(m.data) < startOfMonth(today)).reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
-
-    const cashflowProjectionData = Array.from({ length: 12 }, (_, i) => {
-        const monthDate = addMonths(today, i);
-        const monthStart = startOfMonth(monthDate);
-        const monthEnd = endOfMonth(monthDate);
-        let monthInflows = 0;
-        let monthOutflows = 0;
-        const isCurrentMonth = monthStart.getFullYear() === today.getFullYear() && monthStart.getMonth() === today.getMonth();
-
-        if (isCurrentMonth) {
-            (movimenti || []).forEach(m => { 
-                if (isWithinInterval(parseDate(m.data), { start: monthStart, end: today })) { 
-                    monthInflows += m.entrata || 0; 
-                    monthOutflows += m.uscita || 0; 
-                } 
-            });
-        }
-        
-        (previsioniEntrate || []).forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
-        (previsioniUscite || []).forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
-        (scadenze || []).forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
-        
-        cashflowBalance += monthInflows - monthOutflows;
-        return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: cashflowBalance };
-    });
-
-    return { 
-        chartData, 
-        totals,
-        categoryTotals: { income: combinedIncomeTotals, expense: combinedExpenseTotals },
-        comparisonChartData,
-        cashflowChartData: cashflowProjectionData,
-    };
-  }, [mainYear, comparisonYear, movimenti, previsioniEntrate, previsioniUscite, scadenze]);
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
@@ -376,12 +378,12 @@ export default function PrevisioniPage() {
               </SelectContent>
             </Select>
              <span className="text-muted-foreground font-medium">vs</span>
-            <Select value={comparisonYear ? String(comparisonYear) : ''} onValueChange={(v) => setComparisonYear(Number(v))}>
+             <Select value={comparisonYear ? String(comparisonYear) : ''} onValueChange={(v) => setComparisonYear(Number(v) || null)}>
                 <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Confronto" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="">Nessuno</SelectItem>
+                    <SelectItem value="none">Nessuno</SelectItem>
                     {availableYears.filter(y => y < mainYear).map(year => <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>)}
                 </SelectContent>
             </Select>
