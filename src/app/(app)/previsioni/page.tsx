@@ -21,19 +21,7 @@ import { startOfMonth, endOfMonth, addMonths, isWithinInterval } from 'date-fns'
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
     if (!firestore || !user) return null;
-
-    let q = collection(firestore, collectionName) as CollectionReference<DocumentData>;
-
-    const role = user.role;
-    const userCompany = user.company;
-
-    if (role === 'company' || role === 'company-editor') {
-        if (!userCompany) return null;
-        return query(q, where('societa', '==', userCompany));
-    }
-    
-    // For admin/editor, fetch all data and filter client-side for consistency
-    return query(q);
+    return query(collection(firestore, collectionName) as CollectionReference);
 }
 
 export default function PrevisioniPage() {
@@ -76,22 +64,21 @@ export default function PrevisioniPage() {
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
   
   const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
-  const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
+  const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniUsciteQuery);
   const { data: allPrevisioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
   const { data: allScadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
   const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
   
   const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze || isLoadingCompanies;
 
+  const filterByCompany = (item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany;
+
   const {
     totals,
     monthlyComparisonData,
     categoryComparisonData,
     cashflowDetailData,
-    cashflowChartData
   } = useMemo(() => {
-    const filterByCompany = (item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany;
-
     const movimenti = (allMovements || []).filter(filterByCompany);
     const previsioniEntrate = (allPrevisioniEntrate || []).filter(filterByCompany);
     const previsioniUscite = (allPrevisioniUscite || []).filter(filterByCompany);
@@ -125,32 +112,31 @@ export default function PrevisioniPage() {
 
         // --- MONTHLY DATA ---
         const monthlyData = Array.from({ length: 12 }, (_, i) => {
-            const monthStr = String(i + 1).padStart(2, '0');
             const isPastMonth = new Date(year, i) < startOfMonth(new Date());
             
             let entrateConsuntivo = 0;
             let usciteConsuntivo = 0;
             if (isPastMonth || year < new Date().getFullYear()) {
                  entrateConsuntivo = yearMovements
-                    .filter(m => m.data.substring(5, 7) === monthStr)
+                    .filter(m => parseDate(m.data).getMonth() === i)
                     .reduce((acc, m) => acc + (m.entrata || 0), 0);
 
                  usciteConsuntivo = yearMovements
-                    .filter(m => m.data.substring(5, 7) === monthStr)
+                    .filter(m => parseDate(m.data).getMonth() === i)
                     .reduce((acc, m) => acc + (m.uscita || 0), 0);
             }
 
             const entratePrevisto = yearIncomeForecasts
-                .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && f.dataPrevista.substring(5, 7) === monthStr)
+                .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && parseDate(f.dataPrevista).getMonth() === i)
                 .reduce((acc, f) => acc + ((f.importoLordo || 0) * f.probabilita), 0);
             
             const uscitePrevisto = 
                 yearExpenseForecasts
-                    .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato' && f.dataScadenza.substring(5, 7) === monthStr)
+                    .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato' && parseDate(f.dataScadenza).getMonth() === i)
                     .reduce((acc, f) => acc + ((f.importoLordo || 0) * f.probabilita), 0)
                 + 
                 yearDeadlines
-                    .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato' && d.dataScadenza.substring(5, 7) === monthStr)
+                    .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato' && parseDate(d.dataScadenza).getMonth() === i)
                     .reduce((acc, d) => acc + (d.importoPrevisto - (d.importoPagato || 0)), 0);
 
             return {
@@ -252,48 +238,17 @@ export default function PrevisioniPage() {
         });
     })();
     
-    // --- Data for Cashflow Projection Chart ---
-    const cashflowChartData = (() => {
-      const today = new Date();
-      const liquiditaAttuale = (movimenti || [])
-        .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
-
-      let runningBalance = liquiditaAttuale;
-      return Array.from({ length: 12 }, (_, i) => {
-          const monthDate = addMonths(today, i);
-          const monthStart = startOfMonth(monthDate);
-          const monthEnd = endOfMonth(monthDate);
-          const isCurrentMonth = monthStart.getFullYear() === today.getFullYear() && monthStart.getMonth() === today.getMonth();
-
-          const filterDateRange = { start: isCurrentMonth ? today : monthStart, end: monthEnd };
-
-          const monthInflows = (previsioniEntrate || [])
-              .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataPrevista), filterDateRange))
-              .reduce((acc, f) => acc + (f.importoLordo * f.probabilita), 0);
-          
-          const monthOutflows = 
-              (previsioniUscite || [])
-                  .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataScadenza), filterDateRange))
-                  .reduce((acc, f) => acc + (f.importoLordo * f.probabilita), 0)
-              +
-              (scadenze || [])
-                  .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato' && isWithinInterval(parseDate(d.dataScadenza), filterDateRange))
-                  .reduce((acc, d) => acc + (d.importoPrevisto - (d.importoPagato || 0)), 0);
-          
-          runningBalance += monthInflows - monthOutflows;
-          return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: runningBalance };
-      });
-    })();
-
-    return { totals, monthlyComparisonData, categoryComparisonData, cashflowDetailData, cashflowChartData };
+    return { totals, monthlyComparisonData, categoryComparisonData, cashflowDetailData };
   }, [mainYear, comparisonYear, selectedCompany, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze]);
 
-  const allDataForAI = useMemo(() => ({
-    movements: allMovements || [],
-    incomeForecasts: allPrevisioniEntrate || [],
-    expenseForecasts: allPrevisioniUscite || [],
-    deadlines: allScadenze || [],
-  }), [allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze]);
+  const allDataForAI = useMemo(() => {
+    return {
+        movements: (allMovements || []).filter(filterByCompany),
+        incomeForecasts: (allPrevisioniEntrate || []).filter(filterByCompany),
+        expenseForecasts: (allPrevisioniUscite || []).filter(filterByCompany),
+        deadlines: (allScadenze || []).filter(filterByCompany),
+    }
+  }, [selectedCompany, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, filterByCompany]);
   
   // CRUD Handlers
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
@@ -397,7 +352,7 @@ export default function PrevisioniPage() {
         }));
 
     return [...fromForecasts, ...fromDeadlines];
-  }, [allPrevisioniUscite, allScadenze, selectedCompany]);
+  }, [allPrevisioniUscite, allScadenze, selectedCompany, filterByCompany]);
 
   return (
     <div className="space-y-6">
@@ -459,7 +414,6 @@ export default function PrevisioniPage() {
             totals={totals}
             monthlyComparisonData={monthlyComparisonData}
             categoryComparisonData={categoryComparisonData}
-            cashflowChartData={cashflowChartData}
           />
         </TabsContent>
         <TabsContent value="cashflow">
