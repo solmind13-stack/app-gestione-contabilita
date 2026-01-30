@@ -37,7 +37,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Scadenza, AppUser, Movimento, DeadlineSuggestion, CompanyProfile } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { YEARS, CATEGORIE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
+import { YEARS } from '@/lib/constants';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -215,11 +215,22 @@ export default function ScadenzePage() {
         }
         setIsSuggestionLoading(true);
         setDeadlineSuggestions([]);
+
+        // Filter for the last 2 years of movements to reduce payload size
+        const twoYearsAgo = new Date();
+        twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+        const recentMovements = (movimenti || []).filter(m => new Date(m.data) >= twoYearsAgo);
+
+        if (recentMovements.length === 0) {
+            toast({ title: 'Dati Insufficienti', description: 'Non ci sono movimenti negli ultimi 2 anni da analizzare.' });
+            setIsSuggestionLoading(false);
+            return;
+        }
         
         try {
             const result = await suggestFiscalDeadlines({
                 company: selectedCompany as 'LNC' | 'STG' | 'Tutte',
-                movements: JSON.stringify(movimenti),
+                movements: JSON.stringify(recentMovements),
                 existingDeadlines: JSON.stringify(scadenze || []),
             });
 
