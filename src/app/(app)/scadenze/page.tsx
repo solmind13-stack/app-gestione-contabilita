@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference, deleteDoc } from 'firebase/firestore';
+import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference, deleteDoc, DocumentData } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -48,20 +48,13 @@ import { Label } from '@/components/ui/label';
 import { classifyRecurringExpense } from '@/ai/flows/classify-recurring-expense-flow';
 
 
-const getScadenzeQuery = (firestore: any, user: AppUser | null, company: string) => {
+const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
     if (!firestore || !user) return null;
-    
-    let q = collection(firestore, 'deadlines') as CollectionReference<Scadenza>;
-
-    if (user.role === 'admin' || user.role === 'editor') {
-        if (company !== 'Tutte') {
-            return query(q, where('societa', '==', company));
-        }
-    } else if (user.role === 'company' || user.role === 'company-editor') {
-        if (!user.company) return null; // Should not happen if user is set up correctly
+    let q = collection(firestore, collectionName) as CollectionReference<DocumentData>;
+    if (user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
         return query(q, where('societa', '==', user.company));
     }
-
     return query(q);
 }
 
@@ -92,8 +85,8 @@ export default function ScadenzePage() {
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const deadlinesQuery = useMemo(() => getScadenzeQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
-    const movimentiQuery = useMemo(() => firestore ? query(collection(firestore, 'movements')) : null, [firestore]);
+    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
+    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
     const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
@@ -103,11 +96,8 @@ export default function ScadenzePage() {
     const isLoading = isLoadingScadenze || isLoadingMovimenti || isUserLoading || isLoadingCompanies;
 
     useEffect(() => {
-        if (user?.role === 'company' && user.company) {
-            setSelectedCompany(user.company);
-        }
-         else if (user?.role === 'company-editor' && user.company) {
-            setSelectedCompany(user.company);
+        if (user?.role === 'company' || user.role === 'company-editor') {
+            setSelectedCompany(user.company!);
         }
     }, [user]);
 
@@ -460,7 +450,7 @@ export default function ScadenzePage() {
         scadenzeUrgenti, 
         scadenzeScadute 
     } = useMemo(() => {
-        let data = scadenze || [];
+        let data = (scadenze || []).filter(s => selectedCompany === 'Tutte' || s.societa === selectedCompany);
         
         const categories = [...new Set(data.map(item => item.categoria).filter(Boolean))].sort();
         const statuses = [...new Set(data.map(item => item.stato).filter(Boolean))].sort();
@@ -518,7 +508,7 @@ export default function ScadenzePage() {
                 conteggio: scadenzeOverdue.length
             }
         };
-    }, [scadenze, searchTerm, sortOrder, selectedYear, selectedCategory, selectedStatus, selectedRecurrence, oggi]);
+    }, [scadenze, searchTerm, sortOrder, selectedYear, selectedCategory, selectedStatus, selectedRecurrence, oggi, selectedCompany]);
 
     const getPageTitle = () => {
         if (selectedCompany === 'Tutte') return 'Scadenze';

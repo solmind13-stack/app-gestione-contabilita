@@ -16,12 +16,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { CashflowDetail } from '@/components/previsioni/cashflow-detail';
 import { parseDate } from '@/lib/utils';
-import { startOfMonth, endOfMonth, addMonths, isWithinInterval } from 'date-fns';
+import { startOfMonth } from 'date-fns';
 
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
     if (!firestore || !user) return null;
-    return query(collection(firestore, collectionName) as CollectionReference);
+    let q = collection(firestore, collectionName) as CollectionReference<DocumentData>;
+    if (user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
+        return query(q, where('societa', '==', user.company));
+    }
+    return query(q);
 }
 
 export default function PrevisioniPage() {
@@ -37,10 +42,8 @@ export default function PrevisioniPage() {
   const [comparisonYear, setComparisonYear] = useState<number | null>(availableYears.includes(currentYear - 1) ? currentYear - 1 : null);
 
   useEffect(() => {
-    if (user?.role === 'company' && user.company) {
-      setSelectedCompany(user.company);
-    } else if (user?.role === 'company-editor' && user.company) {
-        setSelectedCompany(user.company);
+    if (user?.role === 'company' || user.role === 'company-editor') {
+      setSelectedCompany(user.company!);
     }
   }, [user]);
 
@@ -63,9 +66,9 @@ export default function PrevisioniPage() {
   const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
   
-  const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
-  const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniUsciteQuery);
+  const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
   const { data: allPrevisioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
+  const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
   const { data: allScadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
   const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
   
@@ -79,18 +82,13 @@ export default function PrevisioniPage() {
     categoryComparisonData,
     cashflowDetailData,
   } = useMemo(() => {
-    const movimenti = (allMovements || []).filter(filterByCompany);
-    const previsioniEntrate = (allPrevisioniEntrate || []).filter(filterByCompany);
-    const previsioniUscite = (allPrevisioniUscite || []).filter(filterByCompany);
-    const scadenze = (allScadenze || []).filter(filterByCompany);
-
     const getYearData = (year: number | null) => {
         if (year === null) return null;
 
-        const yearMovements = movimenti.filter(mov => mov.anno === year);
-        const yearIncomeForecasts = previsioniEntrate.filter(f => f.anno === year);
-        const yearExpenseForecasts = previsioniUscite.filter(f => f.anno === year);
-        const yearDeadlines = scadenze.filter(d => d.anno === year);
+        const yearMovements = (allMovements || []).filter(filterByCompany).filter(mov => mov.anno === year);
+        const yearIncomeForecasts = (allPrevisioniEntrate || []).filter(filterByCompany).filter(f => f.anno === year);
+        const yearExpenseForecasts = (allPrevisioniUscite || []).filter(filterByCompany).filter(f => f.anno === year);
+        const yearDeadlines = (allScadenze || []).filter(filterByCompany).filter(d => d.anno === year);
 
         // --- CONSUNTIVO (ACTUALS) ---
         const incomeConsuntivo = yearMovements.reduce((acc, mov) => acc + (mov.entrata || 0), 0);
@@ -218,7 +216,8 @@ export default function PrevisioniPage() {
     
     // --- Data for Cashflow Detail Table ---
     const cashflowDetailData = (() => {
-        let openingBalance = (movimenti || [])
+        let openingBalance = (allMovements || [])
+            .filter(filterByCompany)
             .filter(m => (m.anno < mainYear))
             .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
         
@@ -248,7 +247,7 @@ export default function PrevisioniPage() {
         expenseForecasts: (allPrevisioniUscite || []).filter(filterByCompany),
         deadlines: (allScadenze || []).filter(filterByCompany),
     }
-  }, [selectedCompany, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, filterByCompany]);
+  }, [allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, filterByCompany]);
   
   // CRUD Handlers
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {

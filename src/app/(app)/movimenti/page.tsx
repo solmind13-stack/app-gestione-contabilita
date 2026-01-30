@@ -49,21 +49,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CATEGORIE, YEARS } from '@/lib/constants';
 import { ReviewMovementsDialog } from '@/components/movimenti/review-movements-dialog';
 
-const getMovimentiQuery = (firestore: any, user: AppUser | null, company: string) => {
+const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
     if (!firestore || !user) return null;
-    
-    let q = collection(firestore, 'movements') as CollectionReference<Movimento>;
-
-    if (user.role === 'admin' || user.role === 'editor') {
-        if (company !== 'Tutte') {
-            return query(q, where('societa', '==', company));
-        }
-    } else if (user.role === 'company' || user.role === 'company-editor') {
-        if (!user.company) return null; // Should not happen if user is set up correctly
+    let q = collection(firestore, collectionName) as CollectionReference<DocumentData>;
+    if (user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
         return query(q, where('societa', '==', user.company));
     }
-
-    return query(q); // For admin/editor with "Tutte" selected
+    return query(q);
 }
 
 
@@ -77,10 +70,10 @@ export default function MovimentiPage() {
     const settingsDocRef = useMemo(() => firestore ? doc(firestore, 'settings', 'appConfiguration') : null, [firestore]);
     const { data: appSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
     
-    const movimentiQuery = useMemo(() => getMovimentiQuery(firestore, user, selectedCompany), [firestore, user, selectedCompany]);
-    const deadlinesQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
-    const expenseForecastsQuery = useMemo(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
-    const incomeForecastsQuery = useMemo(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
+    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
+    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
+    const expenseForecastsQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
+    const incomeForecastsQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
     const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
     
 
@@ -443,7 +436,7 @@ export default function MovimentiPage() {
         uniqueSubCategories, 
         uniqueOperators 
     } = useMemo(() => {
-        let data = movimentiData || [];
+        let data = (movimentiData || []).filter(m => selectedCompany === 'Tutte' || m.societa === selectedCompany);
         
         const inReview = data.filter(m => m.status === 'manual_review');
         const approved = data.filter(m => m.status !== 'manual_review');
@@ -477,7 +470,7 @@ export default function MovimentiPage() {
             uniqueSubCategories: subCategories,
             uniqueOperators: operators
         };
-    }, [movimentiData, searchTerm, sortOrder, selectedYear, selectedCategory, selectedSubCategory, selectedOperator]);
+    }, [movimentiData, searchTerm, sortOrder, selectedYear, selectedCategory, selectedSubCategory, selectedOperator, selectedCompany]);
     
     useEffect(() => {
         if (selectedCategory === 'Tutti') {
