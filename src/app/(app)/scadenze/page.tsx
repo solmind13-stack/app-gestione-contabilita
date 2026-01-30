@@ -96,7 +96,7 @@ export default function ScadenzePage() {
     const isLoading = isLoadingScadenze || isLoadingMovimenti || isUserLoading || isLoadingCompanies;
 
     useEffect(() => {
-        if (user?.role === 'company' || user.role === 'company-editor') {
+        if (user?.role === 'company' || user?.role === 'company-editor') {
             setSelectedCompany(user.company!);
         }
     }, [user]);
@@ -218,18 +218,33 @@ export default function ScadenzePage() {
 
         // --- NEW STRATEGY: Client-side pre-processing ---
         const normalizeDescription = (desc: string) => {
+            // This function aims to create a consistent key for similar recurring transactions.
+            // It removes volatile parts like dates, months, invoice numbers, etc.
+            const months = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic';
+            const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
+
             return desc.toLowerCase()
-                .replace(/n\.\s*\d+/g, '') // remove "n. 123"
-                .replace(/\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/g, '') // remove dates
-                .replace(/fattura|fatt\./g, '') // remove "fattura"
-                .replace(/rif\./g, '') // remove "rif."
-                .replace(/\s+/g, ' ').trim();
+                // Remove specific keywords
+                .replace(monthsRegex, '') 
+                .replace(/\bfattura|\bfatt|\bft/g, '')
+                .replace(/\brif\b|\briferimento/g, '')
+                // Remove various date formats and numbers that often change (invoice numbers, years, etc.)
+                .replace(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g, '') // dd/mm/yyyy, dd-mm-yy etc.
+                .replace(/\b\d{4}\b/g, '') // 4-digit years
+                .replace(/n\.\s*\d+/g, '') // "n. 1234"
+                .replace(/num\.\s*\d+/g, '') // "num. 1234"
+                .replace(/\b\d+\b/g, '') // remove any remaining standalone numbers
+                // Clean up punctuation and extra spaces
+                .replace(/[.,\-_/]/g, ' ') // replace common separators with a space
+                .replace(/\s+/g, ' ') // collapse multiple spaces
+                .trim();
         };
 
         const expenseMovements = movimenti.filter(m => m.uscita > 0);
 
         const grouped = expenseMovements.reduce((acc, mov) => {
             const key = normalizeDescription(mov.descrizione);
+            if (!key) return acc; // Ignore if normalization results in an empty string
             if (!acc[key]) {
                 acc[key] = [];
             }
@@ -498,8 +513,8 @@ export default function ScadenzePage() {
                                                 <span>Scadenza: <Badge variant="outline">{formatDate(suggestion.dataScadenza)}</Badge></span>
                                                 <span>Importo: <Badge variant="outline">{formatCurrency(suggestion.importoPrevisto)}</Badge></span>
                                                 <span>Ricorrenza: <Badge variant="outline">{suggestion.ricorrenza}</Badge></span>
-                                                <span>Tipo: <Badge variant="outline">{suggestion.tipoTassa}</Badge></span>
-                                                <span>Periodo: <Badge variant="outline">{suggestion.periodoRiferimento}</Badge></span>
+                                                {suggestion.tipoTassa && <span>Tipo: <Badge variant="outline">{suggestion.tipoTassa}</Badge></span>}
+                                                {suggestion.periodoRiferimento && <span>Periodo: <Badge variant="outline">{suggestion.periodoRiferimento}</Badge></span>}
                                                 <span>Cat: <Badge variant="outline">{suggestion.categoria}</Badge></span>
                                             </div>
                                         </div>
@@ -824,3 +839,4 @@ export default function ScadenzePage() {
     </div>
   );
 }
+
