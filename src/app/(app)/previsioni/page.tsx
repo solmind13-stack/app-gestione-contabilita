@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
+import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
@@ -13,7 +13,6 @@ import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
 import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { CashflowDetail } from '@/components/previsioni/cashflow-detail';
 import { parseDate } from '@/lib/utils';
 import { startOfMonth } from 'date-fns';
@@ -119,7 +118,7 @@ export default function PrevisioniPage() {
             
             let entrateConsuntivo = 0;
             let usciteConsuntivo = 0;
-            // For past months, consuntivo is from movements
+            
             if (isPastMonth || year < new Date().getFullYear()) {
                  entrateConsuntivo = yearMovements
                     .filter(m => parseDate(m.data).getMonth() === i)
@@ -130,7 +129,6 @@ export default function PrevisioniPage() {
                     .reduce((acc, m) => acc + (m.uscita || 0), 0);
             }
             
-            // Previsto is always calculated from forecasts and deadlines for future cashflow
             const entratePrevisto = yearIncomeForecasts
                 .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && parseDate(f.dataPrevista).getMonth() === i)
                 .reduce((acc, f) => acc + ((f.importoLordo || 0) * f.probabilita), 0);
@@ -153,7 +151,6 @@ export default function PrevisioniPage() {
             };
         });
 
-        // --- CATEGORY DATA (Consuntivo + Previsto combined for charts) ---
         const categoryIncome: { [key: string]: number } = {};
         yearMovements.forEach(m => { if (m.entrata > 0) categoryIncome[m.categoria] = (categoryIncome[m.categoria] || 0) + m.entrata; });
         yearIncomeForecasts.filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato').forEach(f => {
@@ -175,7 +172,6 @@ export default function PrevisioniPage() {
     const mainYearCalculatedData = getYearData(mainYear);
     const comparisonYearCalculatedData = getYearData(comparisonYear);
 
-    // --- Data for KPI Cards ---
     const totals = {
         [`entrateConsuntivo${mainYear}`]: mainYearCalculatedData.incomeConsuntivo,
         [`usciteConsuntivo${mainYear}`]: mainYearCalculatedData.expenseConsuntivo,
@@ -185,7 +181,6 @@ export default function PrevisioniPage() {
         [`usciteConsuntivo${comparisonYear}`]: comparisonYearCalculatedData.expenseConsuntivo,
     };
     
-    // --- Data for Monthly Bar Chart ---
     const monthlyComparisonData = mainYearCalculatedData.monthlyData.map((mainMonth, i) => {
       const compMonth = comparisonYearCalculatedData.monthlyData[i];
       return {
@@ -198,7 +193,6 @@ export default function PrevisioniPage() {
       }
     });
 
-    // --- Data for Category Tables and Pie Charts ---
     const allIncomeCategories = new Set([
         ...Object.keys(mainYearCalculatedData.categoryIncome || {}), 
         ...Object.keys(comparisonYearCalculatedData.categoryIncome || {})
@@ -221,7 +215,6 @@ export default function PrevisioniPage() {
         })).sort((a,b) => b.totalMain - a.totalMain),
     };
     
-    // --- Data for Cashflow Detail Table ---
     const cashflowDetailData = (() => {
         let openingBalance = (allMovements || [])
             .filter(filterByCompany)
@@ -255,7 +248,7 @@ export default function PrevisioniPage() {
     return { totals, monthlyComparisonData, categoryComparisonData, cashflowDetailData, pieIncomeData, pieExpenseData };
   }, [mainYear, comparisonYear, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, filterByCompany]);
 
-  const allData = useMemo(() => {
+  const allDataForAgent = useMemo(() => {
     return {
         movements: (allMovements || []).filter(filterByCompany),
         incomeForecasts: (allPrevisioniEntrate || []).filter(filterByCompany),
@@ -286,7 +279,6 @@ export default function PrevisioniPage() {
     return [...fromForecasts, ...fromDeadlines];
   }, [allPrevisioniUscite, allScadenze, filterByCompany]);
   
-  // CRUD Handlers
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
     if (!firestore || !user) return;
     try {
@@ -465,7 +457,7 @@ export default function PrevisioniPage() {
         <TabsContent value="agente-ai">
             <AiCashflowAgent 
                 company={selectedCompany as 'LNC' | 'STG' | 'Tutte'}
-                allData={allData}
+                allData={allDataForAgent}
             />
         </TabsContent>
       </Tabs>

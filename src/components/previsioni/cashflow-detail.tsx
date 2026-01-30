@@ -20,6 +20,24 @@ interface CashflowDetailProps {
 }
 
 export function CashflowDetail({ year, data, isLoading }: CashflowDetailProps) {
+    if (isLoading) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Dettaglio Flusso di Cassa per il {year}</CardTitle>
+            <CardDescription>
+                Visione mensile del flusso di cassa, combinando dati storici e previsionali (ponderati per probabilità).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center items-center h-48">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -29,36 +47,30 @@ export function CashflowDetail({ year, data, isLoading }: CashflowDetailProps) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {isLoading ? (
-                    <div className="flex justify-center items-center h-48">
-                        <Loader2 className="h-8 w-8 animate-spin" />
-                    </div>
-                ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Mese</TableHead>
-                                <TableHead className="text-right">Saldo Iniziale</TableHead>
-                                <TableHead className="text-right text-green-600">Entrate Previste</TableHead>
-                                <TableHead className="text-right text-red-600">Uscite Previste</TableHead>
-                                <TableHead className="text-right font-bold">Saldo Finale</TableHead>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Mese</TableHead>
+                            <TableHead className="text-right">Saldo Iniziale</TableHead>
+                            <TableHead className="text-right text-green-600">Entrate Previste</TableHead>
+                            <TableHead className="text-right text-red-600">Uscite Previste</TableHead>
+                            <TableHead className="text-right font-bold">Saldo Finale</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {(data || []).map((row, index) => (
+                            <TableRow key={index}>
+                                <TableCell className="font-medium">{row.month}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(row.starting)}</TableCell>
+                                <TableCell className="text-right text-green-600">{formatCurrency(row.inflows)}</TableCell>
+                                <TableCell className="text-right text-red-600">{formatCurrency(row.outflows)}</TableCell>
+                                <TableCell className={cn("text-right font-bold", row.closing < 0 ? 'text-destructive' : '')}>
+                                    {formatCurrency(row.closing)}
+                                </TableCell>
                             </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {data.map((row, index) => (
-                                <TableRow key={index}>
-                                    <TableCell className="font-medium">{row.month}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(row.starting)}</TableCell>
-                                    <TableCell className="text-right text-green-600">{formatCurrency(row.inflows)}</TableCell>
-                                    <TableCell className="text-right text-red-600">{formatCurrency(row.outflows)}</TableCell>
-                                    <TableCell className={cn("text-right font-bold", row.closing < 0 ? 'text-destructive' : '')}>
-                                        {formatCurrency(row.closing)}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                )}
+                        ))}
+                    </TableBody>
+                </Table>
             </CardContent>
         </Card>
     );
