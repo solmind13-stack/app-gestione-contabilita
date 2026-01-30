@@ -90,7 +90,7 @@ export type Scadenza = {
   societa: string;
   anno: number;
   dataScadenza: string;
-  dataPagamento?: string | null; // New field for payment date
+  dataPagamento?: string | null;
   descrizione: string;
   categoria: string;
   sottocategoria?: string;
@@ -102,7 +102,11 @@ export type Scadenza = {
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
+  tipoTassa?: string;
+  periodoRiferimento?: string;
+  source?: 'manual' | 'ai-suggested';
 };
+
 
 export type RiepilogoScadenze = {
     totalePrevisto: number;

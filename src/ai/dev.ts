@@ -8,4 +8,4 @@ import '@/ai/flows/generate-financial-insights.ts';
 import '@/ai/flows/generate-report-flow.ts';
 import '@/ai/flows/import-transactions-flow.ts';
 import '@/ai/flows/analyze-cash-flow.ts';
-import '@/ai/flows/classify-recurring-expense-flow.ts';
+import '@/ai/flows/suggest-fiscal-deadlines.ts';

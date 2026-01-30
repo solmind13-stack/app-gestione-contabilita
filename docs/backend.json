@@ -183,6 +183,19 @@
           "type": "string",
           "description": "The timestamp when the deadline was last updated.",
           "format": "date-time"
+        },
+        "tipoTassa": {
+          "type": "string",
+          "description": "Il tipo di tassa o contributo (es. IVA, IRES, INPS). Specifico per scadenze fiscali."
+        },
+        "periodoRiferimento": {
+          "type": "string",
+          "description": "Il periodo a cui la tassa si riferisce (es. Q1 2025, Giugno 2025)."
+        },
+        "source": {
+          "type": "string",
+          "enum": ["manual", "ai-suggested"],
+          "description": "Indica se la scadenza è stata inserita manualmente o suggerita dall'AI."
         }
       },
       "required": [
