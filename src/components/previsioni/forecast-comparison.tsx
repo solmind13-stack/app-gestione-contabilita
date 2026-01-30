@@ -55,12 +55,8 @@ interface ForecastComparisonProps {
   totals: { [key: string]: number };
   monthlyComparisonData: any[];
   categoryComparisonData: { income: any[]; expense: any[] };
-  allData: {
-    movements: any[];
-    incomeForecasts: any[];
-    expenseForecasts: any[];
-    deadlines: any[];
-  };
+  pieIncomeData: any[];
+  pieExpenseData: any[];
 }
 
 export function ForecastComparison({
@@ -70,10 +66,9 @@ export function ForecastComparison({
   totals,
   monthlyComparisonData,
   categoryComparisonData,
+  pieIncomeData,
+  pieExpenseData
 }: ForecastComparisonProps) {
-  
-  const pieIncomeData = useMemo(() => categoryComparisonData.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryComparisonData.income]);
-  const pieExpenseData = useMemo(() => categoryComparisonData.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryComparisonData.expense]);
 
   return (
     <div className="space-y-6">

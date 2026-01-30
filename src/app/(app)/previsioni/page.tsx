@@ -81,6 +81,8 @@ export default function PrevisioniPage() {
     monthlyComparisonData,
     categoryComparisonData,
     cashflowDetailData,
+    pieIncomeData,
+    pieExpenseData,
   } = useMemo(() => {
     const getYearData = (year: number | null) => {
         if (year === null) return {
@@ -242,7 +244,15 @@ export default function PrevisioniPage() {
         });
     })();
     
-    return { totals, monthlyComparisonData, categoryComparisonData, cashflowDetailData };
+    const pieIncomeData = categoryComparisonData.income
+      .filter(d => d.totalMain > 0)
+      .map(d => ({ name: d.category, value: d.totalMain }));
+
+    const pieExpenseData = categoryComparisonData.expense
+      .filter(d => d.totalMain > 0)
+      .map(d => ({ name: d.category, value: d.totalMain }));
+    
+    return { totals, monthlyComparisonData, categoryComparisonData, cashflowDetailData, pieIncomeData, pieExpenseData };
   }, [mainYear, comparisonYear, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, filterByCompany]);
 
   const allData = useMemo(() => {
@@ -417,7 +427,8 @@ export default function PrevisioniPage() {
             totals={totals}
             monthlyComparisonData={monthlyComparisonData}
             categoryComparisonData={categoryComparisonData}
-            allData={allData}
+            pieIncomeData={pieIncomeData}
+            pieExpenseData={pieExpenseData}
           />
         </TabsContent>
         <TabsContent value="cashflow">
