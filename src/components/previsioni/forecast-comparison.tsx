@@ -8,6 +8,8 @@ import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Info } from 'lucide-react';
+
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -52,57 +54,34 @@ interface ForecastComparisonProps {
   mainYear: number;
   comparisonYear: number | null;
   isLoading: boolean;
-  totals: { [key: string]: number };
   monthlyComparisonData: any[];
   categoryComparisonData: { income: any[]; expense: any[] };
   pieIncomeData: any[];
   pieExpenseData: any[];
+  isAllYearsSelected: boolean;
 }
 
 export function ForecastComparison({
   mainYear,
   comparisonYear,
   isLoading,
-  totals,
   monthlyComparisonData,
   categoryComparisonData,
   pieIncomeData,
-  pieExpenseData
+  pieExpenseData,
+  isAllYearsSelected,
 }: ForecastComparisonProps) {
 
   return (
     <div className="space-y-6">
-       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate Cons. ${mainYear}`}</CardTitle></CardHeader>
-            <CardContent>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`entrateConsuntivo${mainYear}`] || 0)}</p>}
-            </CardContent>
-          </Card>
-           <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite Cons. ${mainYear}`}</CardTitle></CardHeader>
-            <CardContent>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-2xl font-bold">{formatCurrency(totals[`usciteConsuntivo${mainYear}`] || 0)}</p>}
-            </CardContent>
-          </Card>
-           <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Entrate Prev. ${mainYear}`}</CardTitle></CardHeader>
-            <CardContent>
-               {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-blue-600">{formatCurrency(totals[`entratePrevisto${mainYear}`] || 0)}</p>}
-            </CardContent>
-          </Card>
-           <Card>
-            <CardHeader className='pb-2'><CardTitle className="text-sm text-muted-foreground font-medium">{`Totale Uscite Prev. ${mainYear}`}</CardTitle></CardHeader>
-            <CardContent>
-              {isLoading ? <Skeleton className="h-7 w-3/4 mx-auto" /> : <p className="text-xl font-bold text-orange-600">{formatCurrency(totals[`uscitePrevisto${mainYear}`] || 0)}</p>}
-            </CardContent>
-          </Card>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Andamento Mensile</CardTitle>
-          <CardDescription>{`Confronto entrate e uscite (consuntivo e previsto) per l'anno ${mainYear}`}</CardDescription>
+          <CardDescription>
+            {isAllYearsSelected 
+                ? `Andamento per l'anno in corso (${mainYear}) come riferimento.`
+                : `Confronto entrate e uscite (consuntivo e previsto) per l'anno ${mainYear}`}
+            </CardDescription>
         </CardHeader>
         <CardContent className="h-[250px]">
         {isLoading ? (
@@ -116,10 +95,7 @@ export function ForecastComparison({
                   <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
                   <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
                   <Tooltip
-                      contentStyle={{
-                          background: 'hsl(var(--background))',
-                          borderColor: 'hsl(var(--border))',
-                      }}
+                      contentStyle={{ background: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }}
                       formatter={(value: number) => formatCurrency(value)}
                   />
                   <Legend wrapperStyle={{fontSize: "12px"}} />
@@ -133,7 +109,7 @@ export function ForecastComparison({
         </CardContent>
       </Card>
       
-      {comparisonYear && (
+      {comparisonYear && !isAllYearsSelected && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Confronto Consuntivo Anni</CardTitle>
@@ -151,10 +127,7 @@ export function ForecastComparison({
                       <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
                       <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
                       <Tooltip
-                          contentStyle={{
-                              background: 'hsl(var(--background))',
-                              borderColor: 'hsl(var(--border))',
-                          }}
+                          contentStyle={{ background: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }}
                           formatter={(value: number) => formatCurrency(value)}
                       />
                       <Legend wrapperStyle={{fontSize: "12px"}} />
@@ -172,70 +145,45 @@ export function ForecastComparison({
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
             <CardHeader>
-                <CardTitle className="text-lg">Composizione Entrate {mainYear} (Consuntivo + Previsto)</CardTitle>
+                <CardTitle className="text-lg">Composizione Entrate {isAllYearsSelected ? ' (Tutti gli anni)' : mainYear}</CardTitle>
             </CardHeader>
             <CardContent className="h-[200px]">
                  {isLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
-                    </div>
+                    <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/></div>
                 ) : pieIncomeData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie 
-                                data={pieIncomeData} 
-                                dataKey="value" 
-                                nameKey="name" 
-                                cx="50%" 
-                                cy="50%" 
-                                outerRadius={60} 
-                                labelLine={false}
-                                label={renderCustomizedLabel}
-                            >
-                                {pieIncomeData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
+                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
+                                {pieIncomeData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
                             <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">Nessun dato per il grafico.</div>
+                    <div className="flex items-center justify-center h-full text-muted-foreground"><Info className="h-4 w-4 mr-2"/>Nessun dato per il grafico.</div>
                 )}
             </CardContent>
         </Card>
         <Card>
             <CardHeader>
-                <CardTitle className="text-lg">Composizione Uscite {mainYear} (Consuntivo + Previsto)</CardTitle>
+                <CardTitle className="text-lg">Composizione Uscite {isAllYearsSelected ? ' (Tutti gli anni)' : mainYear}</CardTitle>
             </CardHeader>
             <CardContent className="h-[200px]">
                  {isLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
-                    </div>
+                    <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/></div>
                 ) : pieExpenseData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie 
-                                data={pieExpenseData} 
-                                dataKey="value" 
-                                nameKey="name" cx="50%" 
-                                cy="50%" 
-                                outerRadius={60}
-                                labelLine={false}
-                                label={renderCustomizedLabel}
-                            >
-                                {pieExpenseData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
+                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
+                                {pieExpenseData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                             </Pie>
                             <Tooltip content={<CustomTooltip />} />
                             <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
                 ): (
-                     <div className="flex items-center justify-center h-full text-muted-foreground">Nessun dato per il grafico.</div>
+                     <div className="flex items-center justify-center h-full text-muted-foreground"><Info className="h-4 w-4 mr-2"/>Nessun dato per il grafico.</div>
                 )}
             </CardContent>
         </Card>
@@ -250,37 +198,11 @@ export function ForecastComparison({
             </CardHeader>
             <CardContent>
                 <Table>
-                    <TableHeader>
-                    <TableRow>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead className="text-right">{`Totale ${mainYear}`}</TableHead>
-                        <TableHead className="text-right">{`Totale ${comparisonYear}`}</TableHead>
-                    </TableRow>
-                    </TableHeader>
+                    <TableHeader><TableRow><TableHead>Categoria</TableHead><TableHead className="text-right">{`Totale ${mainYear}`}</TableHead><TableHead className="text-right">{`Totale ${comparisonYear}`}</TableHead></TableRow></TableHeader>
                     <TableBody>
-                    {isLoading ? (
-                        [...Array(3)].map((_, i) => (
-                            <TableRow key={i}>
-                            <TableCell><Skeleton className="h-5 w-24"/></TableCell>
-                            <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
-                            <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
-                            </TableRow>
-                        ))
-                    ) : categoryComparisonData.income.length > 0 ? (
-                        categoryComparisonData.income.map(({category, totalMain, totalComparison}) => (
-                        <TableRow key={category}>
-                            <TableCell className="font-medium text-sm">{category}</TableCell>
-                            <TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell>
-                            <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(totalComparison)}</TableCell>
-                        </TableRow>
-                        ))
-                    ) : (
-                        <TableRow>
-                            <TableCell colSpan={3} className="h-24 text-center">
-                            Nessuna entrata per il periodo selezionato.
-                            </TableCell>
-                        </TableRow>
-                    )}
+                    {isLoading ? ([...Array(3)].map((_, i) => (<TableRow key={i}><TableCell><Skeleton className="h-5 w-24"/></TableCell><TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell><TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell></TableRow>))) 
+                    : categoryComparisonData.income.length > 0 ? (categoryComparisonData.income.map(({category, totalMain, totalComparison}) => (<TableRow key={category}><TableCell className="font-medium text-sm">{category}</TableCell><TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell><TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(totalComparison)}</TableCell></TableRow>))) 
+                    : (<TableRow><TableCell colSpan={3} className="h-24 text-center">Nessuna entrata per il periodo selezionato.</TableCell></TableRow>)}
                     </TableBody>
                 </Table>
             </CardContent>
@@ -292,37 +214,11 @@ export function ForecastComparison({
             </CardHeader>
             <CardContent>
                 <Table>
-                    <TableHeader>
-                    <TableRow>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead className="text-right">{`Totale ${mainYear}`}</TableHead>
-                        <TableHead className="text-right">{`Totale ${comparisonYear}`}</TableHead>
-                    </TableRow>
-                    </TableHeader>
+                    <TableHeader><TableRow><TableHead>Categoria</TableHead><TableHead className="text-right">{`Totale ${mainYear}`}</TableHead><TableHead className="text-right">{`Totale ${comparisonYear}`}</TableHead></TableRow></TableHeader>
                     <TableBody>
-                    {isLoading ? (
-                        [...Array(3)].map((_, i) => (
-                            <TableRow key={i}>
-                            <TableCell><Skeleton className="h-5 w-24"/></TableCell>
-                            <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
-                            <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
-                            </TableRow>
-                        ))
-                    ) : categoryComparisonData.expense.length > 0 ? (
-                        categoryComparisonData.expense.map(({category, totalMain, totalComparison}) => (
-                        <TableRow key={category}>
-                            <TableCell className="font-medium text-sm">{category}</TableCell>
-                            <TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell>
-                            <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(totalComparison)}</TableCell>
-                        </TableRow>
-                        ))
-                    ) : (
-                        <TableRow>
-                            <TableCell colSpan={3} className="h-24 text-center">
-                            Nessuna uscita per il periodo selezionato.
-                            </TableCell>
-                        </TableRow>
-                    )}
+                    {isLoading ? ([...Array(3)].map((_, i) => (<TableRow key={i}><TableCell><Skeleton className="h-5 w-24"/></TableCell><TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell><TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell></TableRow>))) 
+                    : categoryComparisonData.expense.length > 0 ? (categoryComparisonData.expense.map(({category, totalMain, totalComparison}) => (<TableRow key={category}><TableCell className="font-medium text-sm">{category}</TableCell><TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell><TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(totalComparison)}</TableCell></TableRow>))) 
+                    : (<TableRow><TableCell colSpan={3} className="h-24 text-center">Nessuna uscita per il periodo selezionato.</TableCell></TableRow>)}
                     </TableBody>
                 </Table>
             </CardContent>

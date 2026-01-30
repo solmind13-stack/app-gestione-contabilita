@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Info } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -17,9 +17,10 @@ interface CashflowDetailProps {
         closing: number;
     }[];
     isLoading: boolean;
+    isAllYearsSelected: boolean;
 }
 
-export function CashflowDetail({ year, data, isLoading }: CashflowDetailProps) {
+export function CashflowDetail({ year, data, isLoading, isAllYearsSelected }: CashflowDetailProps) {
     if (isLoading) {
       return (
         <Card>
@@ -36,6 +37,21 @@ export function CashflowDetail({ year, data, isLoading }: CashflowDetailProps) {
           </CardContent>
         </Card>
       );
+    }
+    
+    if (isAllYearsSelected) {
+        return (
+             <Card>
+                <CardHeader>
+                    <CardTitle>Dettaglio Flusso di Cassa</CardTitle>
+                </CardHeader>
+                <CardContent className="h-48 flex flex-col items-center justify-center text-center text-muted-foreground">
+                    <Info className="h-8 w-8 mb-2"/>
+                    <p>Seleziona un anno specifico per visualizzare</p>
+                    <p>il dettaglio mensile del flusso di cassa.</p>
+                </CardContent>
+            </Card>
+        )
     }
 
     return (
