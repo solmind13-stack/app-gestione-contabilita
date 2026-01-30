@@ -44,21 +44,32 @@ const prompt = ai.definePrompt({
   name: 'suggestFiscalDeadlinesPrompt',
   input: { schema: SuggestFiscalDeadlinesInputSchema },
   output: { schema: SuggestFiscalDeadlinesOutputSchema },
-  prompt: `You are an expert Italian accountant AI. Your task is to identify recurring fiscal deadlines from a list of historical bank movements.
-You are given all movements and all existing deadlines. You must not suggest deadlines that already exist.
+  prompt: `You are an expert financial analyst AI. Your task is to identify ALL recurring expenses from a list of historical bank movements and suggest them as future deadlines.
 
-Analyze the movements for {{company}} and identify patterns for the following Italian taxes:
-1.  **IVA (VAT):** Look for quarterly or monthly payments. Calculate the next due date (e.g., if last payment was for Q1 on May 16, next is Aug 20). Estimate the amount based on the last payment.
-2.  **IRPEF/IRES (Income Tax):** Look for 'Acconto' and 'Saldo' payments, typically described with "F24". Common due dates are June/July and November. Identify the pattern and predict the next payment.
-3.  **INPS (Social Security):** Find recurring INPS payments and predict the next one.
-4.  **Ritenute (Withholdings):** Find payments for "ritenute d'acconto", which are usually due on the 16th of each month.
+You are given all movements for '{{company}}' and all existing deadlines. You must not suggest deadlines that already exist.
 
-For each distinct recurring tax payment you identify:
-- Determine the recurrence (Mensile, Trimestrale, Semestrale, Annuale).
-- Calculate the next legal due date based on the last payment's date and recurrence.
-- Create a clean \`descrizione\`, \`tipoTassa\`, and \`periodoRiferimento\` (e.g., "Pagamento IVA 2° Trimestre 2025", tipo: "IVA", periodo: "Q2 2025").
-- Check if a similar deadline (same description pattern and recurrence) already exists in 'existingDeadlines'. **If it exists, DO NOT include it in your output.**
-- Use the 'Tasse' category and the most appropriate subcategory.
+Analyze the movements and identify recurring patterns for both fiscal and operational expenses.
+
+**1. Fiscal Expenses:**
+-   **IVA (VAT):** Quarterly or monthly payments.
+-   **IRPEF/IRES (Income Tax):** 'Acconto' and 'Saldo' payments, often in F24.
+-   **INPS (Social Security):** Recurring contributions.
+-   **Ritenute (Withholdings):** Withholding tax payments, usually monthly.
+
+**2. Operational Expenses:**
+-   **Utenze:** Look for recurring payments to utility providers (electricity, gas, water).
+-   **Telefonia:** Identify recurring phone and internet bills.
+-   **Canoni:** Find regular rent payments (affitto), leasing installments, or other fees.
+-   **Finanziamenti:** Look for loan (prestito) or mortgage (mutuo) installments.
+-   **Spese Condominiali:** Identify regular condominium fees.
+
+**For each distinct recurring payment you identify:**
+-   Determine the recurrence (Mensile, Trimestrale, Semestrale, Annuale).
+-   Calculate the next due date based on the last payment's date and recurrence.
+-   Create a clean \`descrizione\` for the deadline.
+-   For fiscal items, fill \`tipoTassa\` and \`periodoRiferimento\`. For operational items, these can be left empty or contain relevant info (e.g., "Fattura Mensile").
+-   Assign the most appropriate \`categoria\` and \`sottocategoria\` (e.g., 'Gestione Generale' -> 'Telefonia' for a phone bill, 'Tasse' -> 'IMU' for a tax).
+-   Check if a similar deadline (same description pattern and recurrence) already exists in 'existingDeadlines'. **If it exists, DO NOT include it in your output.**
 
 Historical Movements:
 {{{movements}}}
