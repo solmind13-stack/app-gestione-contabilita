@@ -53,10 +53,9 @@ interface ForecastComparisonProps {
   mainYear: number;
   comparisonYear: number | null;
   isLoading: boolean;
-  chartData: any[];
   totals: { [key: string]: number };
-  categoryTotals: { income: any[]; expense: any[] };
-  comparisonChartData: any[];
+  monthlyComparisonData: any[];
+  categoryComparisonData: { income: any[]; expense: any[] };
   cashflowChartData: any[];
 }
 
@@ -64,15 +63,14 @@ export function ForecastComparison({
   mainYear,
   comparisonYear,
   isLoading,
-  chartData,
   totals,
-  categoryTotals,
-  comparisonChartData,
-  cashflowChartData
+  monthlyComparisonData,
+  categoryComparisonData,
+  cashflowChartData,
 }: ForecastComparisonProps) {
   
-  const pieIncomeData = useMemo(() => categoryTotals.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.income]);
-  const pieExpenseData = useMemo(() => categoryTotals.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryTotals.expense]);
+  const pieIncomeData = useMemo(() => categoryComparisonData.income.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryComparisonData.income]);
+  const pieExpenseData = useMemo(() => categoryComparisonData.expense.filter(d => d.totalMain > 0).map(d => ({ name: d.category, value: d.totalMain })), [categoryComparisonData.expense]);
 
   return (
     <div className="space-y-6">
@@ -115,7 +113,7 @@ export function ForecastComparison({
             </div>
         ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
+              <BarChart data={monthlyComparisonData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
                   <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
@@ -150,7 +148,7 @@ export function ForecastComparison({
                 </div>
             ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={comparisonChartData}>
+                  <BarChart data={monthlyComparisonData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
                       <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
@@ -270,8 +268,8 @@ export function ForecastComparison({
                             <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
                             </TableRow>
                         ))
-                    ) : categoryTotals.income.length > 0 ? (
-                        categoryTotals.income.map(({category, totalMain, totalComparison}) => (
+                    ) : categoryComparisonData.income.length > 0 ? (
+                        categoryComparisonData.income.map(({category, totalMain, totalComparison}) => (
                         <TableRow key={category}>
                             <TableCell className="font-medium text-sm">{category}</TableCell>
                             <TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell>
@@ -312,8 +310,8 @@ export function ForecastComparison({
                             <TableCell><Skeleton className="h-5 w-20 ml-auto"/></TableCell>
                             </TableRow>
                         ))
-                    ) : categoryTotals.expense.length > 0 ? (
-                        categoryTotals.expense.map(({category, totalMain, totalComparison}) => (
+                    ) : categoryComparisonData.expense.length > 0 ? (
+                        categoryComparisonData.expense.map(({category, totalMain, totalComparison}) => (
                         <TableRow key={category}>
                             <TableCell className="font-medium text-sm">{category}</TableCell>
                             <TableCell className="text-right text-sm">{formatCurrency(totalMain)}</TableCell>
