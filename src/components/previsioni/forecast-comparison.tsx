@@ -83,7 +83,6 @@ export function ForecastComparison({
   } = useMemo(() => {
     const today = new Date();
     const currentYear = today.getFullYear();
-    const yearsToProcess = [mainYear, comparisonYear].filter(Boolean) as number[];
 
     const getYearlyTotals = (year: number) => {
         let totalIncomeConsuntivo = 0;
@@ -101,11 +100,11 @@ export function ForecastComparison({
             uscitePrevisto: 0,
         }));
 
-        // Filter data once per year
-        const yearMovements = (movements || []).filter(mov => parseDate(mov.data).getFullYear() === year && (company === 'Tutte' || mov.societa === company));
-        const yearIncomeForecasts = (incomeForecasts || []).filter(f => parseDate(f.dataPrevista).getFullYear() === year && (company === 'Tutte' || f.societa === company));
-        const yearExpenseForecasts = (expenseForecasts || []).filter(f => parseDate(f.dataScadenza).getFullYear() === year && (company === 'Tutte' || f.societa === company));
-        const yearDeadlines = (deadlines || []).filter(d => parseDate(d.dataScadenza).getFullYear() === year && (company === 'Tutte' || d.societa === company));
+        // Filter data once per year, using the reliable `anno` field
+        const yearMovements = (movements || []).filter(mov => mov.anno === year && (company === 'Tutte' || mov.societa === company));
+        const yearIncomeForecasts = (incomeForecasts || []).filter(f => f.anno === year && (company === 'Tutte' || f.societa === company));
+        const yearExpenseForecasts = (expenseForecasts || []).filter(f => f.anno === year && (company === 'Tutte' || f.societa === company));
+        const yearDeadlines = (deadlines || []).filter(d => d.anno === year && (company === 'Tutte' || d.societa === company));
 
         // Aggregate CONSUNTIVO totals and categories directly from movements
         yearMovements.forEach(mov => {
@@ -117,8 +116,10 @@ export function ForecastComparison({
             if (expense > 0) categoryExpense[mov.categoria] = (categoryExpense[mov.categoria] || 0) + expense;
             
             const monthIndex = parseDate(mov.data).getMonth();
-            monthlyData[monthIndex].entrateConsuntivo += income;
-            monthlyData[monthIndex].usciteConsuntivo += expense;
+            if (monthIndex >= 0 && monthIndex < 12) {
+              monthlyData[monthIndex].entrateConsuntivo += income;
+              monthlyData[monthIndex].usciteConsuntivo += expense;
+            }
         });
 
         // Aggregate PREVISTO totals and categories from forecasts and deadlines
@@ -128,7 +129,9 @@ export function ForecastComparison({
                 totalIncomePrevisto += weightedIncome;
                 categoryIncome[f.categoria] = (categoryIncome[f.categoria] || 0) + weightedIncome;
                 const monthIndex = parseDate(f.dataPrevista).getMonth();
-                monthlyData[monthIndex].entratePrevisto += weightedIncome;
+                 if (monthIndex >= 0 && monthIndex < 12) {
+                    monthlyData[monthIndex].entratePrevisto += weightedIncome;
+                }
             }
         });
 
@@ -138,7 +141,9 @@ export function ForecastComparison({
                 totalExpensePrevisto += weightedExpense;
                 categoryExpense[f.categoria] = (categoryExpense[f.categoria] || 0) + weightedExpense;
                 const monthIndex = parseDate(f.dataScadenza).getMonth();
-                monthlyData[monthIndex].uscitePrevisto += weightedExpense;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    monthlyData[monthIndex].uscitePrevisto += weightedExpense;
+                }
             }
         });
         
@@ -148,7 +153,9 @@ export function ForecastComparison({
                 totalExpensePrevisto += remainingAmount;
                 categoryExpense[d.categoria] = (categoryExpense[d.categoria] || 0) + remainingAmount;
                 const monthIndex = parseDate(d.dataScadenza).getMonth();
-                monthlyData[monthIndex].uscitePrevisto += remainingAmount;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    monthlyData[monthIndex].uscitePrevisto += remainingAmount;
+                }
             }
         });
 
@@ -214,18 +221,31 @@ export function ForecastComparison({
     const companyExpenseForecasts = (expenseForecasts || []).filter(f => company === 'Tutte' || f.societa === company);
     const companyDeadlines = (deadlines || []).filter(d => company === 'Tutte' || d.societa === company);
     
-    let cashflowBalance = companyMovements.filter(m => parseDate(m.data) < startOfMonth(today)).reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+    let cashflowBalance = companyMovements.filter(m => m.anno < today.getFullYear() || (m.anno === today.getFullYear() && parseDate(m.data) < startOfMonth(today)))
+                                          .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
+
     const cashflowProjectionData = Array.from({ length: 12 }, (_, i) => {
         const monthDate = addMonths(today, i);
         const monthStart = startOfMonth(monthDate);
         const monthEnd = endOfMonth(monthDate);
         let monthInflows = 0;
         let monthOutflows = 0;
+        
+        const isCurrentMonth = monthStart.getFullYear() === today.getFullYear() && monthStart.getMonth() === today.getMonth();
 
-        companyMovements.forEach(m => { if (isWithinInterval(parseDate(m.data), { start: monthStart < today ? monthStart : today, end: today })) { monthInflows += m.entrata || 0; monthOutflows += m.uscita || 0; } });
-        companyIncomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
-        companyExpenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
-        companyDeadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: monthStart < today ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        // For current month, add past movements
+        if (isCurrentMonth) {
+            companyMovements.forEach(m => { 
+                if (isWithinInterval(parseDate(m.data), { start: monthStart, end: today })) { 
+                    monthInflows += m.entrata || 0; 
+                    monthOutflows += m.uscita || 0; 
+                } 
+            });
+        }
+        
+        companyIncomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
+        companyExpenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
+        companyDeadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
         
         cashflowBalance += monthInflows - monthOutflows;
         return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: cashflowBalance };
