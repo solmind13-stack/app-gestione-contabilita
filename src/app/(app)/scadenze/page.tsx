@@ -216,21 +216,50 @@ export default function ScadenzePage() {
         setIsSuggestionLoading(true);
         setDeadlineSuggestions([]);
 
-        // Filter for the last 2 years of movements to reduce payload size
-        const twoYearsAgo = new Date();
-        twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-        const recentMovements = (movimenti || []).filter(m => new Date(m.data) >= twoYearsAgo);
+        // --- NEW STRATEGY: Client-side pre-processing ---
+        const normalizeDescription = (desc: string) => {
+            return desc.toLowerCase()
+                .replace(/n\.\s*\d+/g, '') // remove "n. 123"
+                .replace(/\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/g, '') // remove dates
+                .replace(/fattura|fatt\./g, '') // remove "fattura"
+                .replace(/rif\./g, '') // remove "rif."
+                .replace(/\s+/g, ' ').trim();
+        };
 
-        if (recentMovements.length === 0) {
-            toast({ title: 'Dati Insufficienti', description: 'Non ci sono movimenti negli ultimi 2 anni da analizzare.' });
+        const expenseMovements = movimenti.filter(m => m.uscita > 0);
+
+        const grouped = expenseMovements.reduce((acc, mov) => {
+            const key = normalizeDescription(mov.descrizione);
+            if (!acc[key]) {
+                acc[key] = [];
+            }
+            acc[key].push(mov);
+            return acc;
+        }, {} as Record<string, Movimento[]>);
+
+        const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3); // At least 3 occurrences
+
+        if (recurringCandidates.length === 0) {
+            toast({ title: 'Nessun Suggerimento', description: 'Non sono state trovate spese ricorrenti con almeno 3 occorrenze.' });
             setIsSuggestionLoading(false);
             return;
         }
+
+        const analysisPayload = recurringCandidates.map(group => {
+            const amounts = group.map(m => m.uscita);
+            const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+            return {
+                description: group[0].descrizione, // Send one original description as an example
+                count: group.length,
+                avgAmount: avgAmount,
+                dates: group.map(m => m.data).sort(),
+            }
+        });
         
         try {
             const result = await suggestFiscalDeadlines({
                 company: selectedCompany as 'LNC' | 'STG' | 'Tutte',
-                movements: JSON.stringify(recentMovements),
+                analysisCandidates: JSON.stringify(analysisPayload),
                 existingDeadlines: JSON.stringify(scadenze || []),
             });
 

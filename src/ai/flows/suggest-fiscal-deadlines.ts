@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 const SuggestFiscalDeadlinesInputSchema = z.object({
   company: z.enum(['LNC', 'STG', 'Tutte']).describe('The company to analyze. If "Tutte", analyze each company separately.'),
-  movements: z.string().describe('A JSON string of all historical financial movements (Movimento[]).'),
+  analysisCandidates: z.string().describe('A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, average amount, and a list of dates.'),
   existingDeadlines: z.string().describe('A JSON string of all existing deadlines (Scadenza[]) to avoid creating duplicates.'),
 });
 export type SuggestFiscalDeadlinesInput = z.infer<typeof SuggestFiscalDeadlinesInputSchema>;
@@ -43,35 +43,24 @@ const prompt = ai.definePrompt({
   name: 'suggestFiscalDeadlinesPrompt',
   input: { schema: SuggestFiscalDeadlinesInputSchema },
   output: { schema: SuggestFiscalDeadlinesOutputSchema },
-  prompt: `You are an expert financial analyst AI. Your task is to identify ALL recurring expenses from a list of historical bank movements and suggest them as future deadlines.
+  prompt: `You are an expert financial analyst AI. Your task is to identify recurring expenses from a pre-processed list of potential candidates and suggest them as future deadlines.
 
-You are given all movements for '{{company}}' and all existing deadlines. You must not suggest deadlines that already exist.
+You are given a list of candidates for '{{company}}' and all existing deadlines. You must not suggest deadlines that already exist.
 
-Analyze the movements and identify recurring patterns for both fiscal and operational expenses.
+Each candidate in the list has a sample description, a count of occurrences, an average amount, and a list of dates.
+Analyze this list to determine the recurrence pattern (Mensile, Trimestrale, etc.) and calculate the next due date.
 
-**1. Fiscal Expenses:**
--   **IVA (VAT):** Quarterly or monthly payments.
--   **IRPEF/IRES (Income Tax):** 'Acconto' and 'Saldo' payments, often in F24.
--   **INPS (Social Security):** Recurring contributions.
--   **Ritenute (Withholdings):** Withholding tax payments, usually monthly.
-
-**2. Operational Expenses:**
--   **Utenze:** Look for recurring payments to utility providers (electricity, gas, water).
--   **Telefonia:** Identify recurring phone and internet bills.
--   **Canoni:** Find regular rent payments (affitto), leasing installments, or other fees.
--   **Finanziamenti:** Look for loan (prestito) or mortgage (mutuo) installments.
--   **Spese Condominiali:** Identify regular condominium fees.
-
-**For each distinct recurring payment you identify:**
--   Determine the recurrence (Mensile, Trimestrale, Semestrale, Annuale).
--   Calculate the next due date based on the last payment's date and recurrence.
--   Create a clean 'descrizione' for the deadline.
--   For fiscal items, fill 'tipoTassa' and 'periodoRiferimento'. For operational items, you should either omit these fields or provide an empty string.
--   Assign the most appropriate 'categoria' and 'sottocategoria' (e.g., 'Gestione Generale' -> 'Telefonia' for a phone bill, 'Tasse' -> 'IMU' for a tax).
+**For each valid recurring expense you identify:**
+-   Determine the recurrence (Mensile, Trimestrale, Semestrale, Annuale). A good recurring expense should have consistent intervals between dates.
+-   Calculate the next due date based on the last payment's date and the identified recurrence.
+-   Create a clean, general 'descrizione' for the deadline (e.g., 'Canone Telefonico TIM').
+-   If it is a clear fiscal expense (e.g., description contains IVA, F24, IRES, INPS), try to determine 'tipoTassa' and 'periodoRiferimento'. For all other operational expenses (like utilities, rent), you MUST OMIT these fields or provide an empty string.
+-   Assign the most appropriate 'categoria' and 'sottocategoria'.
 -   Check if a similar deadline (same description pattern and recurrence) already exists in 'existingDeadlines'. **If it exists, DO NOT include it in your output.**
+-   Provide a 'reason' explaining why you are suggesting it (e.g., 'Found 12 monthly payments for about €25').
 
-Historical Movements:
-{{{movements}}}
+Potential Recurring Expenses:
+{{{analysisCandidates}}}
 
 Existing Deadlines (to avoid duplicates):
 {{{existingDeadlines}}}
