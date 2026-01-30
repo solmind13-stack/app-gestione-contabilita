@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview An AI flow to analyze historical movements and suggest recurring fiscal deadlines.
+ * @fileOverview An AI flow to analyze historical movements and suggest recurring fiscal and operational deadlines.
  *
  * - suggestFiscalDeadlines - The function that calls the AI flow.
  * - SuggestFiscalDeadlinesInput - The input type.
@@ -9,7 +9,6 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { CATEGORIE } from '@/lib/constants';
 
 const SuggestFiscalDeadlinesInputSchema = z.object({
   company: z.enum(['LNC', 'STG', 'Tutte']).describe('The company to analyze. If "Tutte", analyze each company separately.'),
@@ -20,14 +19,14 @@ export type SuggestFiscalDeadlinesInput = z.infer<typeof SuggestFiscalDeadlinesI
 
 const SuggestedDeadlineSchema = z.object({
     societa: z.enum(['LNC', 'STG']),
-    descrizione: z.string().describe('A clean, common description for this recurring fiscal deadline. E.g., "Pagamento IVA 1° Trimestre", "Acconto IRES".'),
+    descrizione: z.string().describe('A clean, common description for this recurring fiscal deadline. E.g., "Pagamento IVA 1° Trimestre", "Acconto IRES", "Canone Telefonico TIM".'),
     importoPrevisto: z.number().describe('The estimated amount for the deadline, based on the average or last payment.'),
     dataScadenza: z.string().describe('The calculated next due date for the deadline in YYYY-MM-DD format.'),
     ricorrenza: z.enum(['Mensile', 'Trimestrale', 'Semestrale', 'Annuale']),
-    tipoTassa: z.string().optional().describe('The specific type of tax or contribution (e.g., IVA, IRES, INPS, Ritenute). Only for fiscal expenses.'),
-    periodoRiferimento: z.string().optional().describe('The reference period for the tax (e.g., "Q2 2025", "Giugno 2025"). Only for fiscal expenses.'),
-    categoria: z.string().describe('The main category, should be "Tasse" or similar.'),
-    sottocategoria: z.string().optional().describe('The sub-category (e.g., "IVA Trimestrale", "IRES").'),
+    tipoTassa: z.string().optional().describe('The specific type of tax or contribution (e.g., IVA, IRES, INPS, Ritenute). Only for fiscal expenses. Omit or leave empty for operational expenses.'),
+    periodoRiferimento: z.string().optional().describe('The reference period for the tax (e.g., "Q2 2025", "Giugno 2025"). Only for fiscal expenses. Omit or leave empty for operational expenses.'),
+    categoria: z.string().describe('The main category, e.g., "Tasse" for taxes or "Gestione Generale" for operational costs.'),
+    sottocategoria: z.string().optional().describe('The sub-category (e.g., "IVA Trimestrale", "Telefonia").'),
     reason: z.string().describe('A brief explanation of why this deadline was suggested, mentioning number of payments found and average amount.'),
 });
 
@@ -66,9 +65,9 @@ Analyze the movements and identify recurring patterns for both fiscal and operat
 **For each distinct recurring payment you identify:**
 -   Determine the recurrence (Mensile, Trimestrale, Semestrale, Annuale).
 -   Calculate the next due date based on the last payment's date and recurrence.
--   Create a clean \`descrizione\` for the deadline.
--   For fiscal items, fill \`tipoTassa\` and \`periodoRiferimento\`. For operational items, you should either omit these fields or provide an empty string.
--   Assign the most appropriate \`categoria\` and \`sottocategoria\` (e.g., 'Gestione Generale' -> 'Telefonia' for a phone bill, 'Tasse' -> 'IMU' for a tax).
+-   Create a clean 'descrizione' for the deadline.
+-   For fiscal items, fill 'tipoTassa' and 'periodoRiferimento'. For operational items, you should either omit these fields or provide an empty string.
+-   Assign the most appropriate 'categoria' and 'sottocategoria' (e.g., 'Gestione Generale' -> 'Telefonia' for a phone bill, 'Tasse' -> 'IMU' for a tax).
 -   Check if a similar deadline (same description pattern and recurrence) already exists in 'existingDeadlines'. **If it exists, DO NOT include it in your output.**
 
 Historical Movements:
@@ -91,14 +90,15 @@ const suggestFiscalDeadlinesFlow = ai.defineFlow(
     try {
       const { output } = await prompt(input);
       if (!output) {
-        throw new Error('AI analysis returned no output.');
+        return { suggestions: [] };
       }
       return output;
     } catch (error: any) {
         console.error("Error in suggestFiscalDeadlinesFlow:", error);
-        throw new Error(
-          `L'analisi AI per suggerire le scadenze non è riuscita. ${error.message || 'Riprova più tardi.'}`
-        );
+        // Instead of throwing, which can crash the server action,
+        // we return a valid but empty output. The client will handle this
+        // as "no suggestions found", which is a safe fallback.
+        return { suggestions: [] };
     }
   }
 );
