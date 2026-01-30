@@ -19,7 +19,7 @@ import { parseDate } from '@/lib/utils';
 import { startOfMonth, endOfMonth, addMonths, isWithinInterval } from 'date-fns';
 
 
-const getQuery = (firestore: any, user: AppUser | null, company: string, collectionName: string) => {
+const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
     if (!firestore || !user) return null;
 
     let q = collection(firestore, collectionName) as CollectionReference<DocumentData>;
@@ -27,15 +27,12 @@ const getQuery = (firestore: any, user: AppUser | null, company: string, collect
     const role = user.role;
     const userCompany = user.company;
 
-    if (role === 'admin' || role === 'editor') {
-        if (company !== 'Tutte') {
-            return query(q, where('societa', '==', company));
-        }
-    } else if (role === 'company' || role === 'company-editor') {
+    if (role === 'company' || role === 'company-editor') {
         if (!userCompany) return null;
         return query(q, where('societa', '==', userCompany));
     }
     
+    // For admin/editor, fetch all data and filter client-side for consistency
     return query(q);
 }
 
@@ -72,16 +69,16 @@ export default function PrevisioniPage() {
     }
   };
 
-  const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'incomeForecasts'), [firestore, user, selectedCompany]);
-  const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'expenseForecasts'), [firestore, user, selectedCompany]);
-  const movimentiQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'movements'), [firestore, user, selectedCompany]);
-  const scadenzeQuery = useMemo(() => getQuery(firestore, user, selectedCompany, 'deadlines'), [firestore, user, selectedCompany]);
+  const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
+  const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
+  const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
+  const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
   
-  const { data: movimenti, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
-  const { data: previsioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
-  const { data: previsioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
-  const { data: scadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
+  const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
+  const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
+  const { data: allPrevisioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
+  const { data: allScadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
   const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
   
   const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze || isLoadingCompanies;
@@ -93,14 +90,20 @@ export default function PrevisioniPage() {
     cashflowDetailData,
     cashflowChartData
   } = useMemo(() => {
-    
+    const filterByCompany = (item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany;
+
+    const movimenti = (allMovements || []).filter(filterByCompany);
+    const previsioniEntrate = (allPrevisioniEntrate || []).filter(filterByCompany);
+    const previsioniUscite = (allPrevisioniUscite || []).filter(filterByCompany);
+    const scadenze = (allScadenze || []).filter(filterByCompany);
+
     const getYearData = (year: number | null) => {
         if (year === null) return null;
 
-        const yearMovements = (movimenti || []).filter(mov => mov.anno === year);
-        const yearIncomeForecasts = (previsioniEntrate || []).filter(f => f.anno === year);
-        const yearExpenseForecasts = (previsioniUscite || []).filter(f => f.anno === year);
-        const yearDeadlines = (scadenze || []).filter(d => d.anno === year);
+        const yearMovements = movimenti.filter(mov => mov.anno === year);
+        const yearIncomeForecasts = previsioniEntrate.filter(f => f.anno === year);
+        const yearExpenseForecasts = previsioniUscite.filter(f => f.anno === year);
+        const yearDeadlines = scadenze.filter(d => d.anno === year);
 
         // --- CONSUNTIVO (ACTUALS) ---
         const incomeConsuntivo = yearMovements.reduce((acc, mov) => acc + (mov.entrata || 0), 0);
@@ -122,28 +125,32 @@ export default function PrevisioniPage() {
 
         // --- MONTHLY DATA ---
         const monthlyData = Array.from({ length: 12 }, (_, i) => {
-            const monthStart = startOfMonth(new Date(year, i));
-            const monthEnd = endOfMonth(monthStart);
+            const monthStr = String(i + 1).padStart(2, '0');
+            const isPastMonth = new Date(year, i) < startOfMonth(new Date());
             
-            const entrateConsuntivo = yearMovements
-                .filter(m => parseDate(m.data).getMonth() === i)
-                .reduce((acc, m) => acc + (m.entrata || 0), 0);
+            let entrateConsuntivo = 0;
+            let usciteConsuntivo = 0;
+            if (isPastMonth || year < new Date().getFullYear()) {
+                 entrateConsuntivo = yearMovements
+                    .filter(m => m.data.substring(5, 7) === monthStr)
+                    .reduce((acc, m) => acc + (m.entrata || 0), 0);
 
-            const usciteConsuntivo = yearMovements
-                .filter(m => parseDate(m.data).getMonth() === i)
-                .reduce((acc, m) => acc + (m.uscita || 0), 0);
+                 usciteConsuntivo = yearMovements
+                    .filter(m => m.data.substring(5, 7) === monthStr)
+                    .reduce((acc, m) => acc + (m.uscita || 0), 0);
+            }
 
             const entratePrevisto = yearIncomeForecasts
-                .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && parseDate(f.dataPrevista).getMonth() === i)
+                .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && f.dataPrevista.substring(5, 7) === monthStr)
                 .reduce((acc, f) => acc + ((f.importoLordo || 0) * f.probabilita), 0);
             
             const uscitePrevisto = 
                 yearExpenseForecasts
-                    .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato' && parseDate(f.dataScadenza).getMonth() === i)
+                    .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato' && f.dataScadenza.substring(5, 7) === monthStr)
                     .reduce((acc, f) => acc + ((f.importoLordo || 0) * f.probabilita), 0)
                 + 
                 yearDeadlines
-                    .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato' && parseDate(d.dataScadenza).getMonth() === i)
+                    .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato' && d.dataScadenza.substring(5, 7) === monthStr)
                     .reduce((acc, d) => acc + (d.importoPrevisto - (d.importoPagato || 0)), 0);
 
             return {
@@ -226,7 +233,7 @@ export default function PrevisioniPage() {
     // --- Data for Cashflow Detail Table ---
     const cashflowDetailData = (() => {
         let openingBalance = (movimenti || [])
-            .filter(m => (m.anno < mainYear) && (selectedCompany === 'Tutte' || m.societa === selectedCompany))
+            .filter(m => (m.anno < mainYear))
             .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
         
         return (mainYearCalculatedData?.monthlyData || []).map(month => {
@@ -249,7 +256,6 @@ export default function PrevisioniPage() {
     const cashflowChartData = (() => {
       const today = new Date();
       const liquiditaAttuale = (movimenti || [])
-        .filter(m => (selectedCompany === 'Tutte' || m.societa === selectedCompany))
         .reduce((acc, mov) => acc + (mov.entrata || 0) - (mov.uscita || 0), 0);
 
       let runningBalance = liquiditaAttuale;
@@ -262,17 +268,17 @@ export default function PrevisioniPage() {
           const filterDateRange = { start: isCurrentMonth ? today : monthStart, end: monthEnd };
 
           const monthInflows = (previsioniEntrate || [])
-              .filter(f => (selectedCompany === 'Tutte' || f.societa === selectedCompany) && f.stato !== 'Incassato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataPrevista), filterDateRange))
+              .filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataPrevista), filterDateRange))
               .reduce((acc, f) => acc + (f.importoLordo * f.probabilita), 0);
           
           const monthOutflows = 
               (previsioniUscite || [])
-                  .filter(f => (selectedCompany === 'Tutte' || f.societa === selectedCompany) && f.stato !== 'Pagato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataScadenza), filterDateRange))
+                  .filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato' && isWithinInterval(parseDate(f.dataScadenza), filterDateRange))
                   .reduce((acc, f) => acc + (f.importoLordo * f.probabilita), 0)
               +
               (scadenze || [])
-                  .filter(d => (selectedCompany === 'Tutte' || d.societa === selectedCompany) && d.stato !== 'Pagato' && d.stato !== 'Annullato' && isWithinInterval(parseDate(d.dataScadenza), filterDateRange))
-                  .reduce((acc, d) => acc + (d.importoPrevisto - d.importoPagato), 0);
+                  .filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato' && isWithinInterval(parseDate(d.dataScadenza), filterDateRange))
+                  .reduce((acc, d) => acc + (d.importoPrevisto - (d.importoPagato || 0)), 0);
           
           runningBalance += monthInflows - monthOutflows;
           return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: runningBalance };
@@ -280,14 +286,14 @@ export default function PrevisioniPage() {
     })();
 
     return { totals, monthlyComparisonData, categoryComparisonData, cashflowDetailData, cashflowChartData };
-  }, [mainYear, comparisonYear, selectedCompany, movimenti, previsioniEntrate, previsioniUscite, scadenze]);
+  }, [mainYear, comparisonYear, selectedCompany, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze]);
 
-  const allData = useMemo(() => ({
-    movements: movimenti || [],
-    incomeForecasts: previsioniEntrate || [],
-    expenseForecasts: previsioniUscite || [],
-    deadlines: scadenze || [],
-  }), [movimenti, previsioniEntrate, previsioniUscite, scadenze]);
+  const allDataForAI = useMemo(() => ({
+    movements: allMovements || [],
+    incomeForecasts: allPrevisioniEntrate || [],
+    expenseForecasts: allPrevisioniUscite || [],
+    deadlines: allScadenze || [],
+  }), [allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze]);
   
   // CRUD Handlers
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
@@ -372,9 +378,10 @@ export default function PrevisioniPage() {
   
 
   const combinedExpenseData = useMemo(() => {
-    const fromForecasts = (previsioniUscite || []).map(f => ({ ...f, type: 'previsione' as const }));
+    const fromForecasts = (allPrevisioniUscite || []).filter(filterByCompany).map(f => ({ ...f, type: 'previsione' as const }));
     
-    const fromDeadlines = (scadenze || [])
+    const fromDeadlines = (allScadenze || [])
+        .filter(filterByCompany)
         .filter(s => s.stato !== 'Pagato')
         .map(s => ({
             id: s.id,
@@ -390,7 +397,7 @@ export default function PrevisioniPage() {
         }));
 
     return [...fromForecasts, ...fromDeadlines];
-  }, [previsioniUscite, scadenze]);
+  }, [allPrevisioniUscite, allScadenze, selectedCompany]);
 
   return (
     <div className="space-y-6">
@@ -464,7 +471,7 @@ export default function PrevisioniPage() {
         </TabsContent>
         <TabsContent value="entrate">
            <IncomeForecasts
-              data={previsioniEntrate || []}
+              data={(allPrevisioniEntrate || []).filter(filterByCompany)}
               year={mainYear}
               isLoading={isLoadingIncome}
               onAdd={handleAddIncomeForecast}
@@ -488,8 +495,8 @@ export default function PrevisioniPage() {
         </TabsContent>
         <TabsContent value="agente-ai">
             <AiCashflowAgent 
-                company={selectedCompany}
-                allData={allData}
+                company={selectedCompany as 'LNC' | 'STG' | 'Tutte'}
+                allData={allDataForAI}
             />
         </TabsContent>
       </Tabs>
