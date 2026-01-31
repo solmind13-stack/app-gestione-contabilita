@@ -235,6 +235,14 @@ export default function ScadenzePage() {
         setIsSuggestionLoading(true);
         setDeadlinePatterns([]);
 
+        const currentYear = new Date().getFullYear();
+        if (selectedYear !== 'Tutti') {
+            const year = Number(selectedYear);
+            setGenerationYear(year < currentYear ? currentYear : year);
+        } else {
+            setGenerationYear(currentYear);
+        }
+
         const companiesToAnalyze = selectedCompany === 'Tutte' && companies
             ? companies.map(c => c.sigla)
             : [selectedCompany];
@@ -250,10 +258,17 @@ export default function ScadenzePage() {
         for (const company of companiesToAnalyze) {
             if (!company) continue;
             
-            const twoYearsAgo = getYear(subYears(new Date(), 2));
-            const movementsForCompany = movimenti.filter(m => m.societa === company && m.anno >= twoYearsAgo);
+            const movementsForCompany = movimenti.filter(m => m.societa === company);
             
-            if (movementsForCompany.length < 3) continue;
+            let movementsToAnalyze: Movimento[];
+            if (selectedYear !== 'Tutti') {
+                movementsToAnalyze = movementsForCompany.filter(m => m.anno === Number(selectedYear));
+            } else {
+                const twoYearsAgo = getYear(subYears(new Date(), 2));
+                movementsToAnalyze = movementsForCompany.filter(m => m.anno >= twoYearsAgo);
+            }
+
+            if (movementsToAnalyze.length < 3) continue;
 
             const normalizeDescription = (desc: string) => {
                 let normalized = desc.toLowerCase();
@@ -271,7 +286,7 @@ export default function ScadenzePage() {
                 return normalized;
             };
 
-            const expenseMovements = movementsForCompany.filter(m => m.uscita > 0);
+            const expenseMovements = movementsToAnalyze.filter(m => m.uscita > 0);
             const grouped = expenseMovements.reduce((acc, mov) => {
                 const key = normalizeDescription(mov.descrizione);
                 if (!key) return acc;
@@ -332,13 +347,15 @@ export default function ScadenzePage() {
                 if (scadenza.societa !== pattern.societa || scadenza.ricorrenza !== pattern.ricorrenza) {
                     return false;
                 }
-                return scadenza.descrizione.toLowerCase().includes(pattern.descrizionePulita.toLowerCase());
+                const cleanScadenzaDesc = scadenza.descrizione.toLowerCase().split(' - ')[0].trim();
+                const cleanPatternDesc = pattern.descrizionePulita.toLowerCase().trim();
+                return cleanScadenzaDesc.includes(cleanPatternDesc) || cleanPatternDesc.includes(cleanScadenzaDesc);
             });
             return !isDuplicate;
         });
 
         if (filteredSuggestions.length === 0) {
-            toast({ title: 'Nessun Suggerimento', description: 'Nessuna nuova scadenza ricorrente è stata trovata.' });
+            toast({ title: 'Nessun Suggerimento', description: 'Nessuna nuova scadenza ricorrente è stata trovata in base ai filtri attuali.' });
         } else {
             const patternsWithIds = filteredSuggestions.map((s, index) => ({
                 ...s,
@@ -349,7 +366,7 @@ export default function ScadenzePage() {
             setIsSuggestionDialogOpen(true);
         }
         setIsSuggestionLoading(false);
-    }, [movimenti, scadenze, toast, selectedCompany, companies]);
+    }, [movimenti, scadenze, toast, selectedCompany, companies, selectedYear]);
 
 
     const handleCreateSuggestedDeadlines = async () => {
@@ -380,7 +397,7 @@ export default function ScadenzePage() {
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                         tipoTassa: pattern.tipoTassa || '',
-                        periodoRiferimento: pattern.periodoRiferimento || '',
+                        periodoRiferimento: '',
                         source: 'ai-suggested',
                     };
                     batch.set(newDeadlineRef, newDeadline);
