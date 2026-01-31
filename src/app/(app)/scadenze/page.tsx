@@ -227,107 +227,115 @@ export default function ScadenzePage() {
         }
     };
 
-   const handleSuggestDeadlines = useCallback(async () => {
-        if (!movimenti || movimenti.length === 0) {
-            toast({ variant: 'destructive', title: 'Nessun Movimento', description: 'Non ci sono movimenti da analizzare.' });
-            return;
-        }
+    const handleSuggestDeadlines = useCallback(async () => {
         setIsSuggestionLoading(true);
         setDeadlineSuggestions([]);
 
-        // --- NEW STRATEGY: Client-side pre-processing ---
-        const normalizeDescription = (desc: string) => {
-            // This function aims to create a consistent key for similar recurring transactions.
-            // It removes volatile parts like dates, months, invoice numbers, etc.
-            const months = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic';
-            const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
+        const companiesToAnalyze = selectedCompany === 'Tutte' && companies
+            ? companies.map(c => c.sigla as 'LNC' | 'STG')
+            : [selectedCompany as 'LNC' | 'STG'];
 
-            return desc.toLowerCase()
-                // Remove specific keywords
-                .replace(monthsRegex, '') 
-                .replace(/\bfattura|\bfatt|\bft/g, '')
-                .replace(/\brif\b|\briferimento/g, '')
-                // Remove various date formats and numbers that often change (invoice numbers, years, etc.)
-                .replace(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g, '') // dd/mm/yyyy, dd-mm-yy etc.
-                .replace(/\b\d{4}\b/g, '') // 4-digit years
-                .replace(/n\.\s*\d+/g, '') // "n. 1234"
-                .replace(/num\.\s*\d+/g, '') // "num. 1234"
-                .replace(/\b\d+\b/g, '') // remove any remaining standalone numbers
-                // Clean up punctuation and extra spaces
-                .replace(/[.,\-_/]/g, ' ') // replace common separators with a space
-                .replace(/\s+/g, ' ') // collapse multiple spaces
-                .trim();
-        };
-
-        const expenseMovements = movimenti.filter(m => m.uscita > 0);
-
-        const grouped = expenseMovements.reduce((acc, mov) => {
-            const key = normalizeDescription(mov.descrizione);
-            if (!key) return acc; // Ignore if normalization results in an empty string
-            if (!acc[key]) {
-                acc[key] = [];
-            }
-            acc[key].push(mov);
-            return acc;
-        }, {} as Record<string, Movimento[]>);
-
-        const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3); // At least 3 occurrences
-
-        if (recurringCandidates.length === 0) {
-            toast({ title: 'Nessun Suggerimento', description: 'Non sono state trovate spese ricorrenti con almeno 3 occorrenze.' });
+        if(companiesToAnalyze.length === 0 || !movimenti){
+            toast({ variant: 'destructive', title: 'Nessun Dato', description: 'Non ci sono società o movimenti da analizzare.' });
             setIsSuggestionLoading(false);
             return;
         }
 
-        const analysisPayload = recurringCandidates.map(group => {
-            const amounts = group.map(m => m.uscita);
-            const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-            return {
-                description: group[0].descrizione, // Send one original description as an example
-                count: group.length,
-                avgAmount: avgAmount,
-                dates: group.map(m => m.data).sort(),
-            }
-        });
-        
-        try {
-            // Simplify existing deadlines to reduce payload size
-            const simplifiedDeadlines = (scadenze || []).map(d => ({
-                descrizione: d.descrizione,
-                ricorrenza: d.ricorrenza,
-                societa: d.societa,
-            }));
+        let allSuggestions: DeadlineSuggestion[] = [];
 
-            const result = await suggestFiscalDeadlines({
-                company: selectedCompany as 'LNC' | 'STG' | 'Tutte',
-                analysisCandidates: JSON.stringify(analysisPayload),
-                existingDeadlines: JSON.stringify(simplifiedDeadlines),
-            });
+        const simplifiedDeadlines = (scadenze || []).map(d => ({
+            descrizione: d.descrizione,
+            ricorrenza: d.ricorrenza,
+            societa: d.societa,
+        }));
 
-            const suggestionsWithIds = result.suggestions.map((s, index) => ({
-                ...s,
-                id: `${s.descrizione}-${index}` // Simple unique ID for the session
-            }));
+        for (const company of companiesToAnalyze) {
+            const movementsForCompany = movimenti.filter(m => m.societa === company);
 
-            if (suggestionsWithIds.length === 0) {
-                toast({ title: 'Nessun Suggerimento', description: 'L\'analisi non ha trovato nuove scadenze ricorrenti.' });
-            } else {
-                setDeadlineSuggestions(suggestionsWithIds);
-                setSelectedSuggestions(suggestionsWithIds); // Pre-select all suggestions
-                setIsSuggestionDialogOpen(true);
+            if (movementsForCompany.length < 3) {
+                continue;
             }
 
-        } catch (error: any) {
-            console.error("Error suggesting deadlines:", error);
-            toast({ 
-                variant: 'destructive', 
-                title: 'Errore Suggerimento', 
-                description: error.message || 'Impossibile completare l\'analisi.' 
+            const twoYearsAgo = new Date();
+            twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+            const recentMovements = movementsForCompany.filter(m => new Date(m.data) >= twoYearsAgo);
+
+            if (recentMovements.length < 3) {
+                continue;
+            }
+
+            const normalizeDescription = (desc: string) => {
+                const months = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic';
+                const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
+                return desc.toLowerCase()
+                    .replace(monthsRegex, '')
+                    .replace(/\bfattura|\bfatt|\bft/g, '')
+                    .replace(/\brif\b|\briferimento/g, '')
+                    .replace(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g, '')
+                    .replace(/\b\d{4}\b/g, '')
+                    .replace(/n\.\s*\d+/g, '')
+                    .replace(/num\.\s*\d+/g, '')
+                    .replace(/\b\d+\b/g, '')
+                    .replace(/[.,\-_/]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+
+            const expenseMovements = recentMovements.filter(m => m.uscita > 0);
+            const grouped = expenseMovements.reduce((acc, mov) => {
+                const key = normalizeDescription(mov.descrizione);
+                if (!key) return acc;
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(mov);
+                return acc;
+            }, {} as Record<string, Movimento[]>);
+
+            const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3);
+            if (recurringCandidates.length === 0) continue;
+
+            const analysisPayload = recurringCandidates.map(group => {
+                const amounts = group.map(m => m.uscita);
+                const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+                return {
+                    description: group[0].descrizione,
+                    count: group.length,
+                    avgAmount: avgAmount,
+                    dates: group.map(m => m.data).sort(),
+                };
             });
-        } finally {
-            setIsSuggestionLoading(false);
+
+            try {
+                const result = await suggestFiscalDeadlines({
+                    company: company,
+                    analysisCandidates: JSON.stringify(analysisPayload),
+                    existingDeadlines: JSON.stringify(simplifiedDeadlines.filter(d => d.societa === company)),
+                });
+                allSuggestions.push(...result.suggestions);
+            } catch (error: any) {
+                console.error(`Error suggesting deadlines for ${company}:`, error);
+                toast({
+                    variant: 'destructive',
+                    title: `Errore Analisi per ${company}`,
+                    description: error.message || 'Impossibile completare l\'analisi.'
+                });
+                setIsSuggestionLoading(false);
+                return;
+            }
         }
-    }, [movimenti, scadenze, toast, selectedCompany]);
+
+        if (allSuggestions.length === 0) {
+            toast({ title: 'Nessun Suggerimento', description: 'L\'analisi non ha trovato nuove scadenze ricorrenti.' });
+        } else {
+            const suggestionsWithIds = allSuggestions.map((s, index) => ({
+                ...s,
+                id: `${s.descrizione}-${index}`
+            }));
+            setDeadlineSuggestions(suggestionsWithIds);
+            setSelectedSuggestions(suggestionsWithIds);
+            setIsSuggestionDialogOpen(true);
+        }
+        setIsSuggestionLoading(false);
+    }, [movimenti, scadenze, toast, selectedCompany, companies]);
 
 
     const handleCreateSuggestedDeadlines = async () => {
@@ -865,7 +873,3 @@ export default function ScadenzePage() {
     </div>
   );
 }
-
-
-
-
