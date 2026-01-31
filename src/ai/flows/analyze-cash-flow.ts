@@ -21,7 +21,7 @@ const MonthlyDataSchema = z.object({
 const AnalyzeCashFlowInputSchema = z.object({
   financialData: z.string().describe('A JSON string containing movements, income forecasts, and expense forecasts for the company.'),
   analysisPeriodDays: z.number().describe('The number of days into the future to analyze.'),
-  company: z.enum(['LNC', 'STG', 'Tutte']).describe('The company to analyze.'),
+  company: z.string().describe('The company to analyze.'),
 });
 export type AnalyzeCashFlowInput = z.infer<typeof AnalyzeCashFlowInputSchema>;
 

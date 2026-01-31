@@ -11,14 +11,14 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 const SuggestFiscalDeadlinesInputSchema = z.object({
-  company: z.enum(['LNC', 'STG', 'Tutte']).describe('The company to analyze. If "Tutte", analyze each company separately.'),
+  company: z.string().describe('The company to analyze. If "Tutte", analyze each company separately.'),
   analysisCandidates: z.string().describe('A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, average amount, and a list of dates.'),
   existingDeadlines: z.string().describe('A JSON string of all existing deadlines (Scadenza[]) to avoid creating duplicates.'),
 });
 export type SuggestFiscalDeadlinesInput = z.infer<typeof SuggestFiscalDeadlinesInputSchema>;
 
 const SuggestedDeadlineSchema = z.object({
-    societa: z.enum(['LNC', 'STG']),
+    societa: z.string(),
     descrizione: z.string().describe('A clean, common description for this recurring fiscal deadline. E.g., "Pagamento IVA 1° Trimestre", "Acconto IRES", "Canone Telefonico TIM".'),
     importoPrevisto: z.number().describe('The estimated amount for the deadline, based on the average or last payment.'),
     dataScadenza: z.string().describe('The calculated next due date for the deadline in YYYY-MM-DD format.'),

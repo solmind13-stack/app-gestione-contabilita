@@ -13,7 +13,7 @@ import {z} from 'genkit';
 
 const ProvideAiChatAssistantInputSchema = z.object({
   query: z.string().describe('The user question about their financial data.'),
-  company: z.enum(['LNC', 'STG', 'Tutte']).describe('The company to filter data by.'),
+  company: z.string().describe('The company to filter data by.'),
   // In a real app, you would pass real, structured data here.
   // For this example, we'll pass a summary string.
   financialData: z.string().describe('A string containing a summary of movements, deadlines, and forecasts.'),
