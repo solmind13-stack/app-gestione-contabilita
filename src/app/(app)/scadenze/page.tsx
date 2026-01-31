@@ -292,11 +292,25 @@ export default function ScadenzePage() {
             const analysisPayload = recurringCandidates.map(group => {
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+                const categoryCounts = group.reduce((acc, mov) => {
+                    const key = `${mov.categoria || 'Da categorizzare'}|||${mov.sottocategoria || 'Da categorizzare'}`;
+                    acc[key] = (acc[key] || 0) + 1;
+                    return acc;
+                }, {} as Record<string, number>);
+            
+                const mostCommonCatSub = Object.keys(categoryCounts).length > 0 
+                    ? Object.keys(categoryCounts).reduce((a, b) => categoryCounts[a] > categoryCounts[b] ? a : b)
+                    : 'Da categorizzare|||Da categorizzare';
+            
+                const [sourceCategory, sourceSubcategory] = mostCommonCatSub.split('|||');
+
                 return {
                     description: group[0].descrizione,
                     count: group.length,
                     avgAmount: avgAmount,
                     dates: group.map(m => m.data).sort(),
+                    sourceCategory: sourceCategory,
+                    sourceSubcategory: sourceSubcategory,
                 };
             });
             
@@ -829,6 +843,7 @@ export default function ScadenzePage() {
                         <TableHead>Sottocategoria</TableHead>
                         <TableHead className="text-right">Importo Previsto</TableHead>
                         <TableHead className="text-right">Importo Pagato</TableHead>
+                        <TableHead>Metodo Pag.</TableHead>
                         <TableHead className="text-center">Stato</TableHead>
                         <TableHead>Ricorrenza</TableHead>
                         <TableHead>Note</TableHead>
@@ -838,23 +853,25 @@ export default function ScadenzePage() {
                 <TableBody>
                     {isLoading ? (
                         <TableRow>
-                            <TableCell colSpan={13} className="h-24 text-center">
+                            <TableCell colSpan={14} className="h-24 text-center">
                                 <Loader2 className="mx-auto h-8 w-8 animate-spin" />
                             </TableCell>
                         </TableRow>
                     ) : error ? (
                         <TableRow>
-                            <TableCell colSpan={13} className="h-24 text-center text-red-500">
+                            <TableCell colSpan={14} className="h-24 text-center text-red-500">
                                 Errore nel caricamento: {error.message}
                             </TableCell>
                         </TableRow>
                     ) : filteredScadenze.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={13} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
+                            <TableCell colSpan={14} className="h-24 text-center">Nessuna scadenza trovata.</TableCell>
                         </TableRow>
                     ) : (
                         filteredScadenze.map((scadenza) => {
                             const isSelected = selectedIds.includes(scadenza.id);
+                            const linkedMovements = movimenti?.filter(m => m.linkedTo === `deadlines/${scadenza.id}`);
+                            const paymentMethods = linkedMovements?.map(m => m.metodoPag).filter(Boolean).join(', ');
                             return (
                                 <TableRow key={scadenza.id} data-state={isSelected ? "selected" : ""} className={cn(new Date(scadenza.dataScadenza) < oggi && scadenza.stato !== 'Pagato' && scadenza.stato !== 'Annullato' && 'bg-red-50 dark:bg-red-900/20')}>
                                     {user?.role === 'admin' && (
@@ -878,6 +895,7 @@ export default function ScadenzePage() {
                                     <TableCell>{scadenza.sottocategoria}</TableCell>
                                     <TableCell className="text-right font-medium">{formatCurrency(scadenza.importoPrevisto)}</TableCell>
                                     <TableCell className="text-right font-medium">{scadenza.importoPagato > 0 ? formatCurrency(scadenza.importoPagato) : '-'}</TableCell>
+                                    <TableCell>{paymentMethods || '-'}</TableCell>
                                     <TableCell className="text-center">
                                         <Badge
                                         className={cn({
@@ -913,6 +931,7 @@ export default function ScadenzePage() {
                             <TableCell colSpan={user?.role === 'admin' ? 7 : 6} className="font-bold">TOTALI</TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePrevisto)}</TableCell>
                             <TableCell className="text-right font-bold">{formatCurrency(riepilogo.totalePagato)}</TableCell>
+                            <TableCell />
                             <TableCell colSpan={4}></TableCell>
                         </TableRow>
                     </TableFooter>

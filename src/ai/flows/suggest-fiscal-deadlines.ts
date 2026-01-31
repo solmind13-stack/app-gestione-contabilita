@@ -13,7 +13,7 @@ import { z } from 'zod';
 
 const SuggestFiscalDeadlinesInputSchema = z.object({
   company: z.string().describe('The company to analyze.'),
-  analysisCandidates: z.string().describe('A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, average amount, and a list of dates.'),
+  analysisCandidates: z.string().describe("A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, average amount, a list of dates, and the most common sourceCategory and sourceSubcategory from the source movements."),
   existingDeadlines: z.string().describe('A JSON string of all existing deadlines (a simplified version) to avoid suggesting duplicates.'),
 });
 export type SuggestFiscalDeadlinesInput = z.infer<typeof SuggestFiscalDeadlinesInputSchema>;
@@ -51,14 +51,13 @@ const prompt = ai.definePrompt({
 
 You are given a list of candidates for '{{company}}' and all existing deadlines to avoid creating duplicates.
 
-Each candidate has a sample description, a count, an average amount, and a list of dates.
-Analyze this list to determine the precise recurrence pattern (Mensile, Trimestrale, Semestrale, etc.), the typical payment day, and other key details.
+Each candidate object in the JSON string has: 'description', 'count', 'avgAmount', 'dates', 'sourceCategory', 'sourceSubcategory'.
 
 **For each valid recurring expense you identify:**
-1.  **Analyze Recurrence**: Based on the provided dates, determine the exact recurrence ('Mensile', 'Bimestrale', 'Trimestrale', 'Quadrimestrale', 'Semestrale', 'Annuale'). Be precise.
+1.  **Analyze Recurrence**: Based on the provided dates, determine the precise recurrence ('Mensile', 'Bimestrale', 'Trimestrale', 'Quadrimestrale', 'Semestrale', 'Annuale'). Be precise.
 2.  **Estimate Due Day**: Calculate the average day of the month ('giornoStimato') the payment occurs.
-3.  **Clean Description**: Create a clean, general 'descrizionePulita' for the deadline (e.g., 'Canone Telefonico TIM', 'Rata Mutuo BAPR').
-4.  **Categorize**: Assign the most appropriate 'categoria' and 'sottocategoria'.
+3.  **Clean Description**: Create a clean, general 'descrizionePulita' that is similar to the source description (e.g., 'Canone Telefonico TIM', 'Rata Mutuo BAPR').
+4.  **Categorize**: Use the provided 'sourceCategory' and 'sourceSubcategory' from the source movements as the 'categoria' and 'sottocategoria' for the new deadline to ensure consistency. Do not invent new categories.
 5.  **Fiscal vs. Operational**:
     - If it is a clear **fiscal expense** (e.g., description contains IVA, F24, IRES, INPS, IMU), you MUST determine 'tipoTassa'.
     - For all other **operational expenses** (like utilities, rent, loans), you MUST OMIT 'tipoTassa' or provide an empty string.
