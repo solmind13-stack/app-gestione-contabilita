@@ -318,7 +318,7 @@ export default function ScadenzePage() {
                     dataScadenza: suggestion.dataScadenza,
                     descrizione: suggestion.descrizione,
                     categoria: suggestion.categoria,
-                    sottocategoria: suggestion.sottocategoria,
+                    sottocategoria: suggestion.sottocategoria || '',
                     importoPrevisto: suggestion.importoPrevisto,
                     importoPagato: 0,
                     stato: 'Da pagare',
@@ -326,8 +326,8 @@ export default function ScadenzePage() {
                     createdBy: user.uid,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
-                    tipoTassa: suggestion.tipoTassa,
-                    periodoRiferimento: suggestion.periodoRiferimento,
+                    tipoTassa: suggestion.tipoTassa || '',
+                    periodoRiferimento: suggestion.periodoRiferimento || '',
                     source: 'ai-suggested',
                 };
                 batch.set(newDeadlineRef, newDeadline);
@@ -839,4 +839,5 @@ export default function ScadenzePage() {
     </div>
   );
 }
+
 
