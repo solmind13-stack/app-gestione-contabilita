@@ -46,7 +46,7 @@ import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { suggestFiscalDeadlines } from '@/ai/flows/suggest-fiscal-deadlines';
-import { format as formatFns } from 'date-fns';
+import { format as formatFns, getYear, subYears } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 
@@ -247,16 +247,11 @@ export default function ScadenzePage() {
 
         let allSuggestions: RecurringExpensePattern[] = [];
         
-        const simplifiedDeadlines = (scadenze || []).map(d => ({
-            descrizione: d.descrizione,
-            ricorrenza: d.ricorrenza,
-            societa: d.societa,
-        }));
-
         for (const company of companiesToAnalyze) {
             if (!company) continue;
             
-            const movementsForCompany = movimenti.filter(m => m.societa === company);
+            const twoYearsAgo = getYear(subYears(new Date(), 2));
+            const movementsForCompany = movimenti.filter(m => m.societa === company && m.anno >= twoYearsAgo);
             
             if (movementsForCompany.length < 3) continue;
 
@@ -269,7 +264,7 @@ export default function ScadenzePage() {
                 const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
                 normalized = normalized.replace(monthsRegex, '');
                 normalized = normalized.replace(/\b(f24)\b/g, '@@F24@@');
-                normalized = normalized.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{2,}\b)/g, '');
+                normalized = normalized.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{4}\b)|(\b\d{6,}\b)/g, '');
                 normalized = normalized.replace(/@@F24@@/g, 'f24');
                 normalized = normalized.replace(/[.,\-_/()]/g, ' ');
                 normalized = normalized.replace(/\s+/g, ' ').trim();
@@ -313,14 +308,11 @@ export default function ScadenzePage() {
                     sourceSubcategory: sourceSubcategory,
                 };
             });
-            
-            const simplifiedDeadlinesForCompany = simplifiedDeadlines.filter(d => d.societa === company);
 
             try {
                 const result = await suggestFiscalDeadlines({
                     company: company,
                     analysisCandidates: JSON.stringify(analysisPayload),
-                    existingDeadlines: JSON.stringify(simplifiedDeadlinesForCompany),
                 });
                 allSuggestions.push(...result.suggestions);
             } catch (error: any) {
@@ -334,11 +326,21 @@ export default function ScadenzePage() {
                 return;
             }
         }
+        
+        const filteredSuggestions = allSuggestions.filter(pattern => {
+            const isDuplicate = (scadenze || []).some(scadenza => {
+                if (scadenza.societa !== pattern.societa || scadenza.ricorrenza !== pattern.ricorrenza) {
+                    return false;
+                }
+                return scadenza.descrizione.toLowerCase().includes(pattern.descrizionePulita.toLowerCase());
+            });
+            return !isDuplicate;
+        });
 
-        if (allSuggestions.length === 0) {
-            toast({ title: 'Nessun Suggerimento', description: 'L\'analisi non ha trovato nuove scadenze ricorrenti.' });
+        if (filteredSuggestions.length === 0) {
+            toast({ title: 'Nessun Suggerimento', description: 'Nessuna nuova scadenza ricorrente è stata trovata.' });
         } else {
-            const patternsWithIds = allSuggestions.map((s, index) => ({
+            const patternsWithIds = filteredSuggestions.map((s, index) => ({
                 ...s,
                 id: `${s.descrizionePulita}-${index}`
             }));
@@ -378,7 +380,7 @@ export default function ScadenzePage() {
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                         tipoTassa: pattern.tipoTassa || '',
-                        periodoRiferimento: '',
+                        periodoRiferimento: pattern.periodoRiferimento || '',
                         source: 'ai-suggested',
                     };
                     batch.set(newDeadlineRef, newDeadline);

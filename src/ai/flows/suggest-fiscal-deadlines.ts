@@ -14,7 +14,6 @@ import { z } from 'zod';
 const SuggestFiscalDeadlinesInputSchema = z.object({
   company: z.string().describe('The company to analyze.'),
   analysisCandidates: z.string().describe("A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, average amount, a list of dates, and the most common sourceCategory and sourceSubcategory from the source movements."),
-  existingDeadlines: z.string().describe('A JSON string of all existing deadlines (a simplified version) to avoid suggesting duplicates.'),
 });
 export type SuggestFiscalDeadlinesInput = z.infer<typeof SuggestFiscalDeadlinesInputSchema>;
 
@@ -49,7 +48,7 @@ const prompt = ai.definePrompt({
   output: { schema: SuggestFiscalDeadlinesOutputSchema },
   prompt: `You are an expert financial analyst AI for Italian companies. Your task is to identify recurring expense patterns from a pre-processed list of potential candidates and suggest them as future schedulable deadlines.
 
-You are given a list of candidates for '{{company}}' and all existing deadlines to avoid creating duplicates.
+You are given a list of candidates for '{{company}}'.
 
 Each candidate object in the JSON string has: 'description', 'count', 'avgAmount', 'dates', 'sourceCategory', 'sourceSubcategory'.
 
@@ -61,17 +60,13 @@ Each candidate object in the JSON string has: 'description', 'count', 'avgAmount
 5.  **Fiscal vs. Operational**:
     - If it is a clear **fiscal expense** (e.g., description contains IVA, F24, IRES, INPS, IMU), you MUST determine 'tipoTassa'.
     - For all other **operational expenses** (like utilities, rent, loans), you MUST OMIT 'tipoTassa' or provide an empty string.
-6.  **Avoid Duplicates**: Check if a similar deadline (same 'descrizionePulita' and 'ricorrenza') already exists in the 'existingDeadlines' list. **If it exists, DO NOT include it in your output.**
-7.  **Provide Reasoning**: Give a brief 'ragione' explaining your suggestion (e.g., 'Trovati 12 pagamenti mensili per circa €25').
-8.  **Copy Company**: Ensure the 'societa' field in your output matches the '{{company}}' from the input.
+6.  **Provide Reasoning**: Give a brief 'ragione' explaining your suggestion (e.g., 'Trovati 12 pagamenti mensili per circa €25').
+7.  **Copy Company**: Ensure the 'societa' field in your output matches the '{{company}}' from the input.
 
 **Candidate Data from Client:**
 {{{analysisCandidates}}}
 
-**Existing Deadlines (to avoid duplicates):**
-{{{existingDeadlines}}}
-
-Respond with a JSON object containing a 'suggestions' array of the new, non-existing recurring patterns you have identified. If you find no new patterns, return an empty array.
+Respond with a JSON object containing a 'suggestions' array of all the recurring patterns you have identified. If you find no patterns, return an empty array.
 `,
 });
 
