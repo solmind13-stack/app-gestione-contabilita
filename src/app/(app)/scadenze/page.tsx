@@ -143,8 +143,27 @@ export default function ScadenzePage() {
     const handleDeleteDeadline = async () => {
         if (!deadlineToDelete || !firestore) return;
         try {
-            await deleteDoc(doc(firestore, 'deadlines', deadlineToDelete.id));
-            toast({ title: "Scadenza Eliminata", description: "La scadenza è stata eliminata con successo." });
+            const deadlineId = deadlineToDelete.id;
+            const deadlineRef = doc(firestore, 'deadlines', deadlineId);
+            
+            // Find all movements linked to this deadline
+            const movementsRef = collection(firestore, 'movements');
+            const q = query(movementsRef, where('linkedTo', '==', `deadlines/${deadlineId}`));
+            const linkedMovementsSnap = await getDocs(q);
+    
+            const batch = writeBatch(firestore);
+            
+            // Unlink all found movements
+            linkedMovementsSnap.forEach(movementDoc => {
+                batch.update(movementDoc.ref, { linkedTo: null });
+            });
+            
+            // Delete the deadline itself
+            batch.delete(deadlineRef);
+            
+            await batch.commit();
+            
+            toast({ title: "Scadenza Eliminata", description: "La scadenza e i relativi collegamenti sono stati rimossi." });
         } catch (error) {
             console.error("Error deleting deadline: ", error);
             toast({ variant: 'destructive', title: 'Errore Eliminazione', description: 'Impossibile eliminare la scadenza. Controlla i permessi.' });
@@ -846,6 +865,7 @@ export default function ScadenzePage() {
     </div>
   );
 }
+
 
 
 

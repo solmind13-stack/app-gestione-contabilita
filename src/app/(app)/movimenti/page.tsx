@@ -212,59 +212,38 @@ export default function MovimentiPage() {
 
     const handleEditMovement = async (updatedMovement: Movimento) => {
         if (!user || !firestore || !updatedMovement.id) return;
-    
-        const originalMovement = movimentiData?.find(m => m.id === updatedMovement.id);
-    
+
         try {
             await runTransaction(firestore, async (transaction) => {
                 const movementDocRef = doc(firestore, 'movements', updatedMovement.id);
-    
                 const originalMovementSnap = await transaction.get(movementDocRef);
+
                 if (!originalMovementSnap.exists()) {
                     throw new Error("Movimento originale non trovato!");
                 }
-                const originalMovementData = originalMovementSnap.data() as Movimento;
-    
-                let linkedDocSnap;
-                let linkedDocRef;
-                if (updatedMovement.linkedTo) {
-                    const [collectionName, docId] = updatedMovement.linkedTo.split('/');
-                    if (!collectionName || !docId) throw new Error("ID elemento collegato non valido.");
-                    linkedDocRef = doc(firestore, collectionName, docId);
-                    linkedDocSnap = await transaction.get(linkedDocRef);
-                    if (!linkedDocSnap?.exists()) {
-                        console.warn(`Documento collegato ${updatedMovement.linkedTo} non trovato durante l'aggiornamento.`);
-                        linkedDocRef = undefined; 
-                    }
-                }
-    
-                const { id, ...dataToUpdate } = updatedMovement;
-                const finalMovementData = {
-                    ...dataToUpdate,
-                    updatedAt: new Date().toISOString(),
-                    createdBy: originalMovementData.createdBy || user.uid,
-                    inseritoDa: user.displayName,
-                };
-    
-                transaction.update(movementDocRef, finalMovementData);
-    
-                if (linkedDocRef && linkedDocSnap?.exists()) {
-                    const collectionName = linkedDocRef.parent.id;
-                    const originalAmount = originalMovementData.uscita > 0 ? originalMovementData.uscita : -originalMovementData.entrata;
-                    const newAmount = updatedMovement.uscita > 0 ? updatedMovement.uscita : -updatedMovement.entrata;
-                    const amountDifference = newAmount - originalAmount;
-    
+                const originalMovement = originalMovementSnap.data() as Movimento;
+
+                // Helper function to update a linked item
+                const updateLinkedItem = async (linkedToPath: string, amount: number, operation: 'add' | 'subtract') => {
+                    const [collectionName, docId] = linkedToPath.split('/');
+                    if (!collectionName || !docId) return; // Invalid path
+
+                    const linkedDocRef = doc(firestore, collectionName, docId);
+                    const linkedDocSnap = await transaction.get(linkedDocRef);
+                    if (!linkedDocSnap.exists()) return; // Linked doc doesn't exist, do nothing
+
                     if (collectionName === 'deadlines') {
                         const data = linkedDocSnap.data() as Scadenza;
-                        const newPaidAmount = (data.importoPagato || 0) + amountDifference;
+                        const change = operation === 'add' ? amount : -amount;
+                        const newPaidAmount = (data.importoPagato || 0) + change;
                         const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
                         transaction.update(linkedDocRef, { importoPagato: newPaidAmount, stato: newStatus });
-    
                     } else if (collectionName === 'expenseForecasts' || collectionName === 'incomeForecasts') {
                         const data = linkedDocSnap.data() as PrevisioneUscita | PrevisioneEntrata;
-                        const newEffectiveAmount = (data.importoEffettivo || 0) + amountDifference;
-                        const isExpense = collectionName === 'expenseForecasts';
+                        const change = operation === 'add' ? amount : -amount;
+                        const newEffectiveAmount = (data.importoEffettivo || 0) + change;
                         
+                        const isExpense = collectionName === 'expenseForecasts';
                         let newStatus;
                         if (newEffectiveAmount >= data.importoLordo) {
                             newStatus = isExpense ? 'Pagato' : 'Incassato';
@@ -275,18 +254,54 @@ export default function MovimentiPage() {
                         }
                         transaction.update(linkedDocRef, { importoEffettivo: newEffectiveAmount, stato: newStatus });
                     }
+                };
+
+                const originalAmount = originalMovement.uscita > 0 ? originalMovement.uscita : originalMovement.entrata;
+                const newAmount = updatedMovement.uscita > 0 ? updatedMovement.uscita : updatedMovement.entrata;
+
+                // If link has changed, revert the old one and apply the new one
+                if (originalMovement.linkedTo !== updatedMovement.linkedTo) {
+                    // Revert from old link if it existed
+                    if (originalMovement.linkedTo) {
+                        await updateLinkedItem(originalMovement.linkedTo, originalAmount, 'subtract');
+                    }
+                    // Apply to new link if it exists
+                    if (updatedMovement.linkedTo && updatedMovement.linkedTo !== 'nessuno') {
+                        await updateLinkedItem(updatedMovement.linkedTo, newAmount, 'add');
+                    }
+                } 
+                // If link is the same but amount changed, adjust the difference
+                else if (updatedMovement.linkedTo && updatedMovement.linkedTo !== 'nessuno' && originalAmount !== newAmount) {
+                    const amountDifference = newAmount - originalAmount;
+                    await updateLinkedItem(updatedMovement.linkedTo, amountDifference, 'add');
                 }
+
+                // Finally, update the movement document itself
+                const { id, ...dataToUpdate } = updatedMovement;
+                const newStatus = originalMovement.status === 'manual_review' && dataToUpdate.categoria !== 'Da categorizzare' ? 'ok' : originalMovement.status;
+                
+                const finalMovementData = {
+                    ...dataToUpdate,
+                    linkedTo: dataToUpdate.linkedTo === 'nessuno' ? null : dataToUpdate.linkedTo,
+                    updatedAt: new Date().toISOString(),
+                    createdBy: originalMovement.createdBy || user.uid,
+                    inseritoDa: user.displayName,
+                    status: newStatus,
+                };
+                transaction.update(movementDocRef, finalMovementData);
             });
-            
-            if (originalMovement && originalMovement.status === 'manual_review' && updatedMovement.status === 'ok') {
+
+            // Handle feedback outside the transaction
+            const originalMov = movimentiData?.find(m => m.id === updatedMovement.id);
+            if (originalMov && originalMov.status === 'manual_review' && updatedMovement.status === 'ok') {
                 await handleSaveFeedback({
-                    descriptionPattern: originalMovement.descrizione,
+                    descriptionPattern: originalMov.descrizione,
                     category: updatedMovement.categoria,
                     subcategory: updatedMovement.sottocategoria,
                     userId: user.uid,
                 });
             }
-    
+
             toast({ title: "Movimento Aggiornato", description: "Il movimento e le voci collegate sono stati aggiornati." });
         } catch (error: any) {
             console.error("Error updating movement: ", error);

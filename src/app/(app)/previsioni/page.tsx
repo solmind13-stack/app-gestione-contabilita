@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc, writeBatch, getDocs } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
@@ -234,8 +234,22 @@ export default function PrevisioniPage() {
   const handleDeleteIncomeForecast = async (forecastId: string) => {
     if (!firestore) return;
     try {
-        await deleteDoc(doc(firestore, 'incomeForecasts', forecastId));
-        toast({ title: 'Previsione Eliminata', description: 'La previsione di entrata è stata eliminata.' });
+        const forecastRef = doc(firestore, 'incomeForecasts', forecastId);
+        const movementsRef = collection(firestore, 'movements');
+        const q = query(movementsRef, where('linkedTo', '==', `incomeForecasts/${forecastId}`));
+        const linkedMovementsSnap = await getDocs(q);
+
+        const batch = writeBatch(firestore);
+
+        linkedMovementsSnap.forEach(movementDoc => {
+            batch.update(movementDoc.ref, { linkedTo: null });
+        });
+
+        batch.delete(forecastRef);
+        
+        await batch.commit();
+
+        toast({ title: 'Previsione Eliminata', description: 'La previsione di entrata e i collegamenti sono stati rimossi.' });
     } catch (e) {
         toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile eliminare la previsione.' });
         console.error(e);
@@ -266,13 +280,27 @@ export default function PrevisioniPage() {
     }
   };
 
-   const handleDeleteExpenseForecast = async (forecastId: string, type: 'previsione' | 'scadenza') => {
+   const handleDeleteExpenseForecast = async (itemId: string, type: 'previsione' | 'scadenza') => {
     if (!firestore) return;
     const collectionName = type === 'previsione' ? 'expenseForecasts' : 'deadlines';
     const toastTitle = type === 'previsione' ? 'Previsione Eliminata' : 'Scadenza Eliminata';
+    
     try {
-        await deleteDoc(doc(firestore, collectionName, forecastId));
-        toast({ title: toastTitle, description: `L'elemento è stato eliminato.` });
+        const itemRef = doc(firestore, collectionName, itemId);
+        const movementsRef = collection(firestore, 'movements');
+        const q = query(movementsRef, where('linkedTo', '==', `${collectionName}/${itemId}`));
+        const linkedMovementsSnap = await getDocs(q);
+
+        const batch = writeBatch(firestore);
+
+        linkedMovementsSnap.forEach(movementDoc => {
+            batch.update(movementDoc.ref, { linkedTo: null });
+        });
+        
+        batch.delete(itemRef);
+
+        await batch.commit();
+        toast({ title: toastTitle, description: `L'elemento e i relativi collegamenti sono stati rimossi.` });
     } catch (e) {
         toast({ variant: 'destructive', title: 'Errore', description: "Impossibile eliminare l'elemento." });
         console.error(e);
