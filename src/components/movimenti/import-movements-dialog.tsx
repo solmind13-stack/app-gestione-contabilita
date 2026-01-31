@@ -229,44 +229,49 @@ export function ImportMovementsDialog({
     };
     
     const parseDateValue = (dateValue: any): string => {
-        try {
-            // Handle Excel's numeric date format
-            if (typeof dateValue === 'number' && dateValue > 0) {
-                const excelEpoch = new Date(1899, 11, 30);
-                const jsDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
-                if (!isNaN(jsDate.getTime())) {
-                    return jsDate.toISOString().split('T')[0];
-                }
-            }
-            
-            // Handle string dates (e.g., "DD/MM/YYYY", "YYYY-MM-DD", etc.)
-            const dateString = String(dateValue);
-            // Attempt to parse formats like DD/MM/YYYY or DD-MM-YYYY
-            const match = dateString.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
-            if (match) {
-                const day = parseInt(match[1], 10);
-                const month = parseInt(match[2], 10);
-                let year = parseInt(match[3], 10);
-                if (year < 100) { // Handle 2-digit years
-                    year += 2000;
-                }
-                const parsedDate = new Date(year, month - 1, day);
-                if (!isNaN(parsedDate.getTime())) {
-                    return parsedDate.toISOString().split('T')[0];
-                }
-            }
-
-            // Fallback for ISO strings or other browser-supported formats
-            const parsedDate = new Date(dateString);
-            if (!isNaN(parsedDate.getTime())) {
-                return parsedDate.toISOString().split('T')[0];
-            }
-            
-            throw new Error('Invalid date format');
-        } catch (e) {
-            console.warn(`Could not parse date "${dateValue}", using today's date.`);
+        if (!dateValue) {
+            console.warn("Received empty date value, using today's date.");
             return new Date().toISOString().split('T')[0];
         }
+
+        // Handle Excel's numeric date format
+        if (typeof dateValue === 'number' && dateValue > 25569) { // 25569 is 1970-01-01
+            const excelEpoch = new Date(1899, 11, 30);
+            const jsDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
+            if (!isNaN(jsDate.getTime())) {
+                const tzOffset = jsDate.getTimezoneOffset() * 60000;
+                const utcDate = new Date(jsDate.getTime() - tzOffset);
+                return utcDate.toISOString().split('T')[0];
+            }
+        }
+        
+        const dateString = String(dateValue).trim();
+
+        // Attempt to parse formats like DD/MM/YYYY or DD-MM-YY
+        const match = dateString.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+        if (match) {
+            const day = match[1].padStart(2, '0');
+            const month = match[2].padStart(2, '0');
+            let year = match[3];
+            if (year.length === 2) {
+                year = `20${year}`;
+            }
+            return `${year}-${month}-${day}`;
+        }
+
+        // Fallback for ISO strings or other directly parsable formats
+        try {
+             const parsedDate = new Date(dateString);
+             if (!isNaN(parsedDate.getTime())) {
+                 const tzOffset = parsedDate.getTimezoneOffset() * 60000;
+                 return new Date(parsedDate.getTime() - tzOffset).toISOString().split('T')[0];
+             }
+        } catch(e) {
+             // Fall through
+        }
+        
+        console.warn(`Could not parse date "${dateString}", using today's date.`);
+        return new Date().toISOString().split('T')[0];
     };
 
     return rows.map(data => {
@@ -503,7 +508,7 @@ export function ImportMovementsDialog({
            <DialogDescription>
             {stage === 'upload' && "Carica un file Excel (.xlsx) per estrarre i movimenti."}
             {stage === 'review' && "Rivedi i dati estratti prima di salvarli nel database."}
-            {stage === 'ai_progress' && "I movimenti sono stati importati. Ora puoi avviare l'analisi AI."}
+            {stage === 'ai_progress' && "I movimenti sono stati importati. Ora puoi avviare l'analisi AI per la categorizzazione."}
             {stage === 'final_review' && "Analisi AI completata. Rivedi i risultati finali."}
           </DialogDescription>
         </DialogHeader>
