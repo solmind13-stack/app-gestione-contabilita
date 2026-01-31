@@ -38,7 +38,7 @@ export const IVA_PERCENTAGES = [
 
 export const METODI_PAGAMENTO = ['Bonifico', 'Contanti', 'Assegno', 'Carta di Credito', 'Addebito Diretto (SDD)', 'Altro'];
 
-export const RICORRENZE = ['Nessuna', 'Mensile', 'Trimestrale', 'Semestrale', 'Annuale'];
+export const RICORRENZE = ['Nessuna', 'Mensile', 'Bimestrale', 'Trimestrale', 'Quadrimestrale', 'Semestrale', 'Annuale', 'Altro'];
 export const STATI_SCADENZE = ['Da pagare', 'Pagato', 'Parziale'];
 
 // Previsioni Entrate

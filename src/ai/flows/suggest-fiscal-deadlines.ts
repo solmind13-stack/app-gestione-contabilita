@@ -1,37 +1,41 @@
 'use server';
 /**
- * @fileOverview An AI flow to analyze historical movements and suggest recurring fiscal and operational deadlines.
+ * @fileOverview An AI flow to analyze historical movements and suggest recurring expense patterns.
  *
  * - suggestFiscalDeadlines - The function that calls the AI flow.
  * - SuggestFiscalDeadlinesInput - The input type.
- * - SuggestFiscalDeadlinesOutput - The output type.
+ * - RecurringExpensePattern - The output type for a single pattern.
+ * - SuggestFiscalDeadlinesOutput - The full output type.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 const SuggestFiscalDeadlinesInputSchema = z.object({
-  company: z.string().describe('The company to analyze. If "Tutte", analyze each company separately.'),
+  company: z.string().describe('The company to analyze.'),
   analysisCandidates: z.string().describe('A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, average amount, and a list of dates.'),
-  existingDeadlines: z.string().describe('A JSON string of all existing deadlines (Scadenza[]) to avoid creating duplicates.'),
+  existingDeadlines: z.string().describe('A JSON string of all existing deadlines (a simplified version) to avoid suggesting duplicates.'),
 });
 export type SuggestFiscalDeadlinesInput = z.infer<typeof SuggestFiscalDeadlinesInputSchema>;
 
-const SuggestedDeadlineSchema = z.object({
-    societa: z.string(),
-    descrizione: z.string().describe('A clean, common description for this recurring fiscal deadline. E.g., "Pagamento IVA 1° Trimestre", "Acconto IRES", "Canone Telefonico TIM".'),
-    importoPrevisto: z.number().describe('The estimated amount for the deadline, based on the average or last payment.'),
-    dataScadenza: z.string().describe('The calculated next due date for the deadline in YYYY-MM-DD format.'),
-    ricorrenza: z.enum(['Mensile', 'Trimestrale', 'Semestrale', 'Annuale']),
-    tipoTassa: z.string().optional().describe('The specific type of tax or contribution (e.g., IVA, IRES, INPS, Ritenute). Only for fiscal expenses. Omit or leave empty for operational expenses.'),
-    periodoRiferimento: z.string().optional().describe('The reference period for the tax (e.g., "Q2 2025", "Giugno 2025"). Only for fiscal expenses. Omit or leave empty for operational expenses.'),
-    categoria: z.string().describe('The main category, e.g., "Tasse" for taxes or "Gestione Generale" for operational costs.'),
-    sottocategoria: z.string().optional().describe('The sub-category (e.g., "IVA Trimestrale", "Telefonia").'),
-    reason: z.string().describe('A brief explanation of why this deadline was suggested, mentioning number of payments found and average amount.'),
+// This is the new, richer output schema for a single pattern
+const RecurringExpensePatternSchema = z.object({
+    societa: z.string().describe("The company code (e.g., 'LNC', 'STG') this pattern belongs to."),
+    descrizionePulita: z.string().describe("A clean, generic description for this recurring expense. E.g., 'Canone Telefonico TIM', 'Rata Mutuo BAPR', 'Pagamento F24'."),
+    importoPrevisto: z.number().describe('The estimated amount for the deadline, based on the average payment.'),
+    ricorrenza: z.enum(['Mensile', 'Bimestrale', 'Trimestrale', 'Quadrimestrale', 'Semestrale', 'Annuale']).describe("The identified recurrence pattern of the expense."),
+    giornoStimato: z.number().int().min(1).max(31).describe("The estimated day of the month the payment is due (e.g., 15 for the 15th). For non-monthly, it's the day in the due month."),
+    primoMese: z.number().int().min(1).max(12).optional().describe("For non-monthly recurrences, the first month of the cycle (1=Jan, 12=Dec). E.g., for quarterly payments in Mar,Jun,Sep,Dec, this would be 3."),
+    categoria: z.string().describe('The most appropriate main category, e.g., "Tasse", "Gestione Generale", "Finanziamenti".'),
+    sottocategoria: z.string().optional().describe('The most appropriate sub-category (e.g., "IVA Trimestrale", "Telefonia", "Rate Mutuo").'),
+    metodoPagamentoTipico: z.string().optional().describe("The typical payment method if identifiable (e.g., 'Addebito Diretto (SDD)', 'Bonifico')."),
+    tipoTassa: z.string().optional().describe("ONLY for fiscal expenses, the specific type of tax (e.g., 'IVA', 'IRES', 'IMU'). Must be omitted or empty for operational expenses like utilities or rent."),
+    ragione: z.string().describe('A brief explanation of why this deadline was suggested, mentioning number of payments found and average amount.'),
 });
+export type RecurringExpensePattern = z.infer<typeof RecurringExpensePatternSchema>;
 
 const SuggestFiscalDeadlinesOutputSchema = z.object({
-  suggestions: z.array(SuggestedDeadlineSchema),
+  suggestions: z.array(RecurringExpensePatternSchema),
 });
 export type SuggestFiscalDeadlinesOutput = z.infer<typeof SuggestFiscalDeadlinesOutputSchema>;
 
@@ -43,29 +47,32 @@ const prompt = ai.definePrompt({
   name: 'suggestFiscalDeadlinesPrompt',
   input: { schema: SuggestFiscalDeadlinesInputSchema },
   output: { schema: SuggestFiscalDeadlinesOutputSchema },
-  prompt: `You are an expert financial analyst AI. Your task is to identify recurring expenses from a pre-processed list of potential candidates and suggest them as future deadlines.
+  prompt: `You are an expert financial analyst AI for Italian companies. Your task is to identify recurring expense patterns from a pre-processed list of potential candidates and suggest them as future schedulable deadlines.
 
-You are given a list of candidates for '{{company}}' and all existing deadlines. You must not suggest deadlines that already exist.
+You are given a list of candidates for '{{company}}' and all existing deadlines to avoid creating duplicates.
 
-Each candidate in the list has a sample description, a count of occurrences, an average amount, and a list of dates.
-Analyze this list to determine the recurrence pattern (Mensile, Trimestrale, etc.) and calculate the next due date.
+Each candidate has a sample description, a count, an average amount, and a list of dates.
+Analyze this list to determine the precise recurrence pattern (Mensile, Trimestrale, Semestrale, etc.), the typical payment day, and other key details.
 
 **For each valid recurring expense you identify:**
--   Determine the recurrence (Mensile, Trimestrale, Semestrale, Annuale). A good recurring expense should have consistent intervals between dates.
--   Calculate the next due date based on the last payment's date and the identified recurrence.
--   Create a clean, general 'descrizione' for the deadline (e.g., 'Canone Telefonico TIM').
--   If it is a clear fiscal expense (e.g., description contains IVA, F24, IRES, INPS), try to determine 'tipoTassa' and 'periodoRiferimento'. For all other operational expenses (like utilities, rent), you MUST OMIT these fields or provide an empty string.
--   Assign the most appropriate 'categoria' and 'sottocategoria'.
--   Check if a similar deadline (same description pattern and recurrence) already exists in 'existingDeadlines'. **If it exists, DO NOT include it in your output.**
--   Provide a 'reason' explaining why you are suggesting it (e.g., 'Found 12 monthly payments for about €25').
+1.  **Analyze Recurrence**: Based on the provided dates, determine the exact recurrence ('Mensile', 'Bimestrale', 'Trimestrale', 'Quadrimestrale', 'Semestrale', 'Annuale'). Be precise.
+2.  **Estimate Due Day**: Calculate the average day of the month ('giornoStimato') the payment occurs.
+3.  **Clean Description**: Create a clean, general 'descrizionePulita' for the deadline (e.g., 'Canone Telefonico TIM', 'Rata Mutuo BAPR').
+4.  **Categorize**: Assign the most appropriate 'categoria' and 'sottocategoria'.
+5.  **Fiscal vs. Operational**:
+    - If it is a clear **fiscal expense** (e.g., description contains IVA, F24, IRES, INPS, IMU), you MUST determine 'tipoTassa'.
+    - For all other **operational expenses** (like utilities, rent, loans), you MUST OMIT 'tipoTassa' or provide an empty string.
+6.  **Avoid Duplicates**: Check if a similar deadline (same 'descrizionePulita' and 'ricorrenza') already exists in the 'existingDeadlines' list. **If it exists, DO NOT include it in your output.**
+7.  **Provide Reasoning**: Give a brief 'ragione' explaining your suggestion (e.g., 'Trovati 12 pagamenti mensili per circa €25').
+8.  **Copy Company**: Ensure the 'societa' field in your output matches the '{{company}}' from the input.
 
-Potential Recurring Expenses:
+**Candidate Data from Client:**
 {{{analysisCandidates}}}
 
-Existing Deadlines (to avoid duplicates):
+**Existing Deadlines (to avoid duplicates):**
 {{{existingDeadlines}}}
 
-Respond with a JSON object containing a 'suggestions' array of the new, non-existing deadlines you have identified. If you find no new recurring deadlines, return an empty array.
+Respond with a JSON object containing a 'suggestions' array of the new, non-existing recurring patterns you have identified. If you find no new patterns, return an empty array.
 `,
 });
 

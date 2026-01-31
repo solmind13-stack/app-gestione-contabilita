@@ -34,7 +34,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Scadenza, AppUser, Movimento, DeadlineSuggestion, CompanyProfile } from '@/lib/types';
+import type { Scadenza, AppUser, Movimento, RecurringExpensePattern, CompanyProfile } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { YEARS } from '@/lib/constants';
@@ -46,6 +46,8 @@ import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { suggestFiscalDeadlines } from '@/ai/flows/suggest-fiscal-deadlines';
+import { format as formatFns } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
@@ -73,8 +75,10 @@ export default function ScadenzePage() {
     // State for AI suggestions
     const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
     const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
-    const [deadlineSuggestions, setDeadlineSuggestions] = useState<DeadlineSuggestion[]>([]);
-    const [selectedSuggestions, setSelectedSuggestions] = useState<DeadlineSuggestion[]>([]);
+    const [deadlinePatterns, setDeadlinePatterns] = useState<RecurringExpensePattern[]>([]);
+    const [selectedPatterns, setSelectedPatterns] = useState<RecurringExpensePattern[]>([]);
+    const [generationYear, setGenerationYear] = useState<number>(new Date().getFullYear());
+
 
     // Filters
     const [selectedYear, setSelectedYear] = useState<string>('Tutti');
@@ -229,11 +233,11 @@ export default function ScadenzePage() {
 
     const handleSuggestDeadlines = useCallback(async () => {
         setIsSuggestionLoading(true);
-        setDeadlineSuggestions([]);
+        setDeadlinePatterns([]);
 
         const companiesToAnalyze = selectedCompany === 'Tutte' && companies
-            ? companies.map(c => c.sigla as 'LNC' | 'STG')
-            : [selectedCompany as 'LNC' | 'STG'];
+            ? companies.map(c => c.sigla as string)
+            : [selectedCompany as string];
 
         if(companiesToAnalyze.length === 0 || !movimenti){
             toast({ variant: 'destructive', title: 'Nessun Dato', description: 'Non ci sono società o movimenti da analizzare.' });
@@ -241,7 +245,7 @@ export default function ScadenzePage() {
             return;
         }
 
-        let allSuggestions: DeadlineSuggestion[] = [];
+        let allSuggestions: RecurringExpensePattern[] = [];
 
         const simplifiedDeadlines = (scadenze || []).map(d => ({
             descrizione: d.descrizione,
@@ -250,6 +254,7 @@ export default function ScadenzePage() {
         }));
 
         for (const company of companiesToAnalyze) {
+            if (!company) continue;
             const movementsForCompany = movimenti.filter(m => m.societa === company);
 
             if (movementsForCompany.length < 3) {
@@ -303,12 +308,14 @@ export default function ScadenzePage() {
                     dates: group.map(m => m.data).sort(),
                 };
             });
+            
+            const simplifiedDeadlinesForCompany = simplifiedDeadlines.filter(d => d.societa === company);
 
             try {
                 const result = await suggestFiscalDeadlines({
                     company: company,
                     analysisCandidates: JSON.stringify(analysisPayload),
-                    existingDeadlines: JSON.stringify(simplifiedDeadlines.filter(d => d.societa === company)),
+                    existingDeadlines: JSON.stringify(simplifiedDeadlinesForCompany),
                 });
                 allSuggestions.push(...result.suggestions);
             } catch (error: any) {
@@ -326,12 +333,12 @@ export default function ScadenzePage() {
         if (allSuggestions.length === 0) {
             toast({ title: 'Nessun Suggerimento', description: 'L\'analisi non ha trovato nuove scadenze ricorrenti.' });
         } else {
-            const suggestionsWithIds = allSuggestions.map((s, index) => ({
+            const patternsWithIds = allSuggestions.map((s, index) => ({
                 ...s,
-                id: `${s.descrizione}-${index}`
+                id: `${s.descrizionePulita}-${index}`
             }));
-            setDeadlineSuggestions(suggestionsWithIds);
-            setSelectedSuggestions(suggestionsWithIds);
+            setDeadlinePatterns(patternsWithIds);
+            setSelectedPatterns(patternsWithIds);
             setIsSuggestionDialogOpen(true);
         }
         setIsSuggestionLoading(false);
@@ -339,38 +346,80 @@ export default function ScadenzePage() {
 
 
     const handleCreateSuggestedDeadlines = async () => {
-        if (!firestore || !user || selectedSuggestions.length === 0) return;
+        if (!firestore || !user || selectedPatterns.length === 0) return;
         setIsSuggestionLoading(true);
+
         try {
             const batch = writeBatch(firestore);
-            selectedSuggestions.forEach(suggestion => {
-                const newDeadlineRef = doc(collection(firestore, 'deadlines'));
-                
-                const newDeadline: Omit<Scadenza, 'id'> = {
-                    societa: suggestion.societa,
-                    anno: new Date(suggestion.dataScadenza).getFullYear(),
-                    dataScadenza: suggestion.dataScadenza,
-                    descrizione: suggestion.descrizione,
-                    categoria: suggestion.categoria,
-                    sottocategoria: suggestion.sottocategoria || '',
-                    importoPrevisto: suggestion.importoPrevisto,
-                    importoPagato: 0,
-                    stato: 'Da pagare',
-                    ricorrenza: suggestion.ricorrenza,
-                    createdBy: user.uid,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    tipoTassa: suggestion.tipoTassa || '',
-                    periodoRiferimento: suggestion.periodoRiferimento || '',
-                    source: 'ai-suggested',
+            let createdCount = 0;
+
+            for (const pattern of selectedPatterns) {
+                const getNextDate = (month: number, day: number) => new Date(generationYear, month, day);
+
+                const createDeadline = (date: Date) => {
+                    const newDeadlineRef = doc(collection(firestore, 'deadlines'));
+                    const newDeadline: Omit<Scadenza, 'id'> = {
+                        societa: pattern.societa as 'LNC' | 'STG',
+                        anno: date.getFullYear(),
+                        dataScadenza: formatFns(date, 'yyyy-MM-dd'),
+                        descrizione: `${pattern.descrizionePulita} - ${formatFns(date, 'MMMM yyyy', { locale: it })}`,
+                        categoria: pattern.categoria,
+                        sottocategoria: pattern.sottocategoria || '',
+                        importoPrevisto: pattern.importoPrevisto,
+                        importoPagato: 0,
+                        stato: 'Da pagare',
+                        ricorrenza: pattern.ricorrenza,
+                        createdBy: user.uid,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        tipoTassa: pattern.tipoTassa || '',
+                        periodoRiferimento: '', // Can be improved later
+                        source: 'ai-suggested',
+                    };
+                    batch.set(newDeadlineRef, newDeadline);
+                    createdCount++;
                 };
-                batch.set(newDeadlineRef, newDeadline);
-            });
+
+                const primoMese = (pattern.primoMese || 1) - 1; // 0-indexed month
+
+                switch (pattern.ricorrenza) {
+                    case 'Mensile':
+                        for (let i = 0; i < 12; i++) {
+                            createDeadline(getNextDate(i, pattern.giornoStimato));
+                        }
+                        break;
+                    case 'Bimestrale':
+                        for (let i = 0; i < 6; i++) {
+                            createDeadline(getNextDate(primoMese + i * 2, pattern.giornoStimato));
+                        }
+                        break;
+                    case 'Trimestrale':
+                        for (let i = 0; i < 4; i++) {
+                            createDeadline(getNextDate(primoMese + i * 3, pattern.giornoStimato));
+                        }
+                        break;
+                    case 'Quadrimestrale':
+                         for (let i = 0; i < 3; i++) {
+                            createDeadline(getNextDate(primoMese + i * 4, pattern.giornoStimato));
+                        }
+                        break;
+                    case 'Semestrale':
+                        for (let i = 0; i < 2; i++) {
+                            createDeadline(getNextDate(primoMese + i * 6, pattern.giornoStimato));
+                        }
+                        break;
+                    case 'Annuale':
+                        createDeadline(getNextDate(primoMese, pattern.giornoStimato));
+                        break;
+                }
+            }
+
             await batch.commit();
-            toast({ title: 'Scadenze Create', description: `${selectedSuggestions.length} nuove scadenze suggerite sono state aggiunte.` });
+            toast({ title: 'Scadenze Create!', description: `${createdCount} nuove scadenze sono state aggiunte per il ${generationYear}.` });
             setIsSuggestionDialogOpen(false);
-            setDeadlineSuggestions([]);
-            setSelectedSuggestions([]);
+            setDeadlinePatterns([]);
+            setSelectedPatterns([]);
+
         } catch (error) {
             console.error("Error creating suggested deadlines:", error);
             toast({ variant: 'destructive', title: 'Errore Creazione', description: 'Impossibile creare le scadenze suggerite.' });
@@ -393,11 +442,11 @@ export default function ScadenzePage() {
         }
     };
     
-    const handleSelectSuggestion = (suggestion: DeadlineSuggestion, checked: boolean) => {
+    const handleSelectPattern = (pattern: RecurringExpensePattern, checked: boolean) => {
         if (checked) {
-            setSelectedSuggestions(prev => [...prev, suggestion]);
+            setSelectedPatterns(prev => [...prev, pattern]);
         } else {
-            setSelectedSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+            setSelectedPatterns(prev => prev.filter(p => p.id !== pattern.id));
         }
     };
 
@@ -522,34 +571,45 @@ export default function ScadenzePage() {
                 <DialogHeader>
                     <DialogTitle>Suggerimenti Scadenze Ricorrenti</DialogTitle>
                     <DialogDescription>
-                        L'analisi dei movimenti ha identificato queste potenziali scadenze. Seleziona quelle da creare.
+                        L'AI ha identificato questi pattern di spesa. Seleziona quelli per cui vuoi generare le scadenze future.
                     </DialogDescription>
                 </DialogHeader>
-                <ScrollArea className="h-[60vh] p-1 pr-4">
+                 <div className="flex items-center gap-4 py-4">
+                    <Label htmlFor="generation-year">Genera scadenze per l'anno:</Label>
+                    <Select value={String(generationYear)} onValueChange={(v) => setGenerationYear(Number(v))}>
+                        <SelectTrigger className="w-[120px]" id="generation-year">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i).map(year => (
+                                <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <ScrollArea className="h-[50vh] p-1 pr-4">
                     <div className="space-y-4">
-                        {deadlineSuggestions.map((suggestion) => {
-                            const isSelected = selectedSuggestions.some(s => s.id === suggestion.id);
-                            
+                        {deadlinePatterns.map((pattern) => {
+                            const isSelected = selectedPatterns.some(s => s.id === pattern.id);
                             return (
-                                <Card key={suggestion.id} className={cn("transition-all", isSelected ? "border-primary" : "")}>
+                                <Card key={pattern.id} className={cn("transition-all", isSelected ? "border-primary" : "")}>
                                     <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
                                         <Checkbox 
-                                            id={`suggestion-${suggestion.id}`}
+                                            id={`pattern-${pattern.id}`}
                                             checked={isSelected}
-                                            onCheckedChange={(checked) => handleSelectSuggestion(suggestion, checked as boolean)}
+                                            onCheckedChange={(checked) => handleSelectPattern(pattern, checked as boolean)}
                                             className="mt-1"
                                         />
                                         <div className="grid gap-1 w-full">
-                                            <Label htmlFor={`suggestion-${suggestion.id}`} className="font-bold text-base cursor-pointer">{suggestion.descrizione}</Label>
-                                            <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
+                                            <Label htmlFor={`pattern-${pattern.id}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
+                                            <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
                                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
-                                                <span>Società: <Badge variant="secondary">{suggestion.societa}</Badge></span>
-                                                <span>Scadenza: <Badge variant="outline">{formatDate(suggestion.dataScadenza)}</Badge></span>
-                                                <span>Importo: <Badge variant="outline">{formatCurrency(suggestion.importoPrevisto)}</Badge></span>
-                                                <span>Ricorrenza: <Badge variant="outline">{suggestion.ricorrenza}</Badge></span>
-                                                {suggestion.tipoTassa && <span>Tipo: <Badge variant="outline">{suggestion.tipoTassa}</Badge></span>}
-                                                {suggestion.periodoRiferimento && <span>Periodo: <Badge variant="outline">{suggestion.periodoRiferimento}</Badge></span>}
-                                                <span>Cat: <Badge variant="outline">{suggestion.categoria}</Badge></span>
+                                                <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
+                                                <span>Importo: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
+                                                <span>Ricorrenza: <Badge variant="outline">{pattern.ricorrenza}</Badge></span>
+                                                <span>Giorno: <Badge variant="outline">~{pattern.giornoStimato}</Badge></span>
+                                                {pattern.metodoPagamentoTipico && <span>Pagamento: <Badge variant="outline">{pattern.metodoPagamentoTipico}</Badge></span>}
+                                                <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
                                             </div>
                                         </div>
                                     </CardHeader>
@@ -560,8 +620,8 @@ export default function ScadenzePage() {
                 </ScrollArea>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setIsSuggestionDialogOpen(false)}>Annulla</Button>
-                    <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedSuggestions.length === 0}>
-                        {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Crea ${selectedSuggestions.length} Scadenze`}
+                    <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedPatterns.length === 0}>
+                        {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Genera ${selectedPatterns.length} Serie di Scadenze`}
                     </Button>
                 </DialogFooter>
             </DialogContent>

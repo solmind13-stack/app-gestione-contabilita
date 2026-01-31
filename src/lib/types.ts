@@ -97,7 +97,7 @@ export type Scadenza = {
   importoPrevisto: number;
   importoPagato: number;
   stato: 'Pagato' | 'Da pagare' | 'Parziale' | 'Annullato';
-  ricorrenza: 'Nessuna' | 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
+  ricorrenza: 'Nessuna' | 'Mensile' | 'Bimestrale' | 'Trimestrale' | 'Quadrimestrale' | 'Semestrale' | 'Annuale' | 'Altro';
   note?: string;
   createdBy?: string;
   createdAt?: string;
@@ -175,18 +175,19 @@ export type RiepilogoPrevisioniUscite = {
   percentualePagato: number;
 };
 
-export type DeadlineSuggestion = {
+export type RecurringExpensePattern = {
     id: string; // Client-generated
-    societa: 'LNC' | 'STG';
-    descrizione: string;
+    societa: string;
+    descrizionePulita: string;
     importoPrevisto: number;
-    dataScadenza: string;
-    ricorrenza: 'Mensile' | 'Trimestrale' | 'Semestrale' | 'Annuale';
-    tipoTassa: string;
-    periodoRiferimento: string;
+    ricorrenza: 'Mensile' | 'Bimestrale' | 'Trimestrale' | 'Quadrimestrale' | 'Semestrale' | 'Annuale';
+    giornoStimato: number;
+    primoMese?: number;
     categoria: string;
-    sottocategoria: string;
-    reason: string;
+    sottocategoria?: string;
+    metodoPagamentoTipico?: string;
+    tipoTassa?: string;
+    ragione: string;
 };
 
 
