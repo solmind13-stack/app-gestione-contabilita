@@ -272,10 +272,17 @@ export default function ScadenzePage() {
         });
         
         try {
+            // Simplify existing deadlines to reduce payload size
+            const simplifiedDeadlines = (scadenze || []).map(d => ({
+                descrizione: d.descrizione,
+                ricorrenza: d.ricorrenza,
+                societa: d.societa,
+            }));
+
             const result = await suggestFiscalDeadlines({
                 company: selectedCompany as 'LNC' | 'STG' | 'Tutte',
                 analysisCandidates: JSON.stringify(analysisPayload),
-                existingDeadlines: JSON.stringify(scadenze || []),
+                existingDeadlines: JSON.stringify(simplifiedDeadlines),
             });
 
             const suggestionsWithIds = result.suggestions.map((s, index) => ({
@@ -673,7 +680,7 @@ export default function ScadenzePage() {
                 <SelectContent>
                     <SelectItem value="Tutti">Tutti gli anni</SelectItem>
                     {YEARS.map(year => (
-                        <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                        <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>
                     ))}
                 </SelectContent>
             </Select>
@@ -839,5 +846,6 @@ export default function ScadenzePage() {
     </div>
   );
 }
+
 
 
