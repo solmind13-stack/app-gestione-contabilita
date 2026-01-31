@@ -236,8 +236,8 @@ export default function ScadenzePage() {
         setDeadlinePatterns([]);
 
         const companiesToAnalyze = selectedCompany === 'Tutte' && companies
-            ? companies.map(c => c.sigla as string)
-            : [selectedCompany as string];
+            ? companies.map(c => c.sigla)
+            : [selectedCompany];
 
         if (companiesToAnalyze.length === 0 || !movimenti) {
             toast({ variant: 'destructive', title: 'Nessun Dato', description: 'Non ci sono società o movimenti da analizzare.' });
@@ -246,7 +246,7 @@ export default function ScadenzePage() {
         }
 
         let allSuggestions: RecurringExpensePattern[] = [];
-
+        
         const simplifiedDeadlines = (scadenze || []).map(d => ({
             descrizione: d.descrizione,
             ricorrenza: d.ricorrenza,
@@ -255,42 +255,28 @@ export default function ScadenzePage() {
 
         for (const company of companiesToAnalyze) {
             if (!company) continue;
+            
             const movementsForCompany = movimenti.filter(m => m.societa === company);
-
-            if (movementsForCompany.length < 3) {
-                continue;
-            }
-
-            const twoYearsAgo = new Date();
-            twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-            const recentMovements = movementsForCompany.filter(m => new Date(m.data) >= twoYearsAgo);
-
-            if (recentMovements.length < 3) {
-                continue;
-            }
+            
+            if (movementsForCompany.length < 3) continue;
 
             const normalizeDescription = (desc: string) => {
                 let normalized = desc.toLowerCase();
-
-                const noise = ['pagamento', 'accredito', 'addebito', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su'];
+                 const noise = ['pagamento', 'accredito', 'addebito', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su', 'e', 'di', 'a'];
                 const noiseRegex = new RegExp(`\\b(${noise.join('|')})\\b`, 'gi');
                 normalized = normalized.replace(noiseRegex, '');
-
                 const months = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic';
                 const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
                 normalized = normalized.replace(monthsRegex, '');
-                
                 normalized = normalized.replace(/\b(f24)\b/g, '@@F24@@');
                 normalized = normalized.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{2,}\b)/g, '');
                 normalized = normalized.replace(/@@F24@@/g, 'f24');
-
                 normalized = normalized.replace(/[.,\-_/()]/g, ' ');
                 normalized = normalized.replace(/\s+/g, ' ').trim();
-
                 return normalized;
             };
 
-            const expenseMovements = recentMovements.filter(m => m.uscita > 0);
+            const expenseMovements = movementsForCompany.filter(m => m.uscita > 0);
             const grouped = expenseMovements.reduce((acc, mov) => {
                 const key = normalizeDescription(mov.descrizione);
                 if (!key) return acc;
@@ -300,7 +286,7 @@ export default function ScadenzePage() {
             }, {} as Record<string, Movimento[]>);
             
             const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3);
-
+            
             if (recurringCandidates.length === 0) continue;
 
             const analysisPayload = recurringCandidates.map(group => {
@@ -378,7 +364,7 @@ export default function ScadenzePage() {
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                         tipoTassa: pattern.tipoTassa || '',
-                        periodoRiferimento: pattern.periodoRiferimento || '',
+                        periodoRiferimento: '',
                         source: 'ai-suggested',
                     };
                     batch.set(newDeadlineRef, newDeadline);
@@ -938,4 +924,3 @@ export default function ScadenzePage() {
     </div>
   );
 }
-
