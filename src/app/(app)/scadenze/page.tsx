@@ -239,7 +239,7 @@ export default function ScadenzePage() {
             ? companies.map(c => c.sigla as string)
             : [selectedCompany as string];
 
-        if(companiesToAnalyze.length === 0 || !movimenti){
+        if (companiesToAnalyze.length === 0 || !movimenti) {
             toast({ variant: 'destructive', title: 'Nessun Dato', description: 'Non ci sono società o movimenti da analizzare.' });
             setIsSuggestionLoading(false);
             return;
@@ -270,20 +270,24 @@ export default function ScadenzePage() {
             }
 
             const normalizeDescription = (desc: string) => {
+                let normalized = desc.toLowerCase();
+
+                const noise = ['pagamento', 'accredito', 'addebito', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su'];
+                const noiseRegex = new RegExp(`\\b(${noise.join('|')})\\b`, 'gi');
+                normalized = normalized.replace(noiseRegex, '');
+
                 const months = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic';
                 const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
-                return desc.toLowerCase()
-                    .replace(monthsRegex, '')
-                    .replace(/\bfattura|\bfatt|\bft/g, '')
-                    .replace(/\brif\b|\briferimento/g, '')
-                    .replace(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g, '')
-                    .replace(/\b\d{4}\b/g, '')
-                    .replace(/n\.\s*\d+/g, '')
-                    .replace(/num\.\s*\d+/g, '')
-                    .replace(/\b\d+\b/g, '')
-                    .replace(/[.,\-_/]/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim();
+                normalized = normalized.replace(monthsRegex, '');
+                
+                normalized = normalized.replace(/\b(f24)\b/g, '@@F24@@');
+                normalized = normalized.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{2,}\b)/g, '');
+                normalized = normalized.replace(/@@F24@@/g, 'f24');
+
+                normalized = normalized.replace(/[.,\-_/()]/g, ' ');
+                normalized = normalized.replace(/\s+/g, ' ').trim();
+
+                return normalized;
             };
 
             const expenseMovements = recentMovements.filter(m => m.uscita > 0);
@@ -294,8 +298,9 @@ export default function ScadenzePage() {
                 acc[key].push(mov);
                 return acc;
             }, {} as Record<string, Movimento[]>);
-
+            
             const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3);
+
             if (recurringCandidates.length === 0) continue;
 
             const analysisPayload = recurringCandidates.map(group => {
@@ -373,7 +378,7 @@ export default function ScadenzePage() {
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                         tipoTassa: pattern.tipoTassa || '',
-                        periodoRiferimento: '', // Can be improved later
+                        periodoRiferimento: pattern.periodoRiferimento || '',
                         source: 'ai-suggested',
                     };
                     batch.set(newDeadlineRef, newDeadline);
@@ -933,3 +938,4 @@ export default function ScadenzePage() {
     </div>
   );
 }
+
