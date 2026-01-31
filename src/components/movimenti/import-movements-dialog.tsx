@@ -227,6 +227,47 @@ export function ImportMovementsDialog({
       }
       return undefined;
     };
+    
+    const parseDateValue = (dateValue: any): string => {
+        try {
+            // Handle Excel's numeric date format
+            if (typeof dateValue === 'number' && dateValue > 0) {
+                const excelEpoch = new Date(1899, 11, 30);
+                const jsDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
+                if (!isNaN(jsDate.getTime())) {
+                    return jsDate.toISOString().split('T')[0];
+                }
+            }
+            
+            // Handle string dates (e.g., "DD/MM/YYYY", "YYYY-MM-DD", etc.)
+            const dateString = String(dateValue);
+            // Attempt to parse formats like DD/MM/YYYY or DD-MM-YYYY
+            const match = dateString.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+            if (match) {
+                const day = parseInt(match[1], 10);
+                const month = parseInt(match[2], 10);
+                let year = parseInt(match[3], 10);
+                if (year < 100) { // Handle 2-digit years
+                    year += 2000;
+                }
+                const parsedDate = new Date(year, month - 1, day);
+                if (!isNaN(parsedDate.getTime())) {
+                    return parsedDate.toISOString().split('T')[0];
+                }
+            }
+
+            // Fallback for ISO strings or other browser-supported formats
+            const parsedDate = new Date(dateString);
+            if (!isNaN(parsedDate.getTime())) {
+                return parsedDate.toISOString().split('T')[0];
+            }
+            
+            throw new Error('Invalid date format');
+        } catch (e) {
+            console.warn(`Could not parse date "${dateValue}", using today's date.`);
+            return new Date().toISOString().split('T')[0];
+        }
+    };
 
     return rows.map(data => {
       const description = findColumn(data, ['descrizione operazione', 'descrizione', 'description']);
@@ -237,9 +278,7 @@ export function ImportMovementsDialog({
         return null;
       }
       
-      const isDateNumber = typeof dateValue === 'number';
-      const jsDate = isDateNumber ? XLSX.SSF.parse_date_code(dateValue) : new Date(dateValue);
-      const dataValida = !isNaN(jsDate.getTime()) ? new Date(jsDate.getUTCFullYear(), jsDate.getUTCMonth(), jsDate.getUTCDate()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const dataValida = parseDateValue(dateValue);
       const anno = new Date(dataValida).getFullYear();
 
       const numericAmount = parseFloat(String(amountValue).replace(',', '.'));
