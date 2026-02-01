@@ -27,7 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles, Trash2, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -60,6 +60,9 @@ const getQuery = (firestore: any, user: AppUser | null, collectionName: string) 
     return query(q);
 }
 
+// New Type for the component state
+type SuggestionPatternWithMovements = RecurringExpensePattern & { sourceMovements: Movimento[] };
+
 export default function ScadenzePage() {
     const { toast } = useToast();
     const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
@@ -75,9 +78,10 @@ export default function ScadenzePage() {
     // State for AI suggestions
     const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
     const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
-    const [deadlinePatterns, setDeadlinePatterns] = useState<RecurringExpensePattern[]>([]);
-    const [selectedPatterns, setSelectedPatterns] = useState<RecurringExpensePattern[]>([]);
+    const [deadlinePatterns, setDeadlinePatterns] = useState<SuggestionPatternWithMovements[]>([]);
+    const [selectedPatterns, setSelectedPatterns] = useState<SuggestionPatternWithMovements[]>([]);
     const [generationYear, setGenerationYear] = useState<number>(new Date().getFullYear());
+    const [movementsToShow, setMovementsToShow] = useState<Movimento[] | null>(null);
 
 
     // Filters
@@ -253,34 +257,33 @@ export default function ScadenzePage() {
             return;
         }
 
-        let allSuggestions: RecurringExpensePattern[] = [];
+        const allGroupsByCompany: { [company: string]: Movimento[][] } = {};
+        let allSuggestionsWithMovements: SuggestionPatternWithMovements[] = [];
         
         for (const company of companiesToAnalyze) {
             if (!company) continue;
             
-            const movementsForCompany = movimenti.filter(m => m.societa === company);
-            
             let movementsToAnalyze: Movimento[];
             if (selectedYear !== 'Tutti') {
-                movementsToAnalyze = movementsForCompany.filter(m => m.anno === Number(selectedYear));
+                movementsToAnalyze = (movimenti || []).filter(m => m.societa === company && m.anno === Number(selectedYear));
             } else {
                 const twoYearsAgo = getYear(subYears(new Date(), 2));
-                movementsToAnalyze = movementsForCompany.filter(m => m.anno >= twoYearsAgo);
+                movementsToAnalyze = (movimenti || []).filter(m => m.societa === company && m.anno >= twoYearsAgo);
             }
 
             if (movementsToAnalyze.length < 3) continue;
 
             const normalizeDescription = (desc: string) => {
-                let normalized = desc.toLowerCase();
-                 const noise = ['pagamento', 'accredito', 'addebito', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su', 'e', 'di', 'a'];
+                 let normalized = desc.toLowerCase();
+                 const noise = ['pagamento', 'accredito', 'addebito', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su', 'e', 'di', 'a', 'vs'];
                 const noiseRegex = new RegExp(`\\b(${noise.join('|')})\\b`, 'gi');
                 normalized = normalized.replace(noiseRegex, '');
                 const months = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic';
                 const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
                 normalized = normalized.replace(monthsRegex, '');
-                normalized = normalized.replace(/\b(f24)\b/g, '@@F24@@');
+                normalized = normalized.replace(/\b(f24)\b/g, '@@F24@@'); // Preserve F24
                 normalized = normalized.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{4}\b)|(\b\d{6,}\b)/g, '');
-                normalized = normalized.replace(/@@F24@@/g, 'f24');
+                normalized = normalized.replace(/@@F24@@/g, 'f24'); // Restore F24
                 normalized = normalized.replace(/[.,\-_/()]/g, ' ');
                 normalized = normalized.replace(/\s+/g, ' ').trim();
                 return normalized;
@@ -296,9 +299,10 @@ export default function ScadenzePage() {
             }, {} as Record<string, Movimento[]>);
             
             const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3);
-            
-            if (recurringCandidates.length === 0) continue;
+            allGroupsByCompany[company] = recurringCandidates;
 
+            if (recurringCandidates.length === 0) continue;
+            
             const analysisPayload = recurringCandidates.map(group => {
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
@@ -323,13 +327,23 @@ export default function ScadenzePage() {
                     sourceSubcategory: sourceSubcategory,
                 };
             });
-
-            try {
+            
+             try {
                 const result = await suggestFiscalDeadlines({
                     company: company,
                     analysisCandidates: JSON.stringify(analysisPayload),
                 });
-                allSuggestions.push(...result.suggestions);
+                
+                const sourceGroups = allGroupsByCompany[company] || [];
+                const mappedSuggestions = result.suggestions.map(suggestion => {
+                    const originalGroup = sourceGroups.find(group => {
+                        if (!group || group.length === 0) return false;
+                        const avgAmount = group.reduce((acc, mov) => acc + mov.uscita, 0) / group.length;
+                        return Math.abs(avgAmount - suggestion.importoPrevisto) < 0.01;
+                    });
+                    return { ...suggestion, sourceMovements: originalGroup || [] };
+                });
+                allSuggestionsWithMovements.push(...mappedSuggestions);
             } catch (error: any) {
                 console.error(`Error suggesting deadlines for ${company}:`, error);
                 toast({
@@ -342,15 +356,22 @@ export default function ScadenzePage() {
             }
         }
         
-        const filteredSuggestions = allSuggestions.filter(pattern => {
-            const isDuplicate = (scadenze || []).some(scadenza => {
-                if (scadenza.societa !== pattern.societa || scadenza.ricorrenza !== pattern.ricorrenza) {
-                    return false;
-                }
-                const cleanScadenzaDesc = scadenza.descrizione.toLowerCase().split(' - ')[0].trim();
-                const cleanPatternDesc = pattern.descrizionePulita.toLowerCase().trim();
-                return cleanScadenzaDesc.includes(cleanPatternDesc) || cleanPatternDesc.includes(cleanScadenzaDesc);
-            });
+        const existingDeadlinesSummary = (scadenze || []).map(scadenza => {
+            const cleanDesc = scadenza.descrizione.toLowerCase().split(' - ')[0].trim();
+            return {
+                societa: scadenza.societa,
+                ricorrenza: scadenza.ricorrenza,
+                cleanDesc: cleanDesc,
+            };
+        });
+
+        const filteredSuggestions = allSuggestionsWithMovements.filter(pattern => {
+            const cleanPatternDesc = pattern.descrizionePulita.toLowerCase().trim();
+            const isDuplicate = existingDeadlinesSummary.some(existing => 
+                existing.societa === pattern.societa &&
+                existing.ricorrenza === pattern.ricorrenza &&
+                (existing.cleanDesc.includes(cleanPatternDesc) || cleanPatternDesc.includes(existing.cleanDesc))
+            );
             return !isDuplicate;
         });
 
@@ -381,6 +402,8 @@ export default function ScadenzePage() {
                 const getNextDate = (month: number, day: number) => new Date(generationYear, month, day);
 
                 const createDeadline = (date: Date) => {
+                    if (date.getFullYear() !== generationYear) return;
+                    
                     const newDeadlineRef = doc(collection(firestore, 'deadlines'));
                     const newDeadline: Omit<Scadenza, 'id'> = {
                         societa: pattern.societa as 'LNC' | 'STG',
@@ -404,7 +427,7 @@ export default function ScadenzePage() {
                     createdCount++;
                 };
 
-                const primoMese = (pattern.primoMese || 1) - 1; // 0-indexed month
+                const primoMese = (pattern.primoMese || new Date().getMonth() + 1) - 1;
 
                 switch (pattern.ricorrenza) {
                     case 'Mensile':
@@ -466,7 +489,7 @@ export default function ScadenzePage() {
         }
     };
     
-    const handleSelectPattern = (pattern: RecurringExpensePattern, checked: boolean) => {
+    const handleSelectPattern = (pattern: SuggestionPatternWithMovements, checked: boolean) => {
         if (checked) {
             setSelectedPatterns(prev => [...prev, pattern]);
         } else {
@@ -590,7 +613,7 @@ export default function ScadenzePage() {
             allDeadlines={scadenze || []}
         />
       
-      <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
+        <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
             <DialogContent className="max-w-4xl">
                 <DialogHeader>
                     <DialogTitle>Suggerimenti Scadenze Ricorrenti</DialogTitle>
@@ -636,6 +659,9 @@ export default function ScadenzePage() {
                                                 <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
                                             </div>
                                         </div>
+                                         <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setMovementsToShow(pattern.sourceMovements)}>
+                                            <ChevronRight className="h-5 w-5" />
+                                        </Button>
                                     </CardHeader>
                                 </Card>
                             )
@@ -647,6 +673,40 @@ export default function ScadenzePage() {
                     <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedPatterns.length === 0}>
                         {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Genera ${selectedPatterns.length} Serie di Scadenze`}
                     </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!movementsToShow} onOpenChange={(open) => !open && setMovementsToShow(null)}>
+            <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>Movimenti Correlati</DialogTitle>
+                    <DialogDescription>
+                        Questi sono i movimenti usati per identificare il pattern di spesa ricorrente.
+                    </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="h-[60vh] border rounded-md">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Data</TableHead>
+                                <TableHead>Descrizione</TableHead>
+                                <TableHead className="text-right">Uscita</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {movementsToShow?.map(mov => (
+                                <TableRow key={mov.id}>
+                                    <TableCell>{formatDate(mov.data)}</TableCell>
+                                    <TableCell>{mov.descrizione}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(mov.uscita)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
+                <DialogFooter>
+                    <Button onClick={() => setMovementsToShow(null)}>Chiudi</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
