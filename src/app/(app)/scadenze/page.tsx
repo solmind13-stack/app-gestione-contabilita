@@ -322,6 +322,7 @@ export default function ScadenzePage() {
                     description: group[0].descrizione,
                     count: group.length,
                     avgAmount: avgAmount,
+                    amounts: amounts,
                     dates: group.map(m => m.data).sort(),
                     sourceCategory: sourceCategory,
                     sourceSubcategory: sourceSubcategory,

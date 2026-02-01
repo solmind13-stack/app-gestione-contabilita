@@ -13,7 +13,7 @@ import { z } from 'zod';
 
 const SuggestFiscalDeadlinesInputSchema = z.object({
   company: z.string().describe('The company to analyze.'),
-  analysisCandidates: z.string().describe("A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, average amount, a list of dates, and the most common sourceCategory and sourceSubcategory from the source movements."),
+  analysisCandidates: z.string().describe("A JSON string of potential recurring expenses, pre-processed by the client. Each object contains a sample description, count, an array of all 'amounts', an 'avgAmount', a list of 'dates', and the most common 'sourceCategory' and 'sourceSubcategory' from the source movements."),
 });
 export type SuggestFiscalDeadlinesInput = z.infer<typeof SuggestFiscalDeadlinesInputSchema>;
 
@@ -50,18 +50,19 @@ const prompt = ai.definePrompt({
 
 You are given a list of candidates for '{{company}}'.
 
-Each candidate object in the JSON string has: 'description', 'count', 'avgAmount', 'dates', 'sourceCategory', 'sourceSubcategory'.
+Each candidate object in the JSON string has: 'description', 'count', 'avgAmount', 'amounts' (an array of all amounts), 'dates', 'sourceCategory', 'sourceSubcategory'.
 
 **For each valid recurring expense you identify:**
-1.  **Analyze Recurrence**: Based on the provided dates, determine the precise recurrence ('Mensile', 'Bimestrale', 'Trimestrale', 'Quadrimestrale', 'Semestrale', 'Annuale'). Be precise.
-2.  **Estimate Due Day**: Calculate the average day of the month ('giornoStimato') the payment occurs.
-3.  **Clean Description**: Create a clean, general 'descrizionePulita' that is similar to the source description (e.g., 'Canone Telefonico TIM', 'Rata Mutuo BAPR').
-4.  **Categorize**: Use the provided 'sourceCategory' and 'sourceSubcategory' from the source movements as the 'categoria' and 'sottocategoria' for the new deadline to ensure consistency. Do not invent new categories.
-5.  **Fiscal vs. Operational**:
+1.  **Analyze Amounts**: Look at the \`amounts\` array. If the amounts are very similar, use the \`avgAmount\` for \`importoPrevisto\`. If you see distinct clusters of amounts (e.g., half are ~€10 and half are ~€30), you MUST create a SEPARATE suggestion for EACH cluster. For each cluster, calculate the average and use that for \`importoPrevisto\`, and create a more specific \`descrizionePulita\` if possible.
+2.  **Analyze Recurrence**: Based on the provided dates, determine the precise recurrence ('Mensile', 'Bimestrale', 'Trimestrale', 'Quadrimestrale', 'Semestrale', 'Annuale'). Be precise.
+3.  **Estimate Due Day**: Calculate the average day of the month ('giornoStimato') the payment occurs.
+4.  **Clean Description**: Create a clean, general 'descrizionePulita' that is similar to the source description (e.g., 'Canone Telefonico TIM', 'Rata Mutuo BAPR'). If you created clusters based on amount, try to make the description more specific for each.
+5.  **Categorize**: Use the provided 'sourceCategory' and 'sourceSubcategory' from the source movements as the 'categoria' and 'sottocategoria' for the new deadline to ensure consistency. Do not invent new categories.
+6.  **Fiscal vs. Operational**:
     - If it is a clear **fiscal expense** (e.g., description contains IVA, F24, IRES, INPS, IMU), you MUST determine 'tipoTassa'.
     - For all other **operational expenses** (like utilities, rent, loans), you MUST OMIT 'tipoTassa' or provide an empty string.
-6.  **Provide Reasoning**: Give a brief 'ragione' explaining your suggestion (e.g., 'Trovati 12 pagamenti mensili per circa €25').
-7.  **Copy Company**: Ensure the 'societa' field in your output matches the '{{company}}' from the input.
+7.  **Provide Reasoning**: Give a brief 'ragione' explaining your suggestion (e.g., 'Trovati 12 pagamenti mensili per circa €25'). If you split a group, explain that too.
+8.  **Copy Company**: Ensure the 'societa' field in your output matches the '{{company}}' from the input.
 
 **Candidate Data from Client:**
 {{{analysisCandidates}}}
