@@ -30,6 +30,7 @@ const RecurringExpensePatternSchema = z.object({
     metodoPagamentoTipico: z.string().optional().describe("The typical payment method if identifiable (e.g., 'Addebito Diretto (SDD)', 'Bonifico')."),
     tipoTassa: z.string().optional().describe("ONLY for fiscal expenses, the specific type of tax (e.g., 'IVA', 'IRES', 'IMU'). Must be omitted or empty for operational expenses like utilities or rent."),
     ragione: z.string().describe('A brief explanation of why this deadline was suggested, mentioning number of payments found and average amount.'),
+    sourceCandidateId: z.number().describe('The original ID of the candidate group from the input JSON that this suggestion is based on.'),
 });
 export type RecurringExpensePattern = z.infer<typeof RecurringExpensePatternSchema>;
 
@@ -50,7 +51,7 @@ const prompt = ai.definePrompt({
 
 You are given a list of candidates for '{{company}}'.
 
-Each candidate object in the JSON string has: 'description', 'count', 'avgAmount', 'amounts' (an array of all amounts), 'dates', 'sourceCategory', 'sourceSubcategory'.
+Each candidate object in the JSON string has: 'id', 'description', 'count', 'avgAmount', 'amounts' (an array of all amounts), 'dates', 'sourceCategory', 'sourceSubcategory'.
 
 **For each valid recurring expense you identify:**
 1.  **Analyze Amounts**: Look at the \`amounts\` array. If the amounts are very similar, use the \`avgAmount\` for \`importoPrevisto\`. If you see distinct clusters of amounts (e.g., half are ~€10 and half are ~€30), you MUST create a SEPARATE suggestion for EACH cluster. For each cluster, calculate the average and use that for \`importoPrevisto\`, and create a more specific \`descrizionePulita\` if possible.
@@ -63,6 +64,7 @@ Each candidate object in the JSON string has: 'description', 'count', 'avgAmount
     - For all other **operational expenses** (like utilities, rent, loans), you MUST OMIT 'tipoTassa' or provide an empty string.
 7.  **Provide Reasoning**: Give a brief 'ragione' explaining your suggestion (e.g., 'Trovati 12 pagamenti mensili per circa €25'). If you split a group, explain that too.
 8.  **Copy Company**: Ensure the 'societa' field in your output matches the '{{company}}' from the input.
+9.  **IMPORTANT: Link back to source**: For each suggestion, you MUST include the original \`id\` from the candidate object in the output field \`sourceCandidateId\`.
 
 **Candidate Data from Client:**
 {{{analysisCandidates}}}

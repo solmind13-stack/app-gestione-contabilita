@@ -27,7 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles, Trash2, ChevronRight } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles, Trash2, ChevronRight, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -61,7 +61,11 @@ const getQuery = (firestore: any, user: AppUser | null, collectionName: string) 
 }
 
 // New Type for the component state
-type SuggestionPatternWithMovements = RecurringExpensePattern & { sourceMovements: Movimento[] };
+type SuggestionPatternWithMovements = RecurringExpensePattern & {
+  sourceMovements: Movimento[];
+  clientId: string; // Add a unique ID for client-side state management
+};
+
 
 export default function ScadenzePage() {
     const { toast } = useToast();
@@ -81,7 +85,7 @@ export default function ScadenzePage() {
     const [deadlinePatterns, setDeadlinePatterns] = useState<SuggestionPatternWithMovements[]>([]);
     const [selectedPatterns, setSelectedPatterns] = useState<SuggestionPatternWithMovements[]>([]);
     const [generationYear, setGenerationYear] = useState<number>(new Date().getFullYear());
-    const [movementsToShow, setMovementsToShow] = useState<Movimento[] | null>(null);
+    const [movementsToShow, setMovementsToShow] = useState<{ movements: Movimento[], clientId: string } | null>(null);
 
 
     // Filters
@@ -257,7 +261,6 @@ export default function ScadenzePage() {
             return;
         }
 
-        const allGroupsByCompany: { [company: string]: Movimento[][] } = {};
         let allSuggestionsWithMovements: SuggestionPatternWithMovements[] = [];
         
         for (const company of companiesToAnalyze) {
@@ -299,11 +302,9 @@ export default function ScadenzePage() {
             }, {} as Record<string, Movimento[]>);
             
             const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3);
-            allGroupsByCompany[company] = recurringCandidates;
-
             if (recurringCandidates.length === 0) continue;
             
-            const analysisPayload = recurringCandidates.map(group => {
+            const analysisPayload = recurringCandidates.map((group, index) => {
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
                 const categoryCounts = group.reduce((acc, mov) => {
@@ -319,6 +320,7 @@ export default function ScadenzePage() {
                 const [sourceCategory, sourceSubcategory] = mostCommonCatSub.split('|||');
 
                 return {
+                    id: index,
                     description: group[0].descrizione,
                     count: group.length,
                     avgAmount: avgAmount,
@@ -335,14 +337,13 @@ export default function ScadenzePage() {
                     analysisCandidates: JSON.stringify(analysisPayload),
                 });
                 
-                const sourceGroups = allGroupsByCompany[company] || [];
-                const mappedSuggestions = result.suggestions.map(suggestion => {
-                    const originalGroup = sourceGroups.find(group => {
-                        if (!group || group.length === 0) return false;
-                        const avgAmount = group.reduce((acc, mov) => acc + mov.uscita, 0) / group.length;
-                        return Math.abs(avgAmount - suggestion.importoPrevisto) < 0.01;
-                    });
-                    return { ...suggestion, sourceMovements: originalGroup || [] };
+                 const mappedSuggestions = result.suggestions.map((suggestion, suggestionIndex) => {
+                    const originalGroup = recurringCandidates[suggestion.sourceCandidateId];
+                    return {
+                        ...suggestion,
+                        sourceMovements: originalGroup || [],
+                        clientId: `${company}-${suggestionIndex}-${new Date().getTime()}`
+                    };
                 });
                 allSuggestionsWithMovements.push(...mappedSuggestions);
             } catch (error: any) {
@@ -379,17 +380,46 @@ export default function ScadenzePage() {
         if (filteredSuggestions.length === 0) {
             toast({ title: 'Nessun Suggerimento', description: 'Nessuna nuova scadenza ricorrente è stata trovata in base ai filtri attuali.' });
         } else {
-            const patternsWithIds = filteredSuggestions.map((s, index) => ({
-                ...s,
-                id: `${s.descrizionePulita}-${index}`
-            }));
-            setDeadlinePatterns(patternsWithIds);
-            setSelectedPatterns(patternsWithIds);
+            setDeadlinePatterns(filteredSuggestions);
+            setSelectedPatterns(filteredSuggestions);
             setIsSuggestionDialogOpen(true);
         }
         setIsSuggestionLoading(false);
     }, [movimenti, scadenze, toast, selectedCompany, companies, selectedYear]);
 
+    const handleSetPatternFromMovement = (clientId: string, templateMovement: Movimento) => {
+        setDeadlinePatterns(prevPatterns =>
+            prevPatterns.map(p => {
+                if (p.clientId === clientId) {
+                    return {
+                        ...p,
+                        descrizionePulita: templateMovement.descrizione,
+                        categoria: templateMovement.categoria,
+                        sottocategoria: templateMovement.sottocategoria,
+                    };
+                }
+                return p;
+            })
+        );
+        setSelectedPatterns(prevPatterns =>
+            prevPatterns.map(p => {
+                if (p.clientId === clientId) {
+                     return {
+                        ...p,
+                        descrizionePulita: templateMovement.descrizione,
+                        categoria: templateMovement.categoria,
+                        sottocategoria: templateMovement.sottocategoria,
+                    };
+                }
+                return p;
+            })
+        );
+        toast({
+            title: "Modello Aggiornato",
+            description: "La descrizione e la categoria del suggerimento sono state aggiornate."
+        });
+        setMovementsToShow(null);
+    };
 
     const handleCreateSuggestedDeadlines = async () => {
         if (!firestore || !user || selectedPatterns.length === 0) return;
@@ -494,7 +524,7 @@ export default function ScadenzePage() {
         if (checked) {
             setSelectedPatterns(prev => [...prev, pattern]);
         } else {
-            setSelectedPatterns(prev => prev.filter(p => p.id !== pattern.id));
+            setSelectedPatterns(prev => prev.filter(p => p.clientId !== pattern.clientId));
         }
     };
 
@@ -638,18 +668,18 @@ export default function ScadenzePage() {
                 <ScrollArea className="h-[50vh] p-1 pr-4">
                     <div className="space-y-4">
                         {deadlinePatterns.map((pattern) => {
-                            const isSelected = selectedPatterns.some(s => s.id === pattern.id);
+                            const isSelected = selectedPatterns.some(s => s.clientId === pattern.clientId);
                             return (
-                                <Card key={pattern.id} className={cn("transition-all", isSelected ? "border-primary" : "")}>
+                                <Card key={pattern.clientId} className={cn("transition-all", isSelected ? "border-primary" : "")}>
                                     <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
                                         <Checkbox 
-                                            id={`pattern-${pattern.id}`}
+                                            id={`pattern-${pattern.clientId}`}
                                             checked={isSelected}
                                             onCheckedChange={(checked) => handleSelectPattern(pattern, checked as boolean)}
                                             className="mt-1"
                                         />
                                         <div className="grid gap-1 w-full">
-                                            <Label htmlFor={`pattern-${pattern.id}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
+                                            <Label htmlFor={`pattern-${pattern.clientId}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
                                             <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
                                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
                                                 <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
@@ -660,7 +690,7 @@ export default function ScadenzePage() {
                                                 <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
                                             </div>
                                         </div>
-                                         <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setMovementsToShow(pattern.sourceMovements)}>
+                                         <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setMovementsToShow({ movements: pattern.sourceMovements, clientId: pattern.clientId })}>
                                             <ChevronRight className="h-5 w-5" />
                                         </Button>
                                     </CardHeader>
@@ -683,7 +713,7 @@ export default function ScadenzePage() {
                 <DialogHeader>
                     <DialogTitle>Movimenti Correlati</DialogTitle>
                     <DialogDescription>
-                        Questi sono i movimenti usati per identificare il pattern di spesa ricorrente.
+                        Questi sono i movimenti usati per identificare il pattern. Clicca "Usa come Modello" per usare i dati di un movimento specifico come base per la nuova scadenza ricorrente.
                     </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="h-[60vh] border rounded-md">
@@ -693,14 +723,25 @@ export default function ScadenzePage() {
                                 <TableHead>Data</TableHead>
                                 <TableHead>Descrizione</TableHead>
                                 <TableHead className="text-right">Uscita</TableHead>
+                                <TableHead className="text-right">Azione</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {movementsToShow?.map(mov => (
+                            {movementsToShow?.movements.map(mov => (
                                 <TableRow key={mov.id}>
                                     <TableCell>{formatDate(mov.data)}</TableCell>
                                     <TableCell>{mov.descrizione}</TableCell>
                                     <TableCell className="text-right">{formatCurrency(mov.uscita)}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleSetPatternFromMovement(movementsToShow!.clientId, mov)}
+                                        >
+                                            <Copy className="mr-2 h-4 w-4" />
+                                            Usa come Modello
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
