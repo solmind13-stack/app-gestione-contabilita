@@ -33,7 +33,7 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, parseDate } from '@/lib/utils';
 import type { Scadenza, AppUser, Movimento, RecurringExpensePattern, CompanyProfile } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
@@ -81,6 +81,7 @@ export default function ScadenzePage() {
     
     // State for AI suggestions
     const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
+    const [isReplicating, setIsReplicating] = useState(false);
     const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
     const [deadlinePatterns, setDeadlinePatterns] = useState<SuggestionPatternWithMovements[]>([]);
     const [selectedPatterns, setSelectedPatterns] = useState<SuggestionPatternWithMovements[]>([]);
@@ -505,6 +506,57 @@ export default function ScadenzePage() {
             setIsSuggestionLoading(false);
         }
     };
+    
+    const handleReplicateExactMovements = async (movementsToReplicate: Movimento[]) => {
+        if (!firestore || !user || movementsToReplicate.length === 0) return;
+        setIsReplicating(true);
+
+        try {
+            const batch = writeBatch(firestore);
+            let createdCount = 0;
+
+            for (const movement of movementsToReplicate) {
+                const originalDate = parseDate(movement.data);
+                const newDate = new Date(generationYear, originalDate.getMonth(), originalDate.getDate());
+
+                if (newDate.getFullYear() !== generationYear) continue;
+
+                const newDeadlineRef = doc(collection(firestore, 'deadlines'));
+                const newDeadline: Omit<Scadenza, 'id'> = {
+                    societa: movement.societa as 'LNC' | 'STG',
+                    anno: generationYear,
+                    dataScadenza: formatFns(newDate, 'yyyy-MM-dd'),
+                    descrizione: movement.descrizione,
+                    categoria: movement.categoria,
+                    sottocategoria: movement.sottocategoria || '',
+                    importoPrevisto: movement.uscita,
+                    importoPagato: 0,
+                    stato: 'Da pagare',
+                    ricorrenza: 'Altro', 
+                    createdBy: user.uid,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    source: 'ai-suggested',
+                };
+                batch.set(newDeadlineRef, newDeadline);
+                createdCount++;
+            }
+
+            await batch.commit();
+            toast({ title: 'Scadenze Replicate!', description: `${createdCount} nuove scadenze sono state create con gli importi esatti.` });
+            
+            setMovementsToShow(null);
+            setIsSuggestionDialogOpen(false);
+            setDeadlinePatterns([]);
+            setSelectedPatterns([]);
+
+        } catch (error) {
+            console.error("Error replicating exact movements:", error);
+            toast({ variant: 'destructive', title: 'Errore Replica', description: 'Impossibile creare le scadenze.' });
+        } finally {
+            setIsReplicating(false);
+        }
+    };
 
 
     const handleOpenDialog = (deadline?: Scadenza) => {
@@ -672,18 +724,23 @@ export default function ScadenzePage() {
                             return (
                                 <Card key={pattern.clientId} className={cn("transition-all", isSelected ? "border-primary" : "")}>
                                     <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
-                                        <Checkbox 
-                                            id={`pattern-${pattern.clientId}`}
-                                            checked={isSelected}
-                                            onCheckedChange={(checked) => handleSelectPattern(pattern, checked as boolean)}
-                                            className="mt-1"
-                                        />
+                                        <div className="flex flex-col gap-2">
+                                            <Checkbox 
+                                                id={`pattern-${pattern.clientId}`}
+                                                checked={isSelected}
+                                                onCheckedChange={(checked) => handleSelectPattern(pattern, checked as boolean)}
+                                                className="mt-1"
+                                                disabled={pattern.amountType === 'variable'}
+                                            />
+                                            {pattern.amountType === 'variable' && <span className="text-xs text-muted-foreground -mt-1">N/A</span>}
+                                        </div>
                                         <div className="grid gap-1 w-full">
                                             <Label htmlFor={`pattern-${pattern.clientId}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
                                             <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
+                                             {pattern.amountType === 'variable' && <p className="text-xs text-amber-600 dark:text-amber-500">Importi variabili. Gestisci la replica dai dettagli.</p>}
                                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
                                                 <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
-                                                <span>Importo: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
+                                                <span>Importo Medio: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
                                                 <span>Ricorrenza: <Badge variant="outline">{pattern.ricorrenza}</Badge></span>
                                                 <span>Giorno: <Badge variant="outline">~{pattern.giornoStimato}</Badge></span>
                                                 {pattern.metodoPagamentoTipico && <span>Pagamento: <Badge variant="outline">{pattern.metodoPagamentoTipico}</Badge></span>}
@@ -702,7 +759,7 @@ export default function ScadenzePage() {
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setIsSuggestionDialogOpen(false)}>Annulla</Button>
                     <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedPatterns.length === 0}>
-                        {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Genera ${selectedPatterns.length} Serie di Scadenze`}
+                        {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Genera ${selectedPatterns.length} Serie (Importo Medio)`}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -713,7 +770,7 @@ export default function ScadenzePage() {
                 <DialogHeader>
                     <DialogTitle>Movimenti Correlati</DialogTitle>
                     <DialogDescription>
-                        Questi sono i movimenti usati per identificare il pattern. Clicca "Usa come Modello" per usare i dati di un movimento specifico come base per la nuova scadenza ricorrente.
+                       Questi sono i movimenti usati per identificare il pattern. Puoi usare un movimento come "modello" per la descrizione di una serie, oppure puoi replicare l'intero blocco con i loro importi esatti.
                     </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="h-[60vh] border rounded-md">
@@ -747,7 +804,15 @@ export default function ScadenzePage() {
                         </TableBody>
                     </Table>
                 </ScrollArea>
-                <DialogFooter>
+                <DialogFooter className="justify-between">
+                     <Button 
+                        variant="secondary"
+                        onClick={() => handleReplicateExactMovements(movementsToShow!.movements)}
+                        disabled={isReplicating}
+                    >
+                        {isReplicating ? <Loader2 className="animate-spin mr-2" /> : <Copy className="mr-2 h-4 w-4" />}
+                        Replica questi {movementsToShow?.movements.length} movimenti per il {generationYear}
+                    </Button>
                     <Button onClick={() => setMovementsToShow(null)}>Chiudi</Button>
                 </DialogFooter>
             </DialogContent>

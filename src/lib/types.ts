@@ -176,11 +176,11 @@ export type RiepilogoPrevisioniUscite = {
 };
 
 export type RecurringExpensePattern = {
-    id: string; // Client-generated
     societa: string;
     descrizionePulita: string;
     importoPrevisto: number;
-    ricorrenza: 'Mensile' | 'Bimestrale' | 'Trimestrale' | 'Quadrimestrale' | 'Semestrale' | 'Annuale';
+    amountType: 'fixed' | 'variable';
+    ricorrenza: 'Mensile' | 'Bimestrale' | 'Trimestrale' | 'Quadrimestrale' | 'Semestrale' | 'Annuale' | 'Altro';
     giornoStimato: number;
     primoMese?: number;
     categoria: string;
@@ -188,6 +188,7 @@ export type RecurringExpensePattern = {
     metodoPagamentoTipico?: string;
     tipoTassa?: string;
     ragione: string;
+    sourceCandidateId: number;
 };
 
 
