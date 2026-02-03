@@ -250,52 +250,82 @@ export default function ScadenzePage() {
 
             if (movementsToAnalyze.length < 3) continue;
 
-            const normalizeDescription = (desc: string) => {
-                 let normalized = desc.toLowerCase();
-                 const noise = ['pagamento', 'accredito', 'addebito', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su', 'e', 'di', 'a', 'vs'];
-                const noiseRegex = new RegExp(`\\b(${noise.join('|')})\\b`, 'gi');
-                normalized = normalized.replace(noiseRegex, '');
-                const months = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic';
-                const monthsRegex = new RegExp(`\\b(${months})\\b`, 'gi');
-                normalized = normalized.replace(monthsRegex, '');
-                normalized = normalized.replace(/\b(f24)\b/g, '@@F24@@'); // Preserve F24
-                normalized = normalized.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{4}\b)|(\b\d{6,}\b)/g, '');
-                normalized = normalized.replace(/@@F24@@/g, 'f24'); // Restore F24
-                normalized = normalized.replace(/[.,\-_/()]/g, ' ');
-                normalized = normalized.replace(/\s+/g, ' ').trim();
-                return normalized;
+            const createGroupingKey = (desc: string): string => {
+                const lowerDesc = desc.toLowerCase();
+            
+                const primaryEntities = ['f24', 'imu', 'ires', 'irap', 'iva', 'inps', 'telecom', 'tim', 'enel', 'bapr', 'gse', 'eris', 'reggiani', 'h&s'];
+                
+                for (const entity of primaryEntities) {
+                    if (lowerDesc.includes(entity)) {
+                        if (entity === 'f24') {
+                            if (lowerDesc.includes('imu')) return 'f24 imu';
+                            if (lowerDesc.includes('ires')) return 'f24 ires';
+                            return 'f24';
+                        }
+                        return entity;
+                    }
+                }
+            
+                const noiseWords = ['pagamento', 'accredito', 'addebito', 'sdd', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su', 'e', 'di', 'a', 'vs', 'commissioni', 'bancarie', 'spese', 'recupero', 'imposta', 'bollo', 'su', 'estratto', 'conto', 'ren', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre', 'gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+                const noiseRegex = new RegExp(`\\b(${noiseWords.join('|')})\\b`, 'gi');
+                let cleanedDesc = lowerDesc.replace(noiseRegex, '');
+            
+                cleanedDesc = cleanedDesc.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{2,}\b)/g, '');
+                cleanedDesc = cleanedDesc.replace(/[.,\-_/()]/g, ' ').trim();
+                
+                const significantWords = cleanedDesc.split(/\s+/).filter(w => w.length > 2);
+                return significantWords.slice(0, 2).join(' ');
             };
 
             const expenseMovements = movementsToAnalyze.filter(m => m.uscita > 0);
-            const grouped = expenseMovements.reduce((acc, mov) => {
-                const key = normalizeDescription(mov.descrizione);
+            
+            const groupedByDescription = expenseMovements.reduce((acc, mov) => {
+                const key = createGroupingKey(mov.descrizione);
                 if (!key) return acc;
                 if (!acc[key]) acc[key] = [];
                 acc[key].push(mov);
                 return acc;
             }, {} as Record<string, Movimento[]>);
-            
-            const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3);
 
-            const existingDeadlinesSummary = (scadenze || []).map(scadenza => ({
-                societa: scadenza.societa,
-                cleanDesc: normalizeDescription(scadenza.descrizione).toLowerCase(),
-            }));
+            const finalCandidateGroups: Movimento[][] = [];
             
-            // Pre-filter candidates to reduce payload
-            const candidatesToAnalyze = recurringCandidates.filter(candidateGroup => {
-                const candidateDesc = normalizeDescription(candidateGroup[0].descrizione).toLowerCase();
-                const isDuplicate = existingDeadlinesSummary.some(existing => 
-                    existing.societa === company &&
-                    (existing.cleanDesc.includes(candidateDesc) || candidateDesc.includes(existing.cleanDesc))
-                );
-                return !isDuplicate;
+            Object.values(groupedByDescription).forEach(group => {
+                if (group.length < 3) return;
+
+                const amountClusters: Movimento[][] = [];
+                const sortedGroup = group.sort((a,b) => a.uscita - b.uscita);
+                
+                let currentCluster: Movimento[] = [];
+                if(sortedGroup.length > 0) {
+                   currentCluster.push(sortedGroup[0]);
+                }
+
+                for (let i = 1; i < sortedGroup.length; i++) {
+                    const currentMov = sortedGroup[i];
+                    const clusterAvg = currentCluster.reduce((sum, m) => sum + m.uscita, 0) / currentCluster.length;
+                    const tolerance = 0.1; // 10%
+
+                    if (Math.abs(currentMov.uscita - clusterAvg) / clusterAvg <= tolerance) {
+                        currentCluster.push(currentMov);
+                    } else {
+                        amountClusters.push(currentCluster);
+                        currentCluster = [currentMov];
+                    }
+                }
+                if (currentCluster.length > 0) {
+                    amountClusters.push(currentCluster);
+                }
+
+                amountClusters.forEach(cluster => {
+                    if (cluster.length >= 3) {
+                        finalCandidateGroups.push(cluster);
+                    }
+                });
             });
 
-            if (candidatesToAnalyze.length === 0) continue;
+            if (finalCandidateGroups.length === 0) continue;
             
-            const analysisPayload = candidatesToAnalyze.map((group, index) => {
-                // **FIX**: Sort the movements within the group by date before analysis
+            const analysisPayload = finalCandidateGroups.map((group, index) => {
                 group.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
 
                 const amounts = group.map(m => m.uscita);
@@ -330,10 +360,10 @@ export default function ScadenzePage() {
                     analysisCandidates: JSON.stringify(analysisPayload),
                 });
                 
-                if (result.suggestions.length > 0) {
+                if (result && result.suggestions && result.suggestions.length > 0) {
                     const batch = writeBatch(firestore);
                     for (const suggestion of result.suggestions) {
-                        const originalGroup = candidatesToAnalyze[suggestion.sourceCandidateId];
+                        const originalGroup = finalCandidateGroups[suggestion.sourceCandidateId];
                         if (!originalGroup) continue;
 
                         const newSuggestionRef = doc(collection(firestore, 'users', user.uid, 'deadlineSuggestions'));
