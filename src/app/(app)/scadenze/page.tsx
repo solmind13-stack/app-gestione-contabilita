@@ -229,27 +229,27 @@ export default function ScadenzePage() {
     const handleSuggestDeadlines = useCallback(async () => {
         if (!firestore || !user) return;
         setIsSuggestionLoading(true);
-
+    
         const companiesToAnalyze = selectedCompany === 'Tutte' && companies
             ? companies.map(c => c.sigla)
             : [selectedCompany];
-
+    
         if (companiesToAnalyze.length === 0 || !movimenti) {
             toast({ variant: 'destructive', title: 'Nessun Dato', description: 'Non ci sono società o movimenti da analizzare.' });
             setIsSuggestionLoading(false);
             return;
         }
-
+    
         let totalSuggestionsCreated = 0;
         
         for (const company of companiesToAnalyze) {
             if (!company) continue;
             
             const twoYearsAgo = getYear(subYears(new Date(), 2));
-            const movementsToAnalyze = (movimenti || []).filter(m => m.societa === company && m.anno >= twoYearsAgo);
-
+            const movementsToAnalyze = (movimenti || []).filter(m => m.societa === company && m.anno >= twoYearsAgo && m.uscita > 0);
+    
             if (movementsToAnalyze.length < 3) continue;
-
+    
             const createGroupingKey = (desc: string): string => {
                 const lowerDesc = desc.toLowerCase().trim();
                 const primaryEntities = ['f24', 'imu', 'ires', 'irap', 'iva', 'inps', 'telecom', 'tim', 'enel', 'bapr', 'gse', 'eris', 'reggiani', 'h&s', 'spazio pedagogia'];
@@ -273,17 +273,15 @@ export default function ScadenzePage() {
                 const significantWords = cleanedDesc.split(/\s+/).filter(w => w.length > 2);
                 return significantWords.slice(0, 3).join(' ');
             };
-
-            const expenseMovements = movementsToAnalyze.filter(m => m.uscita > 0);
-            
-            const groupedByDescription = expenseMovements.reduce((acc, mov) => {
+    
+            const groupedByDescription = movementsToAnalyze.reduce((acc, mov) => {
                 const key = createGroupingKey(mov.descrizione);
                 if (!key) return acc;
                 if (!acc[key]) acc[key] = [];
                 acc[key].push(mov);
                 return acc;
             }, {} as Record<string, Movimento[]>);
-
+    
             const finalCandidateGroups: Movimento[][] = [];
             
             Object.values(groupedByDescription).forEach(group => {
@@ -310,21 +308,49 @@ export default function ScadenzePage() {
             });
             
             const existingDeadlines = (scadenze || []).filter(s => s.societa === company);
-
+    
             const filteredCandidates = finalCandidateGroups.filter(group => {
                 const avgAmount = group.reduce((sum, m) => sum + m.uscita, 0) / group.length;
                 return !existingDeadlines.some(deadline => 
                     Math.abs(deadline.importoPrevisto - avgAmount) / avgAmount < 0.1 // 10% tolerance
                 );
             });
-
+    
             if (filteredCandidates.length === 0) continue;
             
             const analysisPayload = filteredCandidates.map((group, index) => {
                 group.sort((a, b) => parseDate(a.data).getTime() - parseDate(b.data).getTime());
-
+    
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    
+                const stdDev = Math.sqrt(amounts.map(x => Math.pow(x - avgAmount, 2)).reduce((a, b) => a + b, 0) / amounts.length);
+                const coefficientOfVariation = avgAmount === 0 ? 0 : stdDev / avgAmount;
+                const amountType = coefficientOfVariation < 0.05 ? 'fixed' : 'variable';
+    
+                let ricorrenza: RecurringExpensePattern['ricorrenza'] = 'Altro';
+                if (group.length > 1) {
+                    let totalDays = 0;
+                    for (let i = 1; i < group.length; i++) {
+                        const date1 = parseDate(group[i - 1].data);
+                        const date2 = parseDate(group[i].data);
+                        totalDays += (date2.getTime() - date1.getTime()) / (1000 * 3600 * 60 * 24);
+                    }
+                    const avgDays = totalDays / (group.length - 1);
+    
+                    if (avgDays > 25 && avgDays < 35) ricorrenza = 'Mensile';
+                    else if (avgDays > 55 && avgDays < 65) ricorrenza = 'Bimestrale';
+                    else if (avgDays > 85 && avgDays < 95) ricorrenza = 'Trimestrale';
+                    else if (avgDays > 115 && avgDays < 125) ricorrenza = 'Quadrimestrale';
+                    else if (avgDays > 175 && avgDays < 185) ricorrenza = 'Semestrale';
+                    else if (avgDays > 360 && avgDays < 370) ricorrenza = 'Annuale';
+                }
+    
+                const daysOfMonth = group.map(m => parseDate(m.data).getDate());
+                const giornoStimato = Math.round(daysOfMonth.reduce((a, b) => a + b, 0) / daysOfMonth.length);
+    
+                const firstMonth = group.length > 0 ? parseDate(group[0].data).getMonth() + 1 : undefined;
+    
                 const categoryCounts = group.reduce((acc, mov) => {
                     const key = `${mov.categoria || 'Da categorizzare'}|||${mov.sottocategoria || 'Da categorizzare'}`;
                     acc[key] = (acc[key] || 0) + 1;
@@ -336,19 +362,21 @@ export default function ScadenzePage() {
                     : 'Da categorizzare|||Da categorizzare';
             
                 const [sourceCategory, sourceSubcategory] = mostCommonCatSub.split('|||');
-
+    
                 return {
                     id: index,
                     description: group[0].descrizione,
                     count: group.length,
                     avgAmount: avgAmount,
-                    amounts: amounts,
-                    dates: group.map(m => m.data),
+                    amountType: amountType,
+                    ricorrenza: ricorrenza,
+                    giornoStimato: giornoStimato,
+                    primoMese: firstMonth,
                     sourceCategory: sourceCategory,
                     sourceSubcategory: sourceSubcategory,
                 };
             });
-
+    
             try {
                 const result = await suggestFiscalDeadlines({
                     company: company,
@@ -358,10 +386,9 @@ export default function ScadenzePage() {
                 if (result?.suggestions && result.suggestions.length > 0) {
                     const batch = writeBatch(firestore);
                     for (const suggestion of result.suggestions) {
-                        if (suggestion.sourceCandidateId >= filteredCandidates.length) continue;
                         const originalGroup = filteredCandidates[suggestion.sourceCandidateId];
                         if (!originalGroup) continue;
-
+    
                         const newSuggestionRef = doc(collection(firestore, 'users', user.uid, 'deadlineSuggestions'));
                         const suggestionPayload: Omit<DeadlineSuggestion, 'id'> = {
                             ...(suggestion as Omit<RecurringExpensePattern, 'sourceCandidateId'>),
