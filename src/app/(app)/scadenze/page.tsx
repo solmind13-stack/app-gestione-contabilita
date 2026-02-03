@@ -295,6 +295,9 @@ export default function ScadenzePage() {
             if (candidatesToAnalyze.length === 0) continue;
             
             const analysisPayload = candidatesToAnalyze.map((group, index) => {
+                // **FIX**: Sort the movements within the group by date before analysis
+                group.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
                 const categoryCounts = group.reduce((acc, mov) => {
@@ -315,7 +318,7 @@ export default function ScadenzePage() {
                     count: group.length,
                     avgAmount: avgAmount,
                     amounts: amounts,
-                    dates: group.map(m => m.data).sort(),
+                    dates: group.map(m => m.data),
                     sourceCategory: sourceCategory,
                     sourceSubcategory: sourceSubcategory,
                 };
