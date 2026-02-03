@@ -465,7 +465,7 @@ export default function PrevisioniPage() {
             
                 const [sourceCategory, sourceSubcategory] = mostCommonCatSub.split('|||');
     
-                return { id: index, description: group[0].descrizione, count: group.length, avgAmount, amountType, ricorrenza, giornoStimato, primoMese, sourceCategory, sourceSubcategory };
+                return { id: index, description: group[0].descrizione, count: group.length, avgAmount, amountType, ricorrenza, giornoStimato, primoMese: firstMonth, sourceCategory, sourceSubcategory };
             });
     
             try {
