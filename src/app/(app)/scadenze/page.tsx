@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference, deleteDoc, DocumentData } from 'firebase/firestore';
 import {
@@ -27,27 +28,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle, Upload, FileSpreadsheet, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles, Trash2, ChevronRight, Copy } from 'lucide-react';
+import { PlusCircle, Upload, Search, ArrowUp, ArrowDown, Pencil, CalendarClock, AlertTriangle, History, Loader2, Sparkles, Trash2, ClipboardCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate, parseDate } from '@/lib/utils';
-import type { Scadenza, AppUser, Movimento, RecurringExpensePattern, CompanyProfile } from '@/lib/types';
+import type { Scadenza, AppUser, Movimento, RecurringExpensePattern, CompanyProfile, DeadlineSuggestion } from '@/lib/types';
 import { AddDeadlineDialog } from '@/components/scadenze/add-deadline-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { YEARS } from '@/lib/constants';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Label } from '@/components/ui/label';
 import { suggestFiscalDeadlines } from '@/ai/flows/suggest-fiscal-deadlines';
-import { format as formatFns, getYear, subYears } from 'date-fns';
-import { it } from 'date-fns/locale';
+import { getYear, subYears } from 'date-fns';
 
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
@@ -60,15 +57,9 @@ const getQuery = (firestore: any, user: AppUser | null, collectionName: string) 
     return query(q);
 }
 
-// New Type for the component state
-type SuggestionPatternWithMovements = RecurringExpensePattern & {
-  sourceMovements: Movimento[];
-  clientId: string; // Add a unique ID for client-side state management
-};
-
-
 export default function ScadenzePage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc');
     const [searchTerm, setSearchTerm] = useState('');
@@ -81,14 +72,7 @@ export default function ScadenzePage() {
     
     // State for AI suggestions
     const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
-    const [isReplicating, setIsReplicating] = useState(false);
-    const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
-    const [deadlinePatterns, setDeadlinePatterns] = useState<SuggestionPatternWithMovements[]>([]);
-    const [selectedPatterns, setSelectedPatterns] = useState<SuggestionPatternWithMovements[]>([]);
-    const [generationYear, setGenerationYear] = useState<number>(new Date().getFullYear());
-    const [movementsToShow, setMovementsToShow] = useState<{ movements: Movimento[], clientId: string } | null>(null);
-
-
+    
     // Filters
     const [selectedYear, setSelectedYear] = useState<string>('Tutti');
     const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
@@ -101,12 +85,14 @@ export default function ScadenzePage() {
     const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
     const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
     const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
+    const suggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'deadlineSuggestions'), where('status', '==', 'pending')) : null, [firestore, user]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
     const { data: movimenti, isLoading: isLoadingMovimenti } = useCollection<Movimento>(movimentiQuery);
     const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
+    const { data: suggestions, isLoading: isLoadingSuggestions } = useCollection<DeadlineSuggestion>(suggestionsQuery);
 
-    const isLoading = isLoadingScadenze || isLoadingMovimenti || isUserLoading || isLoadingCompanies;
+    const isLoading = isLoadingScadenze || isLoadingMovimenti || isUserLoading || isLoadingCompanies || isLoadingSuggestions;
 
     useEffect(() => {
         if (user?.role === 'company' || user?.role === 'company-editor') {
@@ -241,16 +227,8 @@ export default function ScadenzePage() {
     };
 
     const handleSuggestDeadlines = useCallback(async () => {
+        if (!firestore || !user) return;
         setIsSuggestionLoading(true);
-        setDeadlinePatterns([]);
-
-        const currentYear = new Date().getFullYear();
-        if (selectedYear !== 'Tutti') {
-            const year = Number(selectedYear);
-            setGenerationYear(year < currentYear ? currentYear : year);
-        } else {
-            setGenerationYear(currentYear);
-        }
 
         const companiesToAnalyze = selectedCompany === 'Tutte' && companies
             ? companies.map(c => c.sigla)
@@ -262,18 +240,13 @@ export default function ScadenzePage() {
             return;
         }
 
-        let allSuggestionsWithMovements: SuggestionPatternWithMovements[] = [];
+        let totalSuggestionsCreated = 0;
         
         for (const company of companiesToAnalyze) {
             if (!company) continue;
             
-            let movementsToAnalyze: Movimento[];
-            if (selectedYear !== 'Tutti') {
-                movementsToAnalyze = (movimenti || []).filter(m => m.societa === company && m.anno === Number(selectedYear));
-            } else {
-                const twoYearsAgo = getYear(subYears(new Date(), 2));
-                movementsToAnalyze = (movimenti || []).filter(m => m.societa === company && m.anno >= twoYearsAgo);
-            }
+            const twoYearsAgo = getYear(subYears(new Date(), 2));
+            const movementsToAnalyze = (movimenti || []).filter(m => m.societa === company && m.anno >= twoYearsAgo);
 
             if (movementsToAnalyze.length < 3) continue;
 
@@ -332,21 +305,50 @@ export default function ScadenzePage() {
                 };
             });
             
-             try {
+            const existingDeadlinesSummary = (scadenze || []).map(scadenza => {
+              const cleanDesc = scadenza.descrizione.toLowerCase().split(' - ')[0].trim();
+              return {
+                  societa: scadenza.societa,
+                  ricorrenza: scadenza.ricorrenza,
+                  cleanDesc: cleanDesc,
+              };
+            });
+
+            try {
                 const result = await suggestFiscalDeadlines({
                     company: company,
                     analysisCandidates: JSON.stringify(analysisPayload),
                 });
                 
-                 const mappedSuggestions = result.suggestions.map((suggestion, suggestionIndex) => {
-                    const originalGroup = recurringCandidates[suggestion.sourceCandidateId];
-                    return {
-                        ...suggestion,
-                        sourceMovements: originalGroup || [],
-                        clientId: `${company}-${suggestionIndex}-${new Date().getTime()}`
-                    };
+                const filteredSuggestions = result.suggestions.filter(pattern => {
+                    const cleanPatternDesc = pattern.descrizionePulita.toLowerCase().trim();
+                    const isDuplicate = existingDeadlinesSummary.some(existing => 
+                        existing.societa === pattern.societa &&
+                        existing.ricorrenza === pattern.ricorrenza &&
+                        (existing.cleanDesc.includes(cleanPatternDesc) || cleanPatternDesc.includes(existing.cleanDesc))
+                    );
+                    return !isDuplicate;
                 });
-                allSuggestionsWithMovements.push(...mappedSuggestions);
+                
+                if (filteredSuggestions.length > 0) {
+                    const batch = writeBatch(firestore);
+                    for (const suggestion of filteredSuggestions) {
+                        const originalGroup = recurringCandidates[suggestion.sourceCandidateId];
+                        if (!originalGroup) continue;
+
+                        const newSuggestionRef = doc(collection(firestore, 'users', user.uid, 'deadlineSuggestions'));
+                        const suggestionPayload: Omit<DeadlineSuggestion, 'id'> = {
+                            ...(suggestion as Omit<RecurringExpensePattern, 'sourceCandidateId'>),
+                            sourceMovementIds: originalGroup.map(m => m.id),
+                            status: 'pending',
+                            userId: user.uid,
+                            createdAt: new Date().toISOString()
+                        };
+                        batch.set(newSuggestionRef, suggestionPayload);
+                    }
+                    await batch.commit();
+                    totalSuggestionsCreated += filteredSuggestions.length;
+                }
             } catch (error: any) {
                 console.error(`Error suggesting deadlines for ${company}:`, error);
                 toast({
@@ -354,209 +356,23 @@ export default function ScadenzePage() {
                     title: `Errore Analisi per ${company}`,
                     description: error.message || 'Impossibile completare l\'analisi.'
                 });
-                setIsSuggestionLoading(false);
-                return;
             }
         }
         
-        const existingDeadlinesSummary = (scadenze || []).map(scadenza => {
-            const cleanDesc = scadenza.descrizione.toLowerCase().split(' - ')[0].trim();
-            return {
-                societa: scadenza.societa,
-                ricorrenza: scadenza.ricorrenza,
-                cleanDesc: cleanDesc,
-            };
-        });
-
-        const filteredSuggestions = allSuggestionsWithMovements.filter(pattern => {
-            const cleanPatternDesc = pattern.descrizionePulita.toLowerCase().trim();
-            const isDuplicate = existingDeadlinesSummary.some(existing => 
-                existing.societa === pattern.societa &&
-                existing.ricorrenza === pattern.ricorrenza &&
-                (existing.cleanDesc.includes(cleanPatternDesc) || cleanPatternDesc.includes(existing.cleanDesc))
-            );
-            return !isDuplicate;
-        });
-
-        if (filteredSuggestions.length === 0) {
-            toast({ title: 'Nessun Suggerimento', description: 'Nessuna nuova scadenza ricorrente è stata trovata in base ai filtri attuali.' });
-        } else {
-            setDeadlinePatterns(filteredSuggestions);
-            setSelectedPatterns(filteredSuggestions);
-            setIsSuggestionDialogOpen(true);
-        }
         setIsSuggestionLoading(false);
-    }, [movimenti, scadenze, toast, selectedCompany, companies, selectedYear]);
-
-    const handleSetPatternFromMovement = (clientId: string, templateMovement: Movimento) => {
-        setDeadlinePatterns(prevPatterns =>
-            prevPatterns.map(p => {
-                if (p.clientId === clientId) {
-                    return {
-                        ...p,
-                        descrizionePulita: templateMovement.descrizione,
-                        categoria: templateMovement.categoria,
-                        sottocategoria: templateMovement.sottocategoria,
-                    };
-                }
-                return p;
-            })
-        );
-        setSelectedPatterns(prevPatterns =>
-            prevPatterns.map(p => {
-                if (p.clientId === clientId) {
-                     return {
-                        ...p,
-                        descrizionePulita: templateMovement.descrizione,
-                        categoria: templateMovement.categoria,
-                        sottocategoria: templateMovement.sottocategoria,
-                    };
-                }
-                return p;
-            })
-        );
-        toast({
-            title: "Modello Aggiornato",
-            description: "La descrizione e la categoria del suggerimento sono state aggiornate."
-        });
-        setMovementsToShow(null);
-    };
-
-    const handleCreateSuggestedDeadlines = async () => {
-        if (!firestore || !user || selectedPatterns.length === 0) return;
-        setIsSuggestionLoading(true);
-
-        try {
-            const batch = writeBatch(firestore);
-            let createdCount = 0;
-
-            for (const pattern of selectedPatterns) {
-                const getNextDate = (month: number, day: number) => new Date(generationYear, month, day);
-
-                const createDeadline = (date: Date) => {
-                    if (date.getFullYear() !== generationYear) return;
-                    
-                    const newDeadlineRef = doc(collection(firestore, 'deadlines'));
-                    const newDeadline: Omit<Scadenza, 'id'> = {
-                        societa: pattern.societa as 'LNC' | 'STG',
-                        anno: date.getFullYear(),
-                        dataScadenza: formatFns(date, 'yyyy-MM-dd'),
-                        descrizione: `${pattern.descrizionePulita} - ${formatFns(date, 'MMMM yyyy', { locale: it })}`,
-                        categoria: pattern.categoria,
-                        sottocategoria: pattern.sottocategoria || '',
-                        importoPrevisto: pattern.importoPrevisto,
-                        importoPagato: 0,
-                        stato: 'Da pagare',
-                        ricorrenza: pattern.ricorrenza,
-                        createdBy: user.uid,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                        tipoTassa: pattern.tipoTassa || '',
-                        periodoRiferimento: '',
-                        source: 'ai-suggested',
-                    };
-                    batch.set(newDeadlineRef, newDeadline);
-                    createdCount++;
-                };
-
-                const primoMese = (pattern.primoMese || new Date().getMonth() + 1) - 1;
-
-                switch (pattern.ricorrenza) {
-                    case 'Mensile':
-                        for (let i = 0; i < 12; i++) {
-                            createDeadline(getNextDate(i, pattern.giornoStimato));
-                        }
-                        break;
-                    case 'Bimestrale':
-                        for (let i = 0; i < 6; i++) {
-                            createDeadline(getNextDate(primoMese + i * 2, pattern.giornoStimato));
-                        }
-                        break;
-                    case 'Trimestrale':
-                        for (let i = 0; i < 4; i++) {
-                            createDeadline(getNextDate(primoMese + i * 3, pattern.giornoStimato));
-                        }
-                        break;
-                    case 'Quadrimestrale':
-                         for (let i = 0; i < 3; i++) {
-                            createDeadline(getNextDate(primoMese + i * 4, pattern.giornoStimato));
-                        }
-                        break;
-                    case 'Semestrale':
-                        for (let i = 0; i < 2; i++) {
-                            createDeadline(getNextDate(primoMese + i * 6, pattern.giornoStimato));
-                        }
-                        break;
-                    case 'Annuale':
-                        createDeadline(getNextDate(primoMese, pattern.giornoStimato));
-                        break;
-                }
-            }
-
-            await batch.commit();
-            toast({ title: 'Scadenze Create!', description: `${createdCount} nuove scadenze sono state aggiunte per il ${generationYear}.` });
-            setIsSuggestionDialogOpen(false);
-            setDeadlinePatterns([]);
-            setSelectedPatterns([]);
-
-        } catch (error) {
-            console.error("Error creating suggested deadlines:", error);
-            toast({ variant: 'destructive', title: 'Errore Creazione', description: 'Impossibile creare le scadenze suggerite.' });
-        } finally {
-            setIsSuggestionLoading(false);
+        if (totalSuggestionsCreated > 0) {
+            toast({
+                title: 'Analisi Completata',
+                description: `${totalSuggestionsCreated} nuovi suggerimenti sono disponibili per la revisione.`
+            });
+            router.push('/scadenze/revisione');
+        } else {
+            toast({
+                title: 'Nessun Nuovo Suggerimento',
+                description: 'Nessuna nuova scadenza ricorrente è stata trovata in base ai filtri attuali.'
+            });
         }
-    };
-    
-    const handleReplicateExactMovements = async (movementsToReplicate: Movimento[]) => {
-        if (!firestore || !user || movementsToReplicate.length === 0) return;
-        setIsReplicating(true);
-
-        try {
-            const batch = writeBatch(firestore);
-            let createdCount = 0;
-
-            for (const movement of movementsToReplicate) {
-                const originalDate = parseDate(movement.data);
-                const newDate = new Date(generationYear, originalDate.getMonth(), originalDate.getDate());
-
-                if (newDate.getFullYear() !== generationYear) continue;
-
-                const newDeadlineRef = doc(collection(firestore, 'deadlines'));
-                const newDeadline: Omit<Scadenza, 'id'> = {
-                    societa: movement.societa as 'LNC' | 'STG',
-                    anno: generationYear,
-                    dataScadenza: formatFns(newDate, 'yyyy-MM-dd'),
-                    descrizione: movement.descrizione,
-                    categoria: movement.categoria,
-                    sottocategoria: movement.sottocategoria || '',
-                    importoPrevisto: movement.uscita,
-                    importoPagato: 0,
-                    stato: 'Da pagare',
-                    ricorrenza: 'Altro', 
-                    createdBy: user.uid,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    source: 'ai-suggested',
-                };
-                batch.set(newDeadlineRef, newDeadline);
-                createdCount++;
-            }
-
-            await batch.commit();
-            toast({ title: 'Scadenze Replicate!', description: `${createdCount} nuove scadenze sono state create con gli importi esatti.` });
-            
-            setMovementsToShow(null);
-            setIsSuggestionDialogOpen(false);
-            setDeadlinePatterns([]);
-            setSelectedPatterns([]);
-
-        } catch (error) {
-            console.error("Error replicating exact movements:", error);
-            toast({ variant: 'destructive', title: 'Errore Replica', description: 'Impossibile creare le scadenze.' });
-        } finally {
-            setIsReplicating(false);
-        }
-    };
+    }, [movimenti, scadenze, toast, selectedCompany, companies, firestore, user, router]);
 
 
     const handleOpenDialog = (deadline?: Scadenza) => {
@@ -572,14 +388,6 @@ export default function ScadenzePage() {
         }
     };
     
-    const handleSelectPattern = (pattern: SuggestionPatternWithMovements, checked: boolean) => {
-        if (checked) {
-            setSelectedPatterns(prev => [...prev, pattern]);
-        } else {
-            setSelectedPatterns(prev => prev.filter(p => p.clientId !== pattern.clientId));
-        }
-    };
-
     const handleSelectRow = (id: string, checked: boolean) => {
         if (checked) {
             setSelectedIds(prev => [...prev, id]);
@@ -686,139 +494,16 @@ export default function ScadenzePage() {
         currentUser={user!}
       />
 
-        <ImportDeadlinesDialog
-            isOpen={isImportDialogOpen}
-            setIsOpen={setIsImportDialogOpen}
-            onImport={handleImportDeadlines}
-            defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
-            currentUser={user}
-            companies={companies || []}
-            allDeadlines={scadenze || []}
-        />
+      <ImportDeadlinesDialog
+          isOpen={isImportDialogOpen}
+          setIsOpen={setIsImportDialogOpen}
+          onImport={handleImportDeadlines}
+          defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany : undefined}
+          currentUser={user}
+          companies={companies || []}
+          allDeadlines={scadenze || []}
+      />
       
-        <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
-            <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                    <DialogTitle>Suggerimenti Scadenze Ricorrenti</DialogTitle>
-                    <DialogDescription>
-                        L'AI ha identificato questi pattern di spesa. Seleziona quelli per cui vuoi generare le scadenze future.
-                    </DialogDescription>
-                </DialogHeader>
-                 <div className="flex items-center gap-4 py-4">
-                    <Label htmlFor="generation-year">Genera scadenze per l'anno:</Label>
-                    <Select value={String(generationYear)} onValueChange={(v) => setGenerationYear(Number(v))}>
-                        <SelectTrigger className="w-[120px]" id="generation-year">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i).map(year => (
-                                <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <ScrollArea className="h-[50vh] p-1 pr-4">
-                    <div className="space-y-4">
-                        {deadlinePatterns.map((pattern) => {
-                            const isSelected = selectedPatterns.some(s => s.clientId === pattern.clientId);
-                            return (
-                                <Card key={pattern.clientId} className={cn("transition-all", isSelected ? "border-primary" : "")}>
-                                    <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox 
-                                                id={`pattern-${pattern.clientId}`}
-                                                checked={isSelected}
-                                                onCheckedChange={(checked) => handleSelectPattern(pattern, checked as boolean)}
-                                                className="mt-1"
-                                                disabled={pattern.amountType === 'variable'}
-                                            />
-                                            {pattern.amountType === 'variable' && <span className="text-xs text-muted-foreground -mt-1">N/A</span>}
-                                        </div>
-                                        <div className="grid gap-1 w-full">
-                                            <Label htmlFor={`pattern-${pattern.clientId}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
-                                            <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
-                                             {pattern.amountType === 'variable' && <p className="text-xs text-amber-600 dark:text-amber-500">Importi variabili. Gestisci la replica dai dettagli.</p>}
-                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
-                                                <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
-                                                <span>Importo Medio: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
-                                                <span>Ricorrenza: <Badge variant="outline">{pattern.ricorrenza}</Badge></span>
-                                                <span>Giorno: <Badge variant="outline">~{pattern.giornoStimato}</Badge></span>
-                                                {pattern.metodoPagamentoTipico && <span>Pagamento: <Badge variant="outline">{pattern.metodoPagamentoTipico}</Badge></span>}
-                                                <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
-                                            </div>
-                                        </div>
-                                         <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setMovementsToShow({ movements: pattern.sourceMovements, clientId: pattern.clientId })}>
-                                            <ChevronRight className="h-5 w-5" />
-                                        </Button>
-                                    </CardHeader>
-                                </Card>
-                            )
-                        })}
-                    </div>
-                </ScrollArea>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsSuggestionDialogOpen(false)}>Annulla</Button>
-                    <Button onClick={handleCreateSuggestedDeadlines} disabled={isSuggestionLoading || selectedPatterns.length === 0}>
-                        {isSuggestionLoading ? <Loader2 className="animate-spin" /> : `Genera ${selectedPatterns.length} Serie (Importo Medio)`}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-
-        <Dialog open={!!movementsToShow} onOpenChange={(open) => !open && setMovementsToShow(null)}>
-            <DialogContent className="max-w-3xl">
-                <DialogHeader>
-                    <DialogTitle>Movimenti Correlati</DialogTitle>
-                    <DialogDescription>
-                       Questi sono i movimenti usati per identificare il pattern. Puoi usare un movimento come "modello" per la descrizione di una serie, oppure puoi replicare l'intero blocco con i loro importi esatti.
-                    </DialogDescription>
-                </DialogHeader>
-                <ScrollArea className="h-[60vh] border rounded-md">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Descrizione</TableHead>
-                                <TableHead className="text-right">Uscita</TableHead>
-                                <TableHead className="text-right">Azione</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {movementsToShow?.movements.map(mov => (
-                                <TableRow key={mov.id}>
-                                    <TableCell>{formatDate(mov.data)}</TableCell>
-                                    <TableCell>{mov.descrizione}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(mov.uscita)}</TableCell>
-                                    <TableCell className="text-right">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => handleSetPatternFromMovement(movementsToShow!.clientId, mov)}
-                                        >
-                                            <Copy className="mr-2 h-4 w-4" />
-                                            Usa come Modello
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </ScrollArea>
-                <DialogFooter className="justify-between">
-                     <Button 
-                        variant="secondary"
-                        onClick={() => handleReplicateExactMovements(movementsToShow!.movements)}
-                        disabled={isReplicating}
-                    >
-                        {isReplicating ? <Loader2 className="animate-spin mr-2" /> : <Copy className="mr-2 h-4 w-4" />}
-                        Replica questi {movementsToShow?.movements.length} movimenti per il {generationYear}
-                    </Button>
-                    <Button onClick={() => setMovementsToShow(null)}>Chiudi</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-
-
       <AlertDialog open={!!deadlineToDelete} onOpenChange={(open) => !open && setDeadlineToDelete(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -923,6 +608,10 @@ export default function ScadenzePage() {
                     Elimina ({selectedIds.length})
                 </Button>
             )}
+             <Button variant="outline" onClick={() => router.push('/scadenze/revisione')}>
+                <ClipboardCheck className="mr-2 h-4 w-4" />
+                Revisiona Suggerimenti ({suggestions?.length || 0})
+            </Button>
             <div className="relative flex-grow">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input

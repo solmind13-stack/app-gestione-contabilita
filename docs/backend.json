@@ -213,6 +213,39 @@
         "updatedAt"
       ]
     },
+    "DeadlineSuggestion": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "DeadlineSuggestion",
+      "type": "object",
+      "description": "Represents an AI-suggested recurring expense pattern to be reviewed by the user.",
+      "properties": {
+        "id": { "type": "string" },
+        "societa": { "type": "string" },
+        "descrizionePulita": { "type": "string" },
+        "importoPrevisto": { "type": "number" },
+        "amountType": { "type": "string", "enum": ["fixed", "variable"] },
+        "ricorrenza": { "type": "string" },
+        "giornoStimato": { "type": "number" },
+        "primoMese": { "type": "number" },
+        "categoria": { "type": "string" },
+        "sottocategoria": { "type": "string" },
+        "metodoPagamentoTipico": { "type": "string" },
+        "tipoTassa": { "type": "string" },
+        "ragione": { "type": "string" },
+        "sourceMovementIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "rejected"],
+          "description": "The review status of the suggestion."
+        },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["societa", "descrizionePulita", "importoPrevisto", "ricorrenza", "categoria", "status", "userId", "createdAt"]
+    },
     "IncomeForecast": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "IncomeForecast",
@@ -758,6 +791,26 @@
             {
               "name": "deadlineId",
               "description": "Unique identifier for the Deadline document."
+            }
+          ]
+        }
+      },
+       {
+        "path": "/users/{userId}/deadlineSuggestions/{suggestionId}",
+        "definition": {
+          "entityName": "DeadlineSuggestion",
+          "schema": {
+            "$ref": "#/backend/entities/DeadlineSuggestion"
+          },
+          "description": "Stores AI-generated deadline suggestions for user review.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The user's UID."
+            },
+            {
+              "name": "suggestionId",
+              "description": "Unique ID for the suggestion."
             }
           ]
         }

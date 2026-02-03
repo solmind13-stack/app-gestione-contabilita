@@ -38,6 +38,14 @@ service cloud.firestore {
       allow update: if isAdmin();
       allow delete: if isAdmin() && request.auth.uid != userId;
 
+      match /chatHistory/{chatId} {
+        allow read, write: if isSignedIn() && isOwner(userId);
+      }
+      
+      match /deadlineSuggestions/{suggestionId} {
+        allow read, write, delete: if isOwner(userId);
+      }
+
       match /{allChildren=**} {
           allow read, write: if isSignedIn() && isOwner(userId);
       }

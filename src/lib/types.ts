@@ -191,6 +191,25 @@ export type RecurringExpensePattern = {
     sourceCandidateId: number;
 };
 
+export type DeadlineSuggestion = {
+  id: string;
+  societa: string;
+  descrizionePulita: string;
+  importoPrevisto: number;
+  amountType: 'fixed' | 'variable';
+  ricorrenza: 'Mensile' | 'Bimestrale' | 'Trimestrale' | 'Quadrimestrale' | 'Semestrale' | 'Annuale' | 'Altro';
+  giornoStimato: number;
+  primoMese?: number;
+  categoria: string;
+  sottocategoria?: string;
+  metodoPagamentoTipico?: string;
+  tipoTassa?: string;
+  ragione: string;
+  sourceMovementIds: string[];
+  status: 'pending' | 'accepted' | 'rejected';
+  userId: string;
+  createdAt: string;
+};
 
 export type CompanyProfile = {
   id: string;
