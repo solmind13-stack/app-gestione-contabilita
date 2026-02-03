@@ -1,7 +1,7 @@
 // src/app/(app)/scadenze/revisione/page.tsx
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, writeBatch, doc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
