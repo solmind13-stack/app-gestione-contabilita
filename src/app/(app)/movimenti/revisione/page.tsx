@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, query, where, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, addDoc, DocumentData } from 'firebase/firestore';
 
 import {
   Card,
@@ -37,13 +37,14 @@ export default function RevisionePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const movimentiDaRevisionareQuery = useMemo(() => {
-    if (!firestore) return null;
-    let q = query(collection(firestore, 'movements'), where('status', '==', 'manual_review'));
-    if(user?.role === 'company' || user?.role === 'company-editor') {
+    if (!firestore || !user) return null;
+    let q: DocumentData = query(collection(firestore, 'movements'), where('status', '==', 'manual_review'));
+    if(user.role === 'company' || user.role === 'company-editor') {
+        if (!user.company) return null;
         q = query(q, where('societa', '==', user.company));
     }
     return q;
-  }, [firestore, user]);
+  }, [firestore, user?.uid, user?.role, user?.company]);
 
   const { data: movimenti, isLoading: isLoadingMovimenti, error } = useCollection<Movimento>(movimentiDaRevisionareQuery);
 
@@ -73,7 +74,7 @@ export default function RevisionePage() {
             status: 'ok' as const, // Mark as reviewed
             updatedAt: new Date().toISOString(),
         };
-        await updateDoc(movementDocRef, finalMovementData);
+        await updateDoc(movementDocRef, finalMovementData as any);
 
         // Feedback loop logic
         if (originalMovement && originalMovement.status === 'manual_review') {

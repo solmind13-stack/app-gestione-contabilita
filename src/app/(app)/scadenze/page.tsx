@@ -82,10 +82,10 @@ export default function ScadenzePage() {
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
-    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
+    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user?.uid, user?.role, user?.company]);
+    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user?.uid, user?.role, user?.company]);
     const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
-    const suggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'deadlineSuggestions'), where('status', '==', 'pending')) : null, [firestore, user]);
+    const suggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'deadlineSuggestions'), where('status', '==', 'pending')) : null, [firestore, user?.uid]);
     
     const { data: scadenze, isLoading: isLoadingScadenze, error } = useCollection<Scadenza>(deadlinesQuery);
     const { data: movimenti, isLoading: isLoadingMovimenti } = useCollection<Movimento>(movimentiQuery);
@@ -121,7 +121,7 @@ export default function ScadenzePage() {
 
     const handleEditDeadline = async (updatedDeadline: Scadenza) => {
          if (!user || !firestore || !updatedDeadline.id) {
-            toast({ variant: 'destructive', title: 'Errore', description: 'Dati non validi per l\'aggiornamento.' });
+            toast({ variant: 'destructive', title: 'Errore', description: 'Dati non validi per l'aggiornamento.' });
             return;
         }
         try {

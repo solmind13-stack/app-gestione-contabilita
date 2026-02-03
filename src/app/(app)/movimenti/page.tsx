@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useCollection, useFirestore, useUser, useDoc } from '@/firebase';
-import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction, getDoc } from 'firebase/firestore';
+import { collection, writeBatch, query, where, getDocs, doc, addDoc, updateDoc, CollectionReference, deleteDoc, runTransaction, getDoc, DocumentData } from 'firebase/firestore';
 import {
   Dialog,
   DialogContent,
@@ -70,10 +70,10 @@ export default function MovimentiPage() {
     const settingsDocRef = useMemo(() => firestore ? doc(firestore, 'settings', 'appConfiguration') : null, [firestore]);
     const { data: appSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
     
-    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
-    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
-    const expenseForecastsQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
-    const incomeForecastsQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
+    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user?.uid, user?.role, user?.company]);
+    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user?.uid, user?.role, user?.company]);
+    const expenseForecastsQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user?.uid, user?.role, user?.company]);
+    const incomeForecastsQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user?.uid, user?.role, user?.company]);
     const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
     
 

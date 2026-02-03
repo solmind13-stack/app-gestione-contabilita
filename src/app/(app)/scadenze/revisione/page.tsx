@@ -55,7 +55,7 @@ export default function RevisioneSuggerimentiPage() {
 
     const suggestionsQuery = useMemo(() => 
         firestore && user ? query(collection(firestore, 'users', user.uid, 'deadlineSuggestions'), where('status', '==', 'pending')) : null, 
-    [firestore, user]);
+    [firestore, user?.uid]);
 
     const allDeadlinesQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
     const movimentiQuery = useMemo(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
