@@ -69,7 +69,14 @@ const provideAiChatAssistantFlow = ai.defineFlow(
   async input => {
     try {
       const {output} = await prompt(input);
-      return output!;
+      if (!output) {
+        console.error('Error in provideAiChatAssistantFlow: AI returned no output.');
+        return {
+          response:
+            'Mi dispiace, ma non sono riuscito a generare una risposta. Il modello AI non ha risposto.',
+        };
+      }
+      return output;
     } catch (error) {
       console.error('Error in provideAiChatAssistantFlow:', error);
       // Return a controlled error response instead of letting the flow crash.

@@ -1,4 +1,3 @@
-// categorize-transactions-with-ai-suggestions.ts
 'use server';
 /**
  * @fileOverview This file defines a Genkit flow for suggesting transaction categories, subcategories, and IVA percentages using AI.
@@ -64,7 +63,7 @@ const categorizeTransactionFlow = ai.defineFlow(
   async input => {
     try {
       const {output} = await prompt(input);
-      return output!;
+      return output || null;
     } catch (error) {
       console.error('Error in categorizeTransactionFlow:', error);
       // Return null on error to not break batch processing

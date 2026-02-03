@@ -45,7 +45,15 @@ const generateFinancialInsightsFlow = ai.defineFlow(
   async input => {
     try {
       const {output} = await prompt(input);
-      return output!;
+      if (!output) {
+        console.error('Error in generateFinancialInsightsFlow: AI returned no output.');
+        return {
+            summary: 'Impossibile generare insight: nessuna risposta dal modello AI.',
+            attentionItems: [],
+            suggestionItems: [],
+        };
+      }
+      return output;
     } catch (error) {
       console.error('Error in generateFinancialInsightsFlow:', error);
       // Return a controlled error response instead of letting the flow crash.

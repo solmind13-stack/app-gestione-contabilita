@@ -1,4 +1,3 @@
-// src/ai/flows/generate-report-flow.ts
 'use server';
 
 /**
@@ -43,7 +42,14 @@ const generateNarrativeReportFlow = ai.defineFlow(
   async input => {
     try {
       const {output} = await prompt(input);
-      return output!;
+      if (!output) {
+         console.error('Error in generateNarrativeReportFlow: AI returned no output.');
+         return {
+          report:
+            'Spiacenti, la generazione del report non è riuscita perché il modello AI non ha fornito una risposta.',
+        };
+      }
+      return output;
     } catch (error) {
       console.error('Error in generateNarrativeReportFlow:', error);
       return {

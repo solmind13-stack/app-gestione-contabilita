@@ -276,9 +276,25 @@ export default function ScadenzePage() {
             }, {} as Record<string, Movimento[]>);
             
             const recurringCandidates = Object.values(grouped).filter(group => group.length >= 3);
-            if (recurringCandidates.length === 0) continue;
+
+            const existingDeadlinesSummary = (scadenze || []).map(scadenza => ({
+                societa: scadenza.societa,
+                cleanDesc: normalizeDescription(scadenza.descrizione).toLowerCase(),
+            }));
             
-            const analysisPayload = recurringCandidates.map((group, index) => {
+            // Pre-filter candidates to reduce payload
+            const candidatesToAnalyze = recurringCandidates.filter(candidateGroup => {
+                const candidateDesc = normalizeDescription(candidateGroup[0].descrizione).toLowerCase();
+                const isDuplicate = existingDeadlinesSummary.some(existing => 
+                    existing.societa === company &&
+                    (existing.cleanDesc.includes(candidateDesc) || candidateDesc.includes(existing.cleanDesc))
+                );
+                return !isDuplicate;
+            });
+
+            if (candidatesToAnalyze.length === 0) continue;
+            
+            const analysisPayload = candidatesToAnalyze.map((group, index) => {
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
                 const categoryCounts = group.reduce((acc, mov) => {
@@ -304,15 +320,6 @@ export default function ScadenzePage() {
                     sourceSubcategory: sourceSubcategory,
                 };
             });
-            
-            const existingDeadlinesSummary = (scadenze || []).map(scadenza => {
-              const cleanDesc = scadenza.descrizione.toLowerCase().split(' - ')[0].trim();
-              return {
-                  societa: scadenza.societa,
-                  ricorrenza: scadenza.ricorrenza,
-                  cleanDesc: cleanDesc,
-              };
-            });
 
             try {
                 const result = await suggestFiscalDeadlines({
@@ -320,20 +327,10 @@ export default function ScadenzePage() {
                     analysisCandidates: JSON.stringify(analysisPayload),
                 });
                 
-                const filteredSuggestions = result.suggestions.filter(pattern => {
-                    const cleanPatternDesc = pattern.descrizionePulita.toLowerCase().trim();
-                    const isDuplicate = existingDeadlinesSummary.some(existing => 
-                        existing.societa === pattern.societa &&
-                        existing.ricorrenza === pattern.ricorrenza &&
-                        (existing.cleanDesc.includes(cleanPatternDesc) || cleanPatternDesc.includes(existing.cleanDesc))
-                    );
-                    return !isDuplicate;
-                });
-                
-                if (filteredSuggestions.length > 0) {
+                if (result.suggestions.length > 0) {
                     const batch = writeBatch(firestore);
-                    for (const suggestion of filteredSuggestions) {
-                        const originalGroup = recurringCandidates[suggestion.sourceCandidateId];
+                    for (const suggestion of result.suggestions) {
+                        const originalGroup = candidatesToAnalyze[suggestion.sourceCandidateId];
                         if (!originalGroup) continue;
 
                         const newSuggestionRef = doc(collection(firestore, 'users', user.uid, 'deadlineSuggestions'));
@@ -347,7 +344,7 @@ export default function ScadenzePage() {
                         batch.set(newSuggestionRef, suggestionPayload);
                     }
                     await batch.commit();
-                    totalSuggestionsCreated += filteredSuggestions.length;
+                    totalSuggestionsCreated += result.suggestions.length;
                 }
             } catch (error: any) {
                 console.error(`Error suggesting deadlines for ${company}:`, error);

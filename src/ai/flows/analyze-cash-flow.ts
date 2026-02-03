@@ -78,7 +78,13 @@ const analyzeCashFlowFlow = ai.defineFlow(
     try {
       const {output} = await prompt(input);
       if (!output) {
-        throw new Error('AI analysis returned no output.');
+        console.error('Error in analyzeCashFlowFlow: AI returned no output.');
+        return {
+          overallSummary: 'Analisi AI non disponibile: nessuna risposta dal modello.',
+          totalInvestmentCapacity: 0,
+          monthlyAnalysis: [],
+          alerts: ["Analisi AI non disponibile al momento."],
+        };
       }
       return output;
     } catch (error) {
