@@ -251,13 +251,12 @@ export default function ScadenzePage() {
             if (movementsToAnalyze.length < 3) continue;
 
             const createGroupingKey = (desc: string): string => {
-                const lowerDesc = desc.toLowerCase();
-            
-                const primaryEntities = ['f24', 'imu', 'ires', 'irap', 'iva', 'inps', 'telecom', 'tim', 'enel', 'bapr', 'gse', 'eris', 'reggiani', 'h&s'];
+                const lowerDesc = desc.toLowerCase().trim();
+                const primaryEntities = ['f24', 'imu', 'ires', 'irap', 'iva', 'inps', 'telecom', 'tim', 'enel', 'bapr', 'gse', 'eris', 'reggiani', 'h&s', 'spazio pedagogia'];
                 
                 for (const entity of primaryEntities) {
                     if (lowerDesc.includes(entity)) {
-                        if (entity === 'f24') {
+                         if (entity === 'f24') {
                             if (lowerDesc.includes('imu')) return 'f24 imu';
                             if (lowerDesc.includes('ires')) return 'f24 ires';
                             return 'f24';
@@ -269,12 +268,10 @@ export default function ScadenzePage() {
                 const noiseWords = ['pagamento', 'accredito', 'addebito', 'sdd', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su', 'e', 'di', 'a', 'vs', 'commissioni', 'bancarie', 'spese', 'recupero', 'imposta', 'bollo', 'su', 'estratto', 'conto', 'ren', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre', 'gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
                 const noiseRegex = new RegExp(`\\b(${noiseWords.join('|')})\\b`, 'gi');
                 let cleanedDesc = lowerDesc.replace(noiseRegex, '');
-            
                 cleanedDesc = cleanedDesc.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{2,}\b)/g, '');
                 cleanedDesc = cleanedDesc.replace(/[.,\-_/()]/g, ' ').trim();
-                
                 const significantWords = cleanedDesc.split(/\s+/).filter(w => w.length > 2);
-                return significantWords.slice(0, 2).join(' ');
+                return significantWords.slice(0, 3).join(' ');
             };
 
             const expenseMovements = movementsToAnalyze.filter(m => m.uscita > 0);
@@ -291,42 +288,40 @@ export default function ScadenzePage() {
             
             Object.values(groupedByDescription).forEach(group => {
                 if (group.length < 3) return;
-
-                const amountClusters: Movimento[][] = [];
-                const sortedGroup = group.sort((a,b) => a.uscita - b.uscita);
-                
-                let currentCluster: Movimento[] = [];
-                if(sortedGroup.length > 0) {
-                   currentCluster.push(sortedGroup[0]);
-                }
-
-                for (let i = 1; i < sortedGroup.length; i++) {
-                    const currentMov = sortedGroup[i];
+            
+                const sortedByAmount = [...group].sort((a, b) => a.uscita - b.uscita);
+                let currentCluster: Movimento[] = [sortedByAmount[0]];
+            
+                for (let i = 1; i < sortedByAmount.length; i++) {
+                    const currentMov = sortedByAmount[i];
                     const clusterAvg = currentCluster.reduce((sum, m) => sum + m.uscita, 0) / currentCluster.length;
-                    const tolerance = 0.1; // 10%
-
-                    if (Math.abs(currentMov.uscita - clusterAvg) / clusterAvg <= tolerance) {
+                    const tolerance = 0.15; // 15%
+            
+                    if (clusterAvg > 0 && Math.abs(currentMov.uscita - clusterAvg) / clusterAvg <= tolerance) {
                         currentCluster.push(currentMov);
+                    } else if (clusterAvg === 0 && currentMov.uscita === 0) {
+                         currentCluster.push(currentMov);
                     } else {
-                        amountClusters.push(currentCluster);
+                        if (currentCluster.length >= 3) finalCandidateGroups.push(currentCluster);
                         currentCluster = [currentMov];
                     }
                 }
-                if (currentCluster.length > 0) {
-                    amountClusters.push(currentCluster);
-                }
+                if (currentCluster.length >= 3) finalCandidateGroups.push(currentCluster);
+            });
+            
+            const existingDeadlines = (scadenze || []).filter(s => s.societa === company);
 
-                amountClusters.forEach(cluster => {
-                    if (cluster.length >= 3) {
-                        finalCandidateGroups.push(cluster);
-                    }
-                });
+            const filteredCandidates = finalCandidateGroups.filter(group => {
+                const avgAmount = group.reduce((sum, m) => sum + m.uscita, 0) / group.length;
+                return !existingDeadlines.some(deadline => 
+                    Math.abs(deadline.importoPrevisto - avgAmount) / avgAmount < 0.1 // 10% tolerance
+                );
             });
 
-            if (finalCandidateGroups.length === 0) continue;
+            if (filteredCandidates.length === 0) continue;
             
-            const analysisPayload = finalCandidateGroups.map((group, index) => {
-                group.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+            const analysisPayload = filteredCandidates.map((group, index) => {
+                group.sort((a, b) => parseDate(a.data).getTime() - parseDate(b.data).getTime());
 
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
@@ -360,10 +355,11 @@ export default function ScadenzePage() {
                     analysisCandidates: JSON.stringify(analysisPayload),
                 });
                 
-                if (result && result.suggestions && result.suggestions.length > 0) {
+                if (result?.suggestions && result.suggestions.length > 0) {
                     const batch = writeBatch(firestore);
                     for (const suggestion of result.suggestions) {
-                        const originalGroup = finalCandidateGroups[suggestion.sourceCandidateId];
+                        if (suggestion.sourceCandidateId >= filteredCandidates.length) continue;
+                        const originalGroup = filteredCandidates[suggestion.sourceCandidateId];
                         if (!originalGroup) continue;
 
                         const newSuggestionRef = doc(collection(firestore, 'users', user.uid, 'deadlineSuggestions'));
@@ -453,8 +449,8 @@ export default function ScadenzePage() {
             .filter(s => s.descrizione.toLowerCase().includes(searchTerm.toLowerCase()));
         
         filtered = filtered.sort((a, b) => {
-                const dateA = new Date(a.dataScadenza).getTime();
-                const dateB = new Date(b.dataScadenza).getTime();
+                const dateA = parseDate(a.dataScadenza).getTime();
+                const dateB = parseDate(b.dataScadenza).getTime();
                 return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
             });
 
@@ -462,16 +458,16 @@ export default function ScadenzePage() {
         setteGiorni.setDate(oggi.getDate() + 7);
 
         const scadenzeNelMese = filtered.filter(s => {
-            const dataScadenza = new Date(s.dataScadenza);
+            const dataScadenza = parseDate(s.dataScadenza);
             return dataScadenza.getMonth() === oggi.getMonth() && dataScadenza.getFullYear() === oggi.getFullYear() && s.stato !== 'Pagato';
         });
 
         const scadenzeUrg = filtered.filter(s => {
-            const dataScadenza = new Date(s.dataScadenza);
+            const dataScadenza = parseDate(s.dataScadenza);
             return dataScadenza >= oggi && dataScadenza <= setteGiorni && s.stato !== 'Pagato';
         });
 
-        const scadenzeOverdue = filtered.filter(s => new Date(s.dataScadenza) < oggi && s.stato !== 'Pagato' && s.stato !== 'Annullato');
+        const scadenzeOverdue = filtered.filter(s => parseDate(s.dataScadenza) < oggi && s.stato !== 'Pagato' && s.stato !== 'Annullato');
 
         const totalePrevisto = filtered.reduce((acc, s) => acc + s.importoPrevisto, 0);
         const totalePagato = filtered.reduce((acc, s) => acc + s.importoPagato, 0);
@@ -778,7 +774,7 @@ export default function ScadenzePage() {
                             const linkedMovements = movimenti?.filter(m => m.linkedTo === `deadlines/${scadenza.id}`);
                             const paymentMethods = linkedMovements?.map(m => m.metodoPag).filter(Boolean).join(', ');
                             return (
-                                <TableRow key={scadenza.id} data-state={isSelected ? "selected" : ""} className={cn(new Date(scadenza.dataScadenza) < oggi && scadenza.stato !== 'Pagato' && scadenza.stato !== 'Annullato' && 'bg-red-50 dark:bg-red-900/20')}>
+                                <TableRow key={scadenza.id} data-state={isSelected ? "selected" : ""} className={cn(parseDate(scadenza.dataScadenza) < oggi && scadenza.stato !== 'Pagato' && scadenza.stato !== 'Annullato' && 'bg-red-50 dark:bg-red-900/20')}>
                                     {user?.role === 'admin' && (
                                         <TableCell padding="checkbox">
                                             <Checkbox

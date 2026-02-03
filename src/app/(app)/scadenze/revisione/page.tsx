@@ -48,7 +48,10 @@ export default function RevisioneSuggerimentiPage() {
     const [selectedSuggestions, setSelectedSuggestions] = useState<DeadlineSuggestion[]>([]);
     const [generationYear, setGenerationYear] = useState<number>(new Date().getFullYear());
     const [isCreating, setIsCreating] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [confirmingItem, setConfirmingItem] = useState<{suggestion: DeadlineSuggestion, similar: Scadenza} | null>(null);
+    const [isRejectAllAlertOpen, setIsRejectAllAlertOpen] = useState(false);
+
 
     const suggestionsQuery = useMemo(() => 
         firestore && user ? query(collection(firestore, 'users', user.uid, 'deadlineSuggestions'), where('status', '==', 'pending')) : null, 
@@ -190,6 +193,26 @@ export default function RevisioneSuggerimentiPage() {
             toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile rimuovere il suggerimento.' });
         }
     };
+
+    const handleRejectAll = async () => {
+        if (!firestore || !user || !suggestions || suggestions.length === 0) return;
+        setIsDeleting(true);
+        try {
+            const batch = writeBatch(firestore);
+            suggestions.forEach(suggestion => {
+                const suggestionRef = doc(firestore, 'users', user.uid, 'deadlineSuggestions', suggestion.id);
+                batch.delete(suggestionRef);
+            });
+            await batch.commit();
+            toast({ title: 'Tutti i suggerimenti sono stati rimossi.' });
+        } catch (e) {
+            console.error("Error rejecting all suggestions:", e);
+            toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile rimuovere tutti i suggerimenti.' });
+        } finally {
+            setIsDeleting(false);
+            setIsRejectAllAlertOpen(false);
+        }
+    };
     
     const handleReplicateExact = useCallback(async (suggestion: DeadlineSuggestion, sourceMovements: Movimento[]) => {
         if (!firestore || !user || sourceMovements.length === 0) return;
@@ -274,6 +297,23 @@ export default function RevisioneSuggerimentiPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            
+            <AlertDialog open={isRejectAllAlertOpen} onOpenChange={setIsRejectAllAlertOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Sei sicuro di voler cancellare tutto?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Questa azione eliminerà permanentemente tutti i {suggestions?.length || 0} suggerimenti in attesa. Non potrai annullare questa operazione.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Annulla</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleRejectAll} className="bg-destructive hover:bg-destructive/90">
+                            {isDeleting ? <Loader2 className="animate-spin h-4 w-4" /> : 'Elimina Tutto'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
                 <div>
@@ -300,10 +340,19 @@ export default function RevisioneSuggerimentiPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button onClick={handleCreateSelected} disabled={isCreating || selectedSuggestions.length === 0}>
-                            {isCreating ? <Loader2 className="animate-spin mr-2"/> : <Check className="mr-2"/>}
-                            Crea {selectedSuggestions.length} Serie Selezionate
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" onClick={() => router.back()}>Annulla</Button>
+                            {(suggestions?.length || 0) > 0 &&
+                                <Button variant="destructive" onClick={() => setIsRejectAllAlertOpen(true)}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Cancella Tutti
+                                </Button>
+                            }
+                            <Button onClick={handleCreateSelected} disabled={isCreating || selectedSuggestions.length === 0}>
+                                {isCreating ? <Loader2 className="animate-spin mr-2"/> : <Check className="mr-2"/>}
+                                Crea {selectedSuggestions.length} Serie Selezionate
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                  <CardContent>
@@ -412,5 +461,3 @@ export default function RevisioneSuggerimentiPage() {
         </div>
     );
 }
-
-    
