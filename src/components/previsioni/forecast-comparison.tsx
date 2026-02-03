@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Info } from 'lucide-react';
-import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -54,7 +54,7 @@ const chartConfig = {
     label: "Uscite Prev.",
     color: "hsl(var(--chart-3))", // Orange
   },
-};
+} satisfies ChartConfig;
 
 export function ForecastComparison({
   mainYear,
@@ -76,6 +76,16 @@ export function ForecastComparison({
       [`uscite${comparisonYear}`]: { label: `Uscite ${comparisonYear}`, color: "hsla(var(--chart-3), 0.5)" },
     }
   }, [mainYear, comparisonYear]);
+
+  const pieIncomeConfig = useMemo(() => pieIncomeData.reduce((acc, entry) => {
+    acc[entry.name] = { label: entry.name };
+    return acc;
+  }, {} as ChartConfig), [pieIncomeData]);
+
+  const pieExpenseConfig = useMemo(() => pieExpenseData.reduce((acc, entry) => {
+    acc[entry.name] = { label: entry.name };
+    return acc;
+  }, {} as ChartConfig), [pieExpenseData]);
 
 
   return (
@@ -159,15 +169,17 @@ export function ForecastComparison({
                  {isLoading ? (
                     <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/></div>
                 ) : pieIncomeData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
-                                {pieIncomeData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
-                            </Pie>
-                            <Tooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(value as number)} />} />
-                            <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
-                        </PieChart>
-                    </ResponsiveContainer>
+                    <ChartContainer config={pieIncomeConfig} className="h-full w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
+                                    {pieIncomeData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                                </Pie>
+                                <Tooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(value as number)} />} />
+                                <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
                 ): (
                     <div className="flex items-center justify-center h-full text-muted-foreground"><Info className="h-4 w-4 mr-2"/>Nessun dato per il grafico.</div>
                 )}
@@ -181,15 +193,17 @@ export function ForecastComparison({
                  {isLoading ? (
                     <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/></div>
                 ) : pieExpenseData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
-                                {pieExpenseData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
-                            </Pie>
-                            <Tooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(value as number)} />} />
-                            <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
-                        </PieChart>
-                    </ResponsiveContainer>
+                    <ChartContainer config={pieExpenseConfig} className="h-full w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
+                                    {pieExpenseData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                                </Pie>
+                                <Tooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(value as number)} />} />
+                                <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
                 ): (
                      <div className="flex items-center justify-center h-full text-muted-foreground"><Info className="h-4 w-4 mr-2"/>Nessun dato per il grafico.</div>
                 )}
