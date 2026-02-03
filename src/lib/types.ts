@@ -211,6 +211,43 @@ export type DeadlineSuggestion = {
   createdAt: string;
 };
 
+export type ExpenseForecastSuggestion = {
+  id: string;
+  societa: string;
+  descrizionePulita: string;
+  importoPrevisto: number;
+  amountType: 'fixed' | 'variable';
+  ricorrenza: 'Mensile' | 'Bimestrale' | 'Trimestrale' | 'Quadrimestrale' | 'Semestrale' | 'Annuale' | 'Altro';
+  giornoStimato: number;
+  primoMese?: number;
+  categoria: string;
+  sottocategoria?: string;
+  metodoPagamentoTipico?: string;
+  ragione: string;
+  sourceMovementIds: string[];
+  status: 'pending' | 'accepted' | 'rejected';
+  userId: string;
+  createdAt: string;
+};
+
+export type IncomeForecastSuggestion = {
+  id: string;
+  societa: string;
+  descrizionePulita: string;
+  importoPrevisto: number;
+  amountType: 'fixed' | 'variable';
+  ricorrenza: 'Mensile' | 'Bimestrale' | 'Trimestrale' | 'Quadrimestrale' | 'Semestrale' | 'Annuale' | 'Altro';
+  giornoStimato: number;
+  primoMese?: number;
+  categoria: string;
+  sottocategoria?: string;
+  ragione: string;
+  sourceMovementIds: string[];
+  status: 'pending' | 'accepted' | 'rejected';
+  userId: string;
+  createdAt: string;
+};
+
 export type CompanyProfile = {
   id: string;
   type: 'persona_giuridica' | 'persona_fisica';
@@ -266,3 +303,5 @@ export type TrainingFeedback = {
     userId: string;
     createdAt: string;
 }
+
+    

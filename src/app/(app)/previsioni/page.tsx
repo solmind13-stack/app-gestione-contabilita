@@ -2,22 +2,27 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc, writeBatch, getDocs } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
 import { YEARS } from '@/lib/constants';
-import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, CompanyProfile } from '@/lib/types';
+import type { Movimento, PrevisioneEntrata, PrevisioneUscita, AppUser, Scadenza, CompanyProfile, IncomeForecastSuggestion, ExpenseForecastSuggestion, RecurringExpensePattern } from '@/lib/types';
 import { IncomeForecasts } from '@/components/previsioni/income-forecasts';
 import { ExpenseForecasts } from '@/components/previsioni/expense-forecasts';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CashflowDetail } from '@/components/previsioni/cashflow-detail';
 import { formatCurrency, parseDate } from '@/lib/utils';
-import { startOfMonth } from 'date-fns';
+import { startOfMonth, getYear, subYears } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { ClipboardCheck, Sparkles, Loader2 } from 'lucide-react';
+import { suggestIncomeForecasts } from '@/ai/flows/suggest-income-forecasts';
+import { suggestExpenseForecasts } from '@/ai/flows/suggest-expense-forecasts';
 
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
@@ -34,6 +39,7 @@ export default function PrevisioniPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
 
   const availableYears = useMemo(() => YEARS.filter(y => typeof y === 'number') as number[], []);
   const currentYear = new Date().getFullYear();
@@ -41,6 +47,7 @@ export default function PrevisioniPage() {
   const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
   const [selectedYear, setSelectedYear] = useState<string>('Tutti');
   const [comparisonYear, setComparisonYear] = useState<string | null>(null);
+  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
 
   useEffect(() => {
     if (user?.role === 'company' || user?.role === 'company-editor') {
@@ -60,14 +67,18 @@ export default function PrevisioniPage() {
   const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
   const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
+  const incomeSuggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'incomeForecastSuggestions'), where('status', '==', 'pending')) : null, [firestore, user]);
+    const expenseSuggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'expenseForecastSuggestions'), where('status', '==', 'pending')) : null, [firestore, user]);
   
   const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
   const { data: allPrevisioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
   const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
   const { data: allScadenze, isLoading: isLoadingScadenze } = useCollection<Scadenza>(scadenzeQuery);
   const { data: companies, isLoading: isLoadingCompanies } = useCollection<CompanyProfile>(companiesQuery);
+  const { data: incomeSuggestions, isLoading: isLoadingIncomeSuggestions } = useCollection<IncomeForecastSuggestion>(incomeSuggestionsQuery);
+  const { data: expenseSuggestions, isLoading: isLoadingExpenseSuggestions } = useCollection<ExpenseForecastSuggestion>(expenseSuggestionsQuery);
   
-  const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze || isLoadingCompanies;
+  const isLoading = isLoadingMovements || isLoadingIncome || isLoadingExpenses || isLoadingScadenze || isLoadingCompanies || isLoadingIncomeSuggestions || isLoadingExpenseSuggestions;
 
   const filterByCompany = useCallback((item: any) => selectedCompany === 'Tutte' || item.societa === selectedCompany, [selectedCompany]);
 
@@ -81,7 +92,6 @@ export default function PrevisioniPage() {
     analysisYear,
     isAllYearsSelected,
   } = useMemo(() => {
-    // --- 1. TOTALI CUMULATIVI "SINO AD OGGI" (per i riquadri di riepilogo) ---
     const today = new Date();
     const movementsSinoAdOggi = (allMovements || []).filter(filterByCompany).filter(m => parseDate(m.data) <= today);
     
@@ -111,7 +121,6 @@ export default function PrevisioniPage() {
         uscitePrevisto: summaryUscitePrevisto,
     };
     
-    // --- 2. DATI PER ANALISI SPECIFICA (per grafici e tabelle) ---
     const isAllYears = selectedYear === 'Tutti';
     const yearForCharts = isAllYears ? currentYear : Number(selectedYear);
     const comparisonYearForCharts = comparisonYear ? Number(comparisonYear) : null;
@@ -307,6 +316,201 @@ export default function PrevisioniPage() {
     }
   };
 
+  // Generic suggestion logic
+    const handleSuggest = useCallback(async (type: 'income' | 'expense') => {
+        if (!firestore || !user) return;
+        setIsSuggestionLoading(true);
+
+        const companiesToAnalyze = selectedCompany === 'Tutte' && companies
+            ? companies.map(c => c.sigla)
+            : [selectedCompany];
+
+        if (companiesToAnalyze.length === 0 || !allMovements) {
+            toast({ variant: 'destructive', title: 'Nessun Dato', description: 'Non ci sono società o movimenti da analizzare.' });
+            setIsSuggestionLoading(false);
+            return;
+        }
+
+        let totalSuggestionsCreated = 0;
+
+        for (const company of companiesToAnalyze) {
+            if (!company) continue;
+
+            const twoYearsAgo = getYear(subYears(new Date(), 2));
+            const movementsToAnalyze = (allMovements || [])
+                .filter(m => m.societa === company && m.anno >= twoYearsAgo && (type === 'income' ? m.entrata > 0 : m.uscita > 0));
+
+            if (movementsToAnalyze.length < 3) continue;
+
+            const createGroupingKey = (desc: string): string => {
+                 const lowerDesc = desc.toLowerCase().trim();
+                const primaryEntities = ['f24', 'imu', 'ires', 'irap', 'iva', 'inps', 'telecom', 'tim', 'enel', 'bapr', 'gse', 'eris', 'reggiani', 'h&s', 'spazio pedagogia'];
+                
+                for (const entity of primaryEntities) {
+                    if (lowerDesc.includes(entity)) {
+                         if (entity === 'f24') {
+                            if (lowerDesc.includes('imu')) return 'f24 imu';
+                            if (lowerDesc.includes('ires')) return 'f24 ires';
+                            return 'f24';
+                        }
+                        return entity;
+                    }
+                }
+            
+                const noiseWords = ['pagamento', 'accredito', 'addebito', 'sdd', 'rata', 'canone', 'fattura', 'fatt', 'ft', 'rif', 'riferimento', 'n\.', 'num\.', 'del', 'al', 'su', 'e', 'di', 'a', 'vs', 'commissioni', 'bancarie', 'spese', 'recupero', 'imposta', 'bollo', 'su', 'estratto', 'conto', 'ren', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre', 'gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+                const noiseRegex = new RegExp(`\\b(${noiseWords.join('|')})\\b`, 'gi');
+                let cleanedDesc = lowerDesc.replace(noiseRegex, '');
+                cleanedDesc = cleanedDesc.replace(/(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\b\d{2,}\b)/g, '');
+                cleanedDesc = cleanedDesc.replace(/[.,\-_/()]/g, ' ').trim();
+                const significantWords = cleanedDesc.split(/\s+/).filter(w => w.length > 2);
+                return significantWords.slice(0, 3).join(' ');
+            };
+
+            const groupedByDescription = movementsToAnalyze.reduce((acc, mov) => {
+                const key = createGroupingKey(mov.descrizione);
+                if (!key) return acc;
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(mov);
+                return acc;
+            }, {} as Record<string, Movimento[]>);
+
+            const finalCandidateGroups: Movimento[][] = [];
+            
+            Object.values(groupedByDescription).forEach(group => {
+                if (group.length < 3) return;
+                
+                group.sort((a,b) => parseDate(a.data).getTime() - parseDate(b.data).getTime());
+                
+                const amountKey = type === 'income' ? 'entrata' : 'uscita';
+                const sortedByAmount = [...group].sort((a, b) => a[amountKey] - b[amountKey]);
+                let currentCluster: Movimento[] = [sortedByAmount[0]];
+            
+                for (let i = 1; i < sortedByAmount.length; i++) {
+                    const currentMov = sortedByAmount[i];
+                    const clusterAvg = currentCluster.reduce((sum, m) => sum + m[amountKey], 0) / currentCluster.length;
+                    
+                    if (clusterAvg > 0 && Math.abs(currentMov[amountKey] - clusterAvg) / clusterAvg <= 0.15) {
+                        currentCluster.push(currentMov);
+                    } else {
+                        if (currentCluster.length >= 3) finalCandidateGroups.push(currentCluster);
+                        currentCluster = [currentMov];
+                    }
+                }
+                if (currentCluster.length >= 3) finalCandidateGroups.push(currentCluster);
+            });
+
+            const existingForecasts = type === 'income' ? allPrevisioniEntrate : [...allPrevisioniUscite, ...allScadenze];
+            const filteredCandidates = finalCandidateGroups.filter(group => {
+                if (group.length === 0) return false;
+                const amountKey = type === 'income' ? 'entrata' : 'uscita';
+                const avgAmount = group.reduce((sum, m) => sum + m[amountKey], 0) / group.length;
+
+                const hasExistingFuture = (existingForecasts || []).some(existing => {
+                    if (existing.societa !== company) return false;
+                    const existingDate = parseDate(type === 'income' ? (existing as PrevisioneEntrata).dataPrevista : (existing as PrevisioneUscita).dataScadenza);
+                    if (existingDate < new Date()) return false;
+                    
+                    const existingAmount = 'importoLordo' in existing ? existing.importoLordo : (existing as Scadenza).importoPrevisto;
+                    const amountDifference = Math.abs(existingAmount - avgAmount);
+                    const isAmountSimilar = (avgAmount > 0) ? (amountDifference / avgAmount) < 0.10 : false;
+                    
+                    const groupDescKey = createGroupingKey(group[0].descrizione);
+                    const existingDescKey = createGroupingKey(existing.descrizione);
+                    
+                    return isAmountSimilar && groupDescKey === existingDescKey;
+                });
+                
+                return !hasExistingFuture;
+            });
+    
+            if (filteredCandidates.length === 0) continue;
+            
+            const analysisPayload = filteredCandidates.map((group, index) => {
+                const amountKey = type === 'income' ? 'entrata' : 'uscita';
+                const amounts = group.map(m => m[amountKey]);
+                const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+                const stdDev = Math.sqrt(amounts.map(x => Math.pow(x - avgAmount, 2)).reduce((a, b) => a + b, 0) / amounts.length);
+                const coefficientOfVariation = avgAmount === 0 ? 0 : stdDev / avgAmount;
+                const amountType = coefficientOfVariation < 0.05 ? 'fixed' : 'variable';
+    
+                let ricorrenza: RecurringExpensePattern['ricorrenza'] = 'Altro';
+                if (group.length > 1) {
+                    let totalDays = 0;
+                    for (let i = 1; i < group.length; i++) {
+                        totalDays += (parseDate(group[i].data).getTime() - parseDate(group[i-1].data).getTime()) / (1000 * 3600 * 60 * 24);
+                    }
+                    const avgDays = totalDays / (group.length - 1);
+    
+                    if (avgDays > 25 && avgDays < 35) ricorrenza = 'Mensile';
+                    else if (avgDays > 55 && avgDays < 65) ricorrenza = 'Bimestrale';
+                    else if (avgDays > 85 && avgDays < 95) ricorrenza = 'Trimestrale';
+                    else if (avgDays > 115 && avgDays < 125) ricorrenza = 'Quadrimestrale';
+                    else if (avgDays > 175 && avgDays < 185) ricorrenza = 'Semestrale';
+                    else if (avgDays > 360 && avgDays < 370) ricorrenza = 'Annuale';
+                }
+    
+                const daysOfMonth = group.map(m => parseDate(m.data).getDate());
+                const giornoStimato = Math.round(daysOfMonth.reduce((a, b) => a + b, 0) / daysOfMonth.length);
+                const firstMonth = group.length > 0 ? parseDate(group[0].data).getMonth() + 1 : undefined;
+    
+                const categoryCounts = group.reduce((acc, mov) => {
+                    const key = `${mov.categoria || 'Da categorizzare'}|||${mov.sottocategoria || 'Da categorizzare'}`;
+                    acc[key] = (acc[key] || 0) + 1;
+                    return acc;
+                }, {} as Record<string, number>);
+            
+                const mostCommonCatSub = Object.keys(categoryCounts).length > 0 
+                    ? Object.keys(categoryCounts).reduce((a, b) => categoryCounts[a] > categoryCounts[b] ? a : b)
+                    : 'Da categorizzare|||Da categorizzare';
+            
+                const [sourceCategory, sourceSubcategory] = mostCommonCatSub.split('|||');
+    
+                return { id: index, description: group[0].descrizione, count: group.length, avgAmount, amountType, ricorrenza, giornoStimato, primoMese, sourceCategory, sourceSubcategory };
+            });
+    
+            try {
+                const suggestionFlow = type === 'income' ? suggestIncomeForecasts : suggestExpenseForecasts;
+                const result = await suggestionFlow({
+                    company: company,
+                    analysisCandidates: JSON.stringify(analysisPayload),
+                });
+                
+                if (result?.suggestions && result.suggestions.length > 0) {
+                    const batch = writeBatch(firestore);
+                    const collectionName = type === 'income' ? 'incomeForecastSuggestions' : 'expenseForecastSuggestions';
+                    for (const suggestion of result.suggestions) {
+                        const originalGroup = filteredCandidates[suggestion.sourceCandidateId];
+                        if (!originalGroup) continue;
+    
+                        const newSuggestionRef = doc(collection(firestore, 'users', user.uid, collectionName));
+                        const payload = {
+                            ...(suggestion as any),
+                            sourceMovementIds: originalGroup.map(m => m.id),
+                            status: 'pending',
+                            userId: user.uid,
+                            createdAt: new Date().toISOString()
+                        };
+                        batch.set(newSuggestionRef, payload);
+                    }
+                    await batch.commit();
+                    totalSuggestionsCreated += result.suggestions.length;
+                }
+            } catch (error: any) {
+                console.error(`Error suggesting for ${company}:`, error);
+                toast({ variant: 'destructive', title: `Errore Analisi per ${company}`, description: 'Impossibile completare l\'analisi.' });
+            }
+        }
+        
+        setIsSuggestionLoading(false);
+        if (totalSuggestionsCreated > 0) {
+            toast({ title: 'Analisi Completata', description: `${totalSuggestionsCreated} nuovi suggerimenti sono disponibili per la revisione.` });
+            router.push(`/previsioni/revisione-${type === 'income' ? 'entrate' : 'uscite'}`);
+        } else {
+            toast({ title: 'Nessun Nuovo Suggerimento', description: 'Nessun nuovo pattern ricorrente è stato trovato.' });
+        }
+    }, [firestore, user, allMovements, allPrevisioniEntrate, allPrevisioniUscite, allScadenze, selectedCompany, companies, toast, router]);
+
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
@@ -405,7 +609,17 @@ export default function PrevisioniPage() {
                 isAllYearsSelected={isAllYearsSelected}
             />
         </TabsContent>
-        <TabsContent value="entrate">
+        <TabsContent value="entrate" className="space-y-4">
+           <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => router.push('/previsioni/revisione-entrate')}>
+                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                    Revisiona Suggerimenti ({incomeSuggestions?.length || 0})
+                </Button>
+                <Button onClick={() => handleSuggest('income')} disabled={isSuggestionLoading}>
+                    {isSuggestionLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Suggerisci Entrate
+                </Button>
+            </div>
            <IncomeForecasts
               data={(allPrevisioniEntrate || []).filter(filterByCompany)}
               year={analysisYear}
@@ -417,7 +631,17 @@ export default function PrevisioniPage() {
               currentUser={user!}
           />
         </TabsContent>
-        <TabsContent value="uscite">
+        <TabsContent value="uscite" className="space-y-4">
+            <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => router.push('/previsioni/revisione-uscite')}>
+                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                    Revisiona Suggerimenti ({expenseSuggestions?.length || 0})
+                </Button>
+                <Button onClick={() => handleSuggest('expense')} disabled={isSuggestionLoading}>
+                    {isSuggestionLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Suggerisci Uscite
+                </Button>
+            </div>
           <ExpenseForecasts
               data={combinedExpenseData}
               year={analysisYear}
@@ -439,3 +663,5 @@ export default function PrevisioniPage() {
     </div>
   );
 }
+
+    
