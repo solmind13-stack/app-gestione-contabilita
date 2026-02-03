@@ -9,33 +9,9 @@ import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Info } from 'lucide-react';
-
+import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="rounded-lg border bg-background p-2 shadow-sm">
-        <div className="grid grid-cols-1 gap-1">
-          <div className="flex flex-col space-y-1">
-            <span className="text-[0.7rem] uppercase text-muted-foreground">
-              {data.name}
-            </span>
-            <span className="font-bold text-foreground">
-              {formatCurrency(data.value)}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              ({(payload[0].percent * 100).toFixed(0)}%)
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
 
 const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
   if (percent < 0.05) return null;
@@ -61,6 +37,25 @@ interface ForecastComparisonProps {
   isAllYearsSelected: boolean;
 }
 
+const chartConfig = {
+  entrateConsuntivo: {
+    label: "Entrate Cons.",
+    color: "hsl(var(--chart-2))",
+  },
+  usciteConsuntivo: {
+    label: "Uscite Cons.",
+    color: "hsl(var(--chart-4))",
+  },
+  entratePrevisto: {
+    label: "Entrate Prev.",
+    color: "hsl(var(--chart-5))", // Blue
+  },
+  uscitePrevisto: {
+    label: "Uscite Prev.",
+    color: "hsl(var(--chart-3))", // Orange
+  },
+};
+
 export function ForecastComparison({
   mainYear,
   comparisonYear,
@@ -71,6 +66,17 @@ export function ForecastComparison({
   pieExpenseData,
   isAllYearsSelected,
 }: ForecastComparisonProps) {
+
+  const comparisonChartConfig = useMemo(() => {
+    if (!comparisonYear) return {};
+    return {
+      [`entrate${mainYear}`]: { label: `Entrate ${mainYear}`, color: "hsl(var(--chart-1))" },
+      [`uscite${mainYear}`]: { label: `Uscite ${mainYear}`, color: "hsl(var(--chart-3))" },
+      [`entrate${comparisonYear}`]: { label: `Entrate ${comparisonYear}`, color: "hsla(var(--chart-1), 0.5)" },
+      [`uscite${comparisonYear}`]: { label: `Uscite ${comparisonYear}`, color: "hsla(var(--chart-3), 0.5)" },
+    }
+  }, [mainYear, comparisonYear]);
+
 
   return (
     <div className="space-y-6">
@@ -89,22 +95,23 @@ export function ForecastComparison({
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
             </div>
         ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyComparisonData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
-                  <Tooltip
-                      contentStyle={{ background: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }}
-                      formatter={(value: number) => formatCurrency(value)}
-                  />
-                  <Legend wrapperStyle={{fontSize: "12px"}} />
-                  <Bar dataKey={`entrateConsuntivo`} name={`Entrate Cons.`} fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey={`usciteConsuntivo`} name={`Uscite Cons.`} fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey={`entratePrevisto`} name={`Entrate Prev.`} fill="hsla(var(--chart-2), 0.5)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey={`uscitePrevisto`} name={`Uscite Prev.`} fill="hsla(var(--chart-4), 0.5)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ChartContainer config={chartConfig} className="h-full w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyComparisonData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+                      <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
+                      <Tooltip
+                          content={<ChartTooltipContent formatter={(value: number) => formatCurrency(value)} />}
+                      />
+                      <Legend wrapperStyle={{fontSize: "12px"}} />
+                      <Bar dataKey={`entrateConsuntivo`} name={`Entrate Cons.`} fill="var(--color-entrateConsuntivo)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={`usciteConsuntivo`} name={`Uscite Cons.`} fill="var(--color-usciteConsuntivo)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={`entratePrevisto`} name={`Entrate Prev.`} fill="var(--color-entratePrevisto)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={`uscitePrevisto`} name={`Uscite Prev.`} fill="var(--color-uscitePrevisto)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+            </ChartContainer>
         )}
         </CardContent>
       </Card>
@@ -121,22 +128,23 @@ export function ForecastComparison({
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
                 </div>
             ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyComparisonData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                      <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
-                      <Tooltip
-                          contentStyle={{ background: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }}
-                          formatter={(value: number) => formatCurrency(value)}
-                      />
-                      <Legend wrapperStyle={{fontSize: "12px"}} />
-                      <Bar dataKey={`entrate${mainYear}`} name={`Entrate ${mainYear}`} fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey={`uscite${mainYear}`} name={`Uscite ${mainYear}`} fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey={`entrate${comparisonYear}`} name={`Entrate ${comparisonYear}`} fill="hsla(var(--chart-1), 0.5)" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey={`uscite${comparisonYear}`} name={`Uscite ${comparisonYear}`} fill="hsla(var(--chart-3), 0.5)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <ChartContainer config={comparisonChartConfig} className="h-full w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyComparisonData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+                        <YAxis tickFormatter={(value) => `€${Number(value) / 1000}k`} tickLine={false} axisLine={false} fontSize={12} />
+                        <Tooltip
+                            content={<ChartTooltipContent formatter={(value: number) => formatCurrency(value)} />}
+                        />
+                        <Legend wrapperStyle={{fontSize: "12px"}} />
+                        <Bar dataKey={`entrate${mainYear}`} fill={`var(--color-entrate${mainYear})`} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={`uscite${mainYear}`} fill={`var(--color-uscite${mainYear})`} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={`entrate${comparisonYear}`} fill={`var(--color-entrate${comparisonYear})`} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={`uscite${comparisonYear}`} fill={`var(--color-uscite${comparisonYear})`} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
             )}
             </CardContent>
           </Card>
@@ -156,7 +164,7 @@ export function ForecastComparison({
                             <Pie data={pieIncomeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
                                 {pieIncomeData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                             </Pie>
-                            <Tooltip content={<CustomTooltip />} />
+                            <Tooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(value as number)} />} />
                             <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
@@ -178,7 +186,7 @@ export function ForecastComparison({
                             <Pie data={pieExpenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} labelLine={false} label={renderCustomizedLabel}>
                                 {pieExpenseData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                             </Pie>
-                            <Tooltip content={<CustomTooltip />} />
+                            <Tooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(value as number)} />} />
                             <Legend iconSize={8} wrapperStyle={{fontSize: "11px", paddingTop: "10px"}}/>
                         </PieChart>
                     </ResponsiveContainer>
