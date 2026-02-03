@@ -308,7 +308,7 @@ export default function RevisioneSuggerimentiPage() {
                 </CardHeader>
                  <CardContent>
                     <ScrollArea className="h-[60vh] p-1 pr-4">
-                        <Accordion type="single" collapsible className="w-full space-y-4">
+                        <Accordion type="multiple" className="w-full space-y-4">
                              {isLoading ? (
                                 <div className="flex items-center justify-center h-full text-muted-foreground">
                                     <Loader2 className="h-8 w-8 animate-spin"/>
@@ -323,45 +323,49 @@ export default function RevisioneSuggerimentiPage() {
                                     return (
                                         <AccordionItem value={pattern.id} key={pattern.id} className="border-b-0">
                                             <Card className={cn("transition-all", isSelected && isFixed ? "border-primary" : "")}>
-                                                <div className="flex flex-row items-start gap-4 space-y-0 p-4">
-                                                    <div className="flex flex-col gap-2 pt-1">
-                                                        <Checkbox 
-                                                            id={`pattern-${pattern.id}`}
-                                                            checked={isSelected}
-                                                            onCheckedChange={(checked) => handleSelectSuggestion(pattern, checked as boolean)}
-                                                            disabled={!isFixed}
-                                                        />
-                                                         {!isFixed && (
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <span tabIndex={0}><AlertTriangle className="h-5 w-5 text-amber-500"/></span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent>
-                                                                        <p>Importi variabili. Usa la replica esatta.</p>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                         )}
-                                                    </div>
-                                                    <AccordionTrigger className="grid gap-1 w-full text-left p-0 hover:no-underline [&>svg]:ml-auto">
-                                                        <Label htmlFor={`pattern-${pattern.id}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
-                                                        <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
-                                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
-                                                            <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
-                                                            <span>Importo Medio: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
-                                                            <span>Ricorrenza: <Badge variant="outline">{pattern.ricorrenza}</Badge></span>
-                                                            {pattern.metodoPagamentoTipico && <span>Pagamento: <Badge variant="outline">{pattern.metodoPagamentoTipico}</Badge></span>}
-                                                            <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
+                                                <div className="p-4">
+                                                    <div className="flex flex-row items-start gap-4">
+                                                        <div className="flex flex-col gap-2 pt-1">
+                                                            <Checkbox 
+                                                                id={`pattern-${pattern.id}`}
+                                                                checked={isSelected}
+                                                                onCheckedChange={(checked) => handleSelectSuggestion(pattern, checked as boolean)}
+                                                                disabled={!isFixed}
+                                                            />
+                                                                {!isFixed && (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span tabIndex={0}><AlertTriangle className="h-5 w-5 text-amber-500"/></span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>
+                                                                            <p>Importi variabili. Usa la replica esatta.</p>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                                )}
                                                         </div>
-                                                         <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                                                    </AccordionTrigger>
-                                                     <Button variant="ghost" size="icon" className="shrink-0 text-destructive self-center" onClick={() => handleRejectSuggestion(pattern.id)}>
-                                                        <Trash2 className="h-5 w-5" />
-                                                    </Button>
+                                                        <div className="flex-grow grid gap-1 text-left">
+                                                            <Label htmlFor={`pattern-${pattern.id}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
+                                                            <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
+                                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-1">
+                                                                <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
+                                                                <span>Importo Medio: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
+                                                                <span>Ricorrenza: <Badge variant="outline">{pattern.ricorrenza}</Badge></span>
+                                                                {pattern.metodoPagamentoTipico && <span>Pagamento: <Badge variant="outline">{pattern.metodoPagamentoTipico}</Badge></span>}
+                                                                <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
+                                                            </div>
+                                                        </div>
+                                                        <Button variant="ghost" size="icon" className="shrink-0 text-destructive self-center" onClick={() => handleRejectSuggestion(pattern.id)}>
+                                                            <Trash2 className="h-5 w-5" />
+                                                        </Button>
+                                                    </div>
                                                 </div>
+                                                <AccordionTrigger className="!py-0 !px-4 !pb-4 !-mt-2 !font-normal !text-primary !justify-start !gap-1 hover:!no-underline">
+                                                    <span className="hover:underline">Vedi i {sourceMovements.length} movimenti originali</span>
+                                                </AccordionTrigger>
                                                 <AccordionContent className="px-6 pb-4">
-                                                    <h4 className="text-sm font-semibold mb-2">Movimenti Originali:</h4>
+                                                    <h4 className="text-sm font-semibold mb-2">Movimenti Originali Analizzati:</h4>
                                                     <ScrollArea className="h-40 border rounded-md">
                                                         <Table>
                                                             <TableHeader>
@@ -382,9 +386,9 @@ export default function RevisioneSuggerimentiPage() {
                                                             </TableBody>
                                                         </Table>
                                                     </ScrollArea>
-                                                     <div className="mt-4 flex justify-end">
+                                                        <div className="mt-4 flex justify-end">
                                                         <Button variant="secondary" onClick={() => handleReplicateExact(pattern, sourceMovements)} disabled={isCreating}>
-                                                             {isCreating ? <Loader2 className="animate-spin mr-2"/> : null}
+                                                                {isCreating ? <Loader2 className="animate-spin mr-2"/> : null}
                                                             Replica Esatta per il {generationYear}
                                                         </Button>
                                                     </div>
@@ -408,3 +412,5 @@ export default function RevisioneSuggerimentiPage() {
         </div>
     );
 }
+
+    
