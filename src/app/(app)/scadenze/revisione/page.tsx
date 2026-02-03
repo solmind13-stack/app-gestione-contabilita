@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Sparkles, Trash2, ChevronRight, Copy, Info, Check, AlertTriangle } from 'lucide-react';
+import { Loader2, Sparkles, Trash2, ChevronRight, Copy, Info, Check, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -37,6 +37,7 @@ import { format as formatFns } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 export default function RevisioneSuggerimentiPage() {
     const { user, isUserLoading } = useUser();
@@ -54,11 +55,13 @@ export default function RevisioneSuggerimentiPage() {
     [firestore, user]);
 
     const allDeadlinesQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
+    const movimentiQuery = useMemo(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
 
     const { data: suggestions, isLoading: isLoadingSuggestions } = useCollection<DeadlineSuggestion>(suggestionsQuery);
     const { data: allDeadlines, isLoading: isLoadingDeadlines } = useCollection<Scadenza>(allDeadlinesQuery);
+    const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
 
-    const isLoading = isLoadingSuggestions || isUserLoading || isLoadingDeadlines;
+    const isLoading = isLoadingSuggestions || isUserLoading || isLoadingDeadlines || isLoadingMovements;
 
     useEffect(() => {
         if (suggestions) {
@@ -188,6 +191,68 @@ export default function RevisioneSuggerimentiPage() {
         }
     };
     
+    const handleReplicateExact = useCallback(async (suggestion: DeadlineSuggestion, sourceMovements: Movimento[]) => {
+        if (!firestore || !user || sourceMovements.length === 0) return;
+        setIsCreating(true);
+
+        try {
+            const batch = writeBatch(firestore);
+            let createdCount = 0;
+
+            for (const mov of sourceMovements) {
+                const newDate = new Date(generationYear, parseDate(mov.data).getMonth(), parseDate(mov.data).getDate());
+                const newDateString = formatFns(newDate, 'yyyy-MM-dd');
+
+                const isDuplicate = (allDeadlines || []).some(d =>
+                    d.societa === mov.societa &&
+                    d.dataScadenza === newDateString &&
+                    d.descrizione === mov.descrizione &&
+                    d.importoPrevisto === mov.uscita
+                );
+
+                if (isDuplicate || newDate.getFullYear() !== generationYear) continue;
+
+                const newDeadlineRef = doc(collection(firestore, 'deadlines'));
+                const newDeadline: Omit<Scadenza, 'id'> = {
+                    societa: mov.societa as 'LNC' | 'STG',
+                    anno: newDate.getFullYear(),
+                    dataScadenza: newDateString,
+                    descrizione: mov.descrizione,
+                    categoria: mov.categoria,
+                    sottocategoria: mov.sottocategoria || '',
+                    importoPrevisto: mov.uscita,
+                    importoPagato: 0,
+                    stato: 'Da pagare',
+                    ricorrenza: 'Nessuna',
+                    createdBy: user.uid,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    source: 'ai-suggested',
+                    note: `Replicato dal movimento originale del ${formatDate(mov.data)}`
+                };
+                batch.set(newDeadlineRef, newDeadline);
+                createdCount++;
+            }
+            
+            const suggestionRef = doc(firestore, 'users', user.uid, 'deadlineSuggestions', suggestion.id);
+            batch.update(suggestionRef, { status: 'accepted' });
+
+            await batch.commit();
+
+            if (createdCount > 0) {
+                toast({ title: 'Scadenze Replicate!', description: `${createdCount} nuove scadenze sono state create per il ${generationYear}.` });
+            } else {
+                 toast({ title: 'Nessuna Scadenza Creata', description: 'Le scadenze potrebbero essere già esistenti per l\'anno selezionato.', variant: 'default' });
+            }
+
+        } catch (error) {
+            console.error("Error replicating exact deadlines:", error);
+            toast({ variant: 'destructive', title: 'Errore Replica', description: 'Impossibile creare le scadenze.' });
+        } finally {
+            setIsCreating(false);
+        }
+    }, [firestore, user, generationYear, toast, allDeadlines]);
+
     return (
         <div className="space-y-6">
             <AlertDialog open={!!confirmingItem} onOpenChange={(open) => !open && setConfirmingItem(null)}>
@@ -243,7 +308,7 @@ export default function RevisioneSuggerimentiPage() {
                 </CardHeader>
                  <CardContent>
                     <ScrollArea className="h-[60vh] p-1 pr-4">
-                        <div className="space-y-4">
+                        <Accordion type="single" collapsible className="w-full space-y-4">
                              {isLoading ? (
                                 <div className="flex items-center justify-center h-full text-muted-foreground">
                                     <Loader2 className="h-8 w-8 animate-spin"/>
@@ -253,46 +318,79 @@ export default function RevisioneSuggerimentiPage() {
                                 suggestions.map((pattern) => {
                                     const isSelected = selectedSuggestions.some(s => s.id === pattern.id);
                                     const isFixed = pattern.amountType === 'fixed';
+                                    const sourceMovements = (allMovements || []).filter(m => pattern.sourceMovementIds.includes(m.id));
+
                                     return (
-                                        <Card key={pattern.id} className={cn("transition-all", isSelected && isFixed ? "border-primary" : "")}>
-                                            <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
-                                                <div className="flex flex-col gap-2">
-                                                    <Checkbox 
-                                                        id={`pattern-${pattern.id}`}
-                                                        checked={isSelected}
-                                                        onCheckedChange={(checked) => handleSelectSuggestion(pattern, checked as boolean)}
-                                                        className="mt-1"
-                                                        disabled={!isFixed}
-                                                    />
-                                                     {!isFixed && (
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <span tabIndex={0}><AlertTriangle className="h-5 w-5 text-amber-500"/></span>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    <p>Importi variabili. Non selezionabile per la creazione massiva.</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
-                                                     )}
-                                                </div>
-                                                <div className="grid gap-1 w-full">
-                                                    <Label htmlFor={`pattern-${pattern.id}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
-                                                    <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
-                                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
-                                                        <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
-                                                        <span>Importo Medio: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
-                                                        <span>Ricorrenza: <Badge variant="outline">{pattern.ricorrenza}</Badge></span>
-                                                        {pattern.metodoPagamentoTipico && <span>Pagamento: <Badge variant="outline">{pattern.metodoPagamentoTipico}</Badge></span>}
-                                                        <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
+                                        <AccordionItem value={pattern.id} key={pattern.id} className="border-b-0">
+                                            <Card className={cn("transition-all", isSelected && isFixed ? "border-primary" : "")}>
+                                                <div className="flex flex-row items-start gap-4 space-y-0 p-4">
+                                                    <div className="flex flex-col gap-2 pt-1">
+                                                        <Checkbox 
+                                                            id={`pattern-${pattern.id}`}
+                                                            checked={isSelected}
+                                                            onCheckedChange={(checked) => handleSelectSuggestion(pattern, checked as boolean)}
+                                                            disabled={!isFixed}
+                                                        />
+                                                         {!isFixed && (
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <span tabIndex={0}><AlertTriangle className="h-5 w-5 text-amber-500"/></span>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>
+                                                                        <p>Importi variabili. Usa la replica esatta.</p>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                         )}
                                                     </div>
+                                                    <AccordionTrigger className="grid gap-1 w-full text-left p-0 hover:no-underline [&>svg]:ml-auto">
+                                                        <Label htmlFor={`pattern-${pattern.id}`} className="font-bold text-base cursor-pointer">{pattern.descrizionePulita}</Label>
+                                                        <p className="text-sm text-muted-foreground">{pattern.ragione}</p>
+                                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm pt-2">
+                                                            <span>Società: <Badge variant="secondary">{pattern.societa}</Badge></span>
+                                                            <span>Importo Medio: <Badge variant="outline">{formatCurrency(pattern.importoPrevisto)}</Badge></span>
+                                                            <span>Ricorrenza: <Badge variant="outline">{pattern.ricorrenza}</Badge></span>
+                                                            {pattern.metodoPagamentoTipico && <span>Pagamento: <Badge variant="outline">{pattern.metodoPagamentoTipico}</Badge></span>}
+                                                            <span>Cat: <Badge variant="outline">{pattern.categoria}</Badge></span>
+                                                        </div>
+                                                         <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                                                    </AccordionTrigger>
+                                                     <Button variant="ghost" size="icon" className="shrink-0 text-destructive self-center" onClick={() => handleRejectSuggestion(pattern.id)}>
+                                                        <Trash2 className="h-5 w-5" />
+                                                    </Button>
                                                 </div>
-                                                 <Button variant="ghost" size="icon" className="shrink-0 text-destructive" onClick={() => handleRejectSuggestion(pattern.id)}>
-                                                    <Trash2 className="h-5 w-5" />
-                                                </Button>
-                                            </CardHeader>
-                                        </Card>
+                                                <AccordionContent className="px-6 pb-4">
+                                                    <h4 className="text-sm font-semibold mb-2">Movimenti Originali:</h4>
+                                                    <ScrollArea className="h-40 border rounded-md">
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow>
+                                                                    <TableHead>Data</TableHead>
+                                                                    <TableHead>Descrizione</TableHead>
+                                                                    <TableHead className="text-right">Importo</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {sourceMovements.map(mov => (
+                                                                    <TableRow key={mov.id}>
+                                                                        <TableCell>{formatDate(mov.data)}</TableCell>
+                                                                        <TableCell>{mov.descrizione}</TableCell>
+                                                                        <TableCell className="text-right text-red-600">{formatCurrency(mov.uscita)}</TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </ScrollArea>
+                                                     <div className="mt-4 flex justify-end">
+                                                        <Button variant="secondary" onClick={() => handleReplicateExact(pattern, sourceMovements)} disabled={isCreating}>
+                                                             {isCreating ? <Loader2 className="animate-spin mr-2"/> : null}
+                                                            Replica Esatta per il {generationYear}
+                                                        </Button>
+                                                    </div>
+                                                </AccordionContent>
+                                            </Card>
+                                        </AccordionItem>
                                     )
                                 })
                             ) : (
@@ -302,7 +400,7 @@ export default function RevisioneSuggerimentiPage() {
                                     <p className="text-sm">Esegui una nuova analisi dalla pagina "Scadenze".</p>
                                 </div>
                             )}
-                        </div>
+                        </Accordion>
                     </ScrollArea>
                 </CardContent>
             </Card>
