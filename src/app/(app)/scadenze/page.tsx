@@ -287,6 +287,8 @@ export default function ScadenzePage() {
             Object.values(groupedByDescription).forEach(group => {
                 if (group.length < 3) return;
             
+                group.sort((a,b) => parseDate(a.data).getTime() - parseDate(b.data).getTime());
+                
                 const sortedByAmount = [...group].sort((a, b) => a.uscita - b.uscita);
                 let currentCluster: Movimento[] = [sortedByAmount[0]];
             
@@ -307,19 +309,31 @@ export default function ScadenzePage() {
                 if (currentCluster.length >= 3) finalCandidateGroups.push(currentCluster);
             });
             
-            const existingDeadlines = (scadenze || []).filter(s => s.societa === company);
-    
             const filteredCandidates = finalCandidateGroups.filter(group => {
+                if (group.length === 0) return false;
+
                 const avgAmount = group.reduce((sum, m) => sum + m.uscita, 0) / group.length;
-                return !existingDeadlines.some(deadline => 
-                    Math.abs(deadline.importoPrevisto - avgAmount) / avgAmount < 0.1 // 10% tolerance
-                );
+
+                // Check against existing future deadlines
+                const hasExistingFutureDeadline = (scadenze || []).some(deadline => {
+                    if (deadline.societa !== company) return false;
+                    if (parseDate(deadline.dataScadenza) < new Date()) return false;
+                    
+                    const amountDifference = Math.abs(deadline.importoPrevisto - avgAmount);
+                    const isAmountSimilar = (avgAmount > 0) ? (amountDifference / avgAmount) < 0.10 : false;
+                    
+                    const groupDescKey = createGroupingKey(group[0].descrizione);
+                    const deadlineDescKey = createGroupingKey(deadline.descrizione);
+                    
+                    return isAmountSimilar && groupDescKey === deadlineDescKey;
+                });
+                
+                return !hasExistingFutureDeadline;
             });
     
             if (filteredCandidates.length === 0) continue;
             
             const analysisPayload = filteredCandidates.map((group, index) => {
-                group.sort((a, b) => parseDate(a.data).getTime() - parseDate(b.data).getTime());
     
                 const amounts = group.map(m => m.uscita);
                 const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
@@ -407,7 +421,7 @@ export default function ScadenzePage() {
                 toast({
                     variant: 'destructive',
                     title: `Errore Analisi per ${company}`,
-                    description: error.message || 'Impossibile completare l\'analisi.'
+                    description: 'Impossibile completare l\'analisi.'
                 });
             }
         }
