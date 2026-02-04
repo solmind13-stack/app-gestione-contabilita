@@ -121,7 +121,7 @@ export default function ScadenzePage() {
 
     const handleEditDeadline = async (updatedDeadline: Scadenza) => {
          if (!user || !firestore || !updatedDeadline.id) {
-            toast({ variant: 'destructive', title: 'Errore', description: 'Dati non validi per l'aggiornamento.' });
+            toast({ variant: 'destructive', title: 'Errore', description: "Dati non validi per l'aggiornamento." });
             return;
         }
         try {
