@@ -70,10 +70,10 @@ export default function MovimentiPage() {
     const settingsDocRef = useMemo(() => firestore ? doc(firestore, 'settings', 'appConfiguration') : null, [firestore]);
     const { data: appSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
     
-    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user?.uid, user?.role, user?.company]);
-    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user?.uid, user?.role, user?.company]);
-    const expenseForecastsQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user?.uid, user?.role, user?.company]);
-    const incomeForecastsQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user?.uid, user?.role, user?.company]);
+    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
+    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
+    const expenseForecastsQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
+    const incomeForecastsQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
     const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
     
 
@@ -282,7 +282,7 @@ export default function MovimentiPage() {
                 
                 const finalMovementData = {
                     ...dataToUpdate,
-                    linkedTo: dataToUpdate.linkedTo === 'nessuno' ? null : dataToUpdate.linkedTo,
+                    linkedTo: dataToUpdate.linkedTo && dataToUpdate.linkedTo !== 'nessuno' ? dataToUpdate.linkedTo : null,
                     updatedAt: new Date().toISOString(),
                     createdBy: originalMovement.createdBy || user.uid,
                     inseritoDa: user.displayName,
