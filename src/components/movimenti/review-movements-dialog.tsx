@@ -48,6 +48,7 @@ export function ReviewMovementsDialog({
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user } = useUser();
+  const [editingDescription, setEditingDescription] = useState<{ id: string; text: string; } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -64,7 +65,6 @@ export function ReviewMovementsDialog({
 
           if (field === 'importo') {
               const newAmount = parseFloat(value) || 0;
-              // To determine if it was an income or expense, we check the original movement
               const originalMovement = movementsToReview.find(m => m.id === id);
               
               if (originalMovement && originalMovement.entrata > 0) {
@@ -76,7 +76,7 @@ export function ReviewMovementsDialog({
               }
           } else if (field === 'categoria') {
             updatedMov.categoria = value;
-            updatedMov.sottocategoria = ''; // Reset subcategory
+            updatedMov.sottocategoria = ''; 
           } else {
             (updatedMov as any)[field as keyof Movimento] = value;
           }
@@ -86,7 +86,6 @@ export function ReviewMovementsDialog({
       })
     );
   };
-
 
   const handleSelectAll = (checked: boolean) => {
     setSelectedIds(checked ? editedMovements.map(m => m.id) : []);
@@ -116,7 +115,6 @@ export function ReviewMovementsDialog({
         };
         batch.update(docRef, dataToUpdate as any);
 
-        // Save feedback
         await onFeedback({
             descriptionPattern: originalMov.descrizione,
             category: dataToUpdate.categoria,
@@ -168,10 +166,47 @@ export function ReviewMovementsDialog({
   const allCategories = appSettings?.categories ? Object.keys(appSettings.categories) : Object.keys(CATEGORIE);
   const allOperators = appSettings?.operators || [];
   const allPaymentMethods = appSettings?.paymentMethods || METODI_PAGAMENTO;
+  
+  const EditDescriptionDialog = () => {
+    const [currentText, setCurrentText] = useState(editingDescription?.text || '');
+
+    useEffect(() => {
+        setCurrentText(editingDescription?.text || '');
+    }, [editingDescription]);
+
+    if (!editingDescription) return null;
+
+    const handleSave = () => {
+        handleFieldChange(editingDescription.id, 'descrizione', currentText);
+        setEditingDescription(null);
+    };
+
+    return (
+        <Dialog open={!!editingDescription} onOpenChange={(open) => !open && setEditingDescription(null)}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Modifica Descrizione</DialogTitle>
+                </DialogHeader>
+                <Textarea 
+                    value={currentText}
+                    onChange={(e) => setCurrentText(e.target.value)}
+                    className="min-h-[120px] text-base"
+                    autoFocus
+                />
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setEditingDescription(null)}>Annulla</Button>
+                    <Button onClick={handleSave}>Salva</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+  };
+
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="max-w-7xl">
+        <EditDescriptionDialog />
         <DialogHeader>
           <DialogTitle>Revisione Movimenti Importati</DialogTitle>
           <DialogDescription>
@@ -208,11 +243,15 @@ export function ReviewMovementsDialog({
                         />
                     </TableCell>
                     <TableCell className="p-2">
-                         <Textarea
-                            value={mov.descrizione}
-                            onChange={(e) => handleFieldChange(mov.id, 'descrizione', e.target.value)}
-                            className="min-h-[80px]"
-                        />
+                         <button 
+                            type="button" 
+                            onClick={() => setEditingDescription({ id: mov.id, text: mov.descrizione })}
+                            className="text-left w-full p-1 rounded hover:bg-muted transition-colors"
+                        >
+                            <p className="line-clamp-3 text-sm">
+                                {mov.descrizione}
+                            </p>
+                        </button>
                     </TableCell>
                     <TableCell className="p-2">
                          <Input
