@@ -87,6 +87,7 @@ export default function MovimentiPage() {
     const [isSeeding, setIsSeeding] = useState(false);
     const [movementToDelete, setMovementToDelete] = useState<Movimento | null>(null);
     const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     
     // Filters state
@@ -349,70 +350,75 @@ export default function MovimentiPage() {
         }
     };
 
+    const runDeleteTransaction = async (movementToDelete: Movimento) => {
+        if (!firestore) return;
+        await runTransaction(firestore, async (transaction) => {
+            const movementDocRef = doc(firestore, 'movements', movementToDelete.id);
+            
+            const movementSnap = await transaction.get(movementDocRef);
+            if (!movementSnap.exists()) {
+                // It might have been deleted by another process in the bulk delete
+                console.warn(`Movimento con ID ${movementToDelete.id} non trovato durante l'eliminazione.`);
+                return;
+            }
+            const movement = movementSnap.data() as Movimento;
+
+            if (movement.linkedTo) {
+                const [collectionName, docId] = movement.linkedTo.split('/');
+                const linkedDocRef = doc(firestore, collectionName, docId);
+                const linkedDocSnap = await transaction.get(linkedDocRef);
+                
+                if (linkedDocSnap.exists()) {
+                    if (collectionName === 'deadlines') {
+                        const data = linkedDocSnap.data() as Scadenza;
+                        const movementAmount = movement.uscita;
+                        const newPaidAmount = (data.importoPagato || 0) - movementAmount;
+                        const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
+                        
+                        const updateData: any = { importoPagato: newPaidAmount, stato: newStatus };
+                        if (newStatus === 'Da pagare') {
+                            updateData.dataPagamento = null;
+                        }
+                        transaction.update(linkedDocRef, updateData);
+
+                    } else if (collectionName === 'expenseForecasts') {
+                        const data = linkedDocSnap.data() as PrevisioneUscita;
+                        const movementAmount = movement.uscita;
+                        const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
+                        const newStatus = newEffectiveAmount >= data.importoLordo ? 'Pagato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da pagare');
+
+                        const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
+                        if (newStatus === 'Da pagare') {
+                            updateData.dataPagamento = null;
+                        }
+                        transaction.update(linkedDocRef, updateData);
+                    
+                    } else if (collectionName === 'incomeForecasts') {
+                        const data = linkedDocSnap.data() as PrevisioneEntrata;
+                        const movementAmount = movement.entrata;
+                        const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
+                        const newStatus = newEffectiveAmount >= data.importoLordo ? 'Incassato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da incassare');
+
+                        const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
+                        if (newStatus === 'Da incassare') {
+                            updateData.dataIncasso = null;
+                        }
+                        transaction.update(linkedDocRef, updateData);
+                    }
+                } else {
+                    console.warn(`Documento collegato ${movement.linkedTo} non trovato durante l'eliminazione.`);
+                }
+            }
+            
+            transaction.delete(movementDocRef);
+        });
+    }
+
     const handleDeleteMovement = async () => {
         if (!movementToDelete || !firestore) return;
         try {
-            await runTransaction(firestore, async (transaction) => {
-                const movementDocRef = doc(firestore, 'movements', movementToDelete.id);
-                
-                const movementSnap = await transaction.get(movementDocRef);
-                if (!movementSnap.exists()) {
-                    throw new Error("Movimento da eliminare non trovato.");
-                }
-                const movement = movementSnap.data() as Movimento;
-
-                if (movement.linkedTo) {
-                    const [collectionName, docId] = movement.linkedTo.split('/');
-                    const linkedDocRef = doc(firestore, collectionName, docId);
-                    const linkedDocSnap = await transaction.get(linkedDocRef);
-                    
-                    if (linkedDocSnap.exists()) {
-                        if (collectionName === 'deadlines') {
-                            const data = linkedDocSnap.data() as Scadenza;
-                            const movementAmount = movement.uscita;
-                            const newPaidAmount = (data.importoPagato || 0) - movementAmount;
-                            const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
-                            
-                            const updateData: any = { importoPagato: newPaidAmount, stato: newStatus };
-                            if (newStatus === 'Da pagare') {
-                                updateData.dataPagamento = null;
-                            }
-                            transaction.update(linkedDocRef, updateData);
-
-                        } else if (collectionName === 'expenseForecasts') {
-                            const data = linkedDocSnap.data() as PrevisioneUscita;
-                            const movementAmount = movement.uscita;
-                            const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
-                            const newStatus = newEffectiveAmount >= data.importoLordo ? 'Pagato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da pagare');
-
-                            const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
-                            if (newStatus === 'Da pagare') {
-                                updateData.dataPagamento = null;
-                            }
-                            transaction.update(linkedDocRef, updateData);
-                        
-                        } else if (collectionName === 'incomeForecasts') {
-                            const data = linkedDocSnap.data() as PrevisioneEntrata;
-                            const movementAmount = movement.entrata;
-                            const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
-                            const newStatus = newEffectiveAmount >= data.importoLordo ? 'Incassato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da incassare');
-
-                            const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
-                            if (newStatus === 'Da incassare') {
-                                updateData.dataIncasso = null;
-                            }
-                            transaction.update(linkedDocRef, updateData);
-                        }
-                    } else {
-                        console.warn(`Documento collegato ${movement.linkedTo} non trovato durante l'eliminazione.`);
-                    }
-                }
-                
-                transaction.delete(movementDocRef);
-            });
-            
+            await runDeleteTransaction(movementToDelete);
             toast({ title: "Movimento Eliminato", description: "Il movimento e la voce collegata sono stati aggiornati." });
-
         } catch (error: any) {
             console.error("Error deleting movement: ", error);
             toast({ variant: 'destructive', title: 'Errore Eliminazione', description: `Impossibile eliminare il movimento. ${error.message}` });
@@ -421,27 +427,38 @@ export default function MovimentiPage() {
         }
     };
 
-
     const handleBulkDelete = async () => {
         if (!firestore || selectedIds.length === 0 || user?.role !== 'admin') {
             toast({ variant: 'destructive', title: 'Azione non permessa', description: 'Nessun elemento selezionato o permessi non sufficienti.' });
             return;
         }
-        try {
-            const batch = writeBatch(firestore);
-            selectedIds.forEach(id => {
-                const docRef = doc(firestore, 'movements', id);
-                batch.delete(docRef);
-            });
-            await batch.commit();
-            toast({ title: "Movimenti Eliminati", description: `${selectedIds.length} movimenti sono stati eliminati.` });
-            setSelectedIds([]); // Clear selection
-        } catch (error) {
-            console.error("Error bulk deleting movements:", error);
-            toast({ variant: 'destructive', title: 'Errore Eliminazione Multipla', description: 'Impossibile eliminare i movimenti selezionati.' });
-        } finally {
-            setIsBulkDeleteAlertOpen(false);
+        setIsBulkDeleteAlertOpen(false);
+        setIsDeleting(true);
+        toast({ title: 'Eliminazione in corso...', description: `Eliminazione di ${selectedIds.length} movimenti...` });
+        
+        let successCount = 0;
+        let errorCount = 0;
+
+        const movementsToDelete = (movimentiData || []).filter(m => selectedIds.includes(m.id));
+
+        for (const movement of movementsToDelete) {
+            try {
+                await runDeleteTransaction(movement);
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to delete movement ${movement.id}:`, error);
+                errorCount++;
+            }
         }
+        
+        if (errorCount > 0) {
+            toast({ variant: 'destructive', title: 'Eliminazione Parziale', description: `${successCount} movimenti eliminati. ${errorCount} eliminazioni fallite.` });
+        } else {
+            toast({ title: "Eliminazione Completata", description: `${successCount} movimenti sono stati eliminati.` });
+        }
+        
+        setSelectedIds([]);
+        setIsDeleting(false);
     };
     
     const handleImportMovements = async (importedMovements: Omit<Movimento, 'id'>[]): Promise<Movimento[]> => {
@@ -478,7 +495,7 @@ export default function MovimentiPage() {
                             const newPaidAmount = (data.importoPagato || 0) + movementAmount;
                             const newStatus: Scadenza['stato'] = newPaidAmount >= data.importoPrevisto ? 'Pagato' : 'Parziale';
                             const updateData: any = { importoPagato: newPaidAmount, stato: newStatus };
-                            if (data.stato === 'Da pagare') {
+                             if (data.stato === 'Da pagare') {
                                updateData.dataPagamento = movement.data;
                             }
                             transaction.update(linkedDocRef, updateData);
@@ -672,12 +689,14 @@ export default function MovimentiPage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Questa azione non può essere annullata. Verranno eliminati permanentemente {selectedIds.length} movimenti.
+                        Questa azione non può essere annullata. Verranno eliminati permanentemente {selectedIds.length} movimenti. Questa operazione aggiornerà anche le scadenze e previsioni collegate.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Annulla</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90">Elimina Tutti</AlertDialogAction>
+                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90">
+                        {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Elimina Tutti'}
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
@@ -701,7 +720,7 @@ export default function MovimentiPage() {
                     Da Revisionare ({movimentiDaRevisionare.length})
                 </Button>
                 {user?.role === 'admin' && selectedIds.length > 0 && (
-                     <Button variant="destructive" onClick={() => setIsBulkDeleteAlertOpen(true)}>
+                     <Button variant="destructive" onClick={() => setIsBulkDeleteAlertOpen(true)} disabled={isDeleting}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         Elimina ({selectedIds.length})
                     </Button>

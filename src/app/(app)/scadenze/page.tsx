@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference, deleteDoc, DocumentData } from 'firebase/firestore';
+import { collection, writeBatch, getDocs, doc, addDoc, updateDoc, query, where, CollectionReference, deleteDoc, DocumentData, runTransaction } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -68,6 +68,7 @@ export default function ScadenzePage() {
     const [editingDeadline, setEditingDeadline] = useState<Scadenza | null>(null);
     const [deadlineToDelete, setDeadlineToDelete] = useState<Scadenza | null>(null);
     const [isBulkDeleteAlertOpen, setIsBulkDeleteAlertOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     
     // State for AI suggestions
@@ -138,30 +139,32 @@ export default function ScadenzePage() {
             toast({ variant: 'destructive', title: 'Errore Aggiornamento', description: 'Impossibile modificare la scadenza. Riprova.' });
         }
     };
-    
-    const handleDeleteDeadline = async () => {
-        if (!deadlineToDelete || !firestore) return;
-        try {
-            const deadlineId = deadlineToDelete.id;
-            const deadlineRef = doc(firestore, 'deadlines', deadlineId);
+
+    const runDeleteTransaction = async (deadlineToDelete: Scadenza) => {
+        if (!firestore) return;
+        
+        await runTransaction(firestore, async (transaction) => {
+            const deadlineRef = doc(firestore, 'deadlines', deadlineToDelete.id);
             
             // Find all movements linked to this deadline
             const movementsRef = collection(firestore, 'movements');
-            const q = query(movementsRef, where('linkedTo', '==', `deadlines/${deadlineId}`));
+            const q = query(movementsRef, where('linkedTo', '==', `deadlines/${deadlineToDelete.id}`));
             const linkedMovementsSnap = await getDocs(q);
     
-            const batch = writeBatch(firestore);
-            
             // Unlink all found movements
             linkedMovementsSnap.forEach(movementDoc => {
-                batch.update(movementDoc.ref, { linkedTo: null });
+                transaction.update(movementDoc.ref, { linkedTo: null });
             });
             
             // Delete the deadline itself
-            batch.delete(deadlineRef);
-            
-            await batch.commit();
-            
+            transaction.delete(deadlineRef);
+        });
+    }
+    
+    const handleDeleteDeadline = async () => {
+        if (!deadlineToDelete) return;
+        try {
+            await runDeleteTransaction(deadlineToDelete);
             toast({ title: "Scadenza Eliminata", description: "La scadenza e i relativi collegamenti sono stati rimossi." });
         } catch (error) {
             console.error("Error deleting deadline: ", error);
@@ -176,21 +179,33 @@ export default function ScadenzePage() {
             toast({ variant: 'destructive', title: 'Azione non permessa', description: 'Nessun elemento selezionato o permessi non sufficienti.' });
             return;
         }
-        try {
-            const batch = writeBatch(firestore);
-            selectedIds.forEach(id => {
-                const docRef = doc(firestore, 'deadlines', id);
-                batch.delete(docRef);
-            });
-            await batch.commit();
-            toast({ title: "Scadenze Eliminate", description: `${selectedIds.length} scadenze sono state eliminate.` });
-            setSelectedIds([]); // Clear selection
-        } catch (error) {
-            console.error("Error bulk deleting deadlines:", error);
-            toast({ variant: 'destructive', title: 'Errore Eliminazione Multipla', description: 'Impossibile eliminare le scadenze selezionate.' });
-        } finally {
-            setIsBulkDeleteAlertOpen(false);
+        setIsBulkDeleteAlertOpen(false);
+        setIsDeleting(true);
+        toast({ title: 'Eliminazione in corso...', description: `Eliminazione di ${selectedIds.length} scadenze...` });
+        
+        let successCount = 0;
+        let errorCount = 0;
+
+        const deadlinesToDelete = (scadenze || []).filter(s => selectedIds.includes(s.id));
+
+        for (const deadline of deadlinesToDelete) {
+            try {
+                await runDeleteTransaction(deadline);
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to delete deadline ${deadline.id}:`, error);
+                errorCount++;
+            }
         }
+        
+        if (errorCount > 0) {
+            toast({ variant: 'destructive', title: 'Eliminazione Parziale', description: `${successCount} scadenze eliminate. ${errorCount} eliminazioni fallite.` });
+        } else {
+            toast({ title: "Eliminazione Completata", description: `${successCount} scadenze sono state eliminate.` });
+        }
+        
+        setSelectedIds([]);
+        setIsDeleting(false);
     };
 
     const handleImportDeadlines = async (importedDeadlines: Omit<Scadenza, 'id'>[]): Promise<Scadenza[]> => {
@@ -590,12 +605,14 @@ export default function ScadenzePage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Sei sicuro di voler eliminare?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Questa azione non può essere annullata. Verranno eliminate permanentemente {selectedIds.length} scadenze.
+                        Questa azione non può essere annullata. Verranno eliminate permanentemente {selectedIds.length} scadenze, scollegando eventuali movimenti associati.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Annulla</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90">Elimina Tutti</AlertDialogAction>
+                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90">
+                        {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Elimina Tutti'}
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
@@ -670,7 +687,7 @@ export default function ScadenzePage() {
         )}
         <div className={cn("flex w-full md:w-auto items-center gap-2", (user?.role === 'admin' || user?.role === 'editor') ? '' : 'ml-auto')}>
              {user?.role === 'admin' && selectedIds.length > 0 && (
-                 <Button variant="destructive" onClick={() => setIsBulkDeleteAlertOpen(true)}>
+                 <Button variant="destructive" onClick={() => setIsBulkDeleteAlertOpen(true)} disabled={isDeleting}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Elimina ({selectedIds.length})
                 </Button>
