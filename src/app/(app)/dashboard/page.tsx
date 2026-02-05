@@ -38,10 +38,10 @@ export default function DashboardPage() {
   const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('monthly');
 
-  const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user?.uid, user?.role, user?.company]);
-  const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user?.uid, user?.role, user?.company]);
-  const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user?.uid, user?.role, user?.company]);
-  const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user?.uid, user?.role, user?.company]);
+  const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user?.uid]);
+  const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user?.uid]);
+  const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user?.uid]);
+  const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user?.uid]);
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
 
   const { data: allMovements, isLoading: isLoadingMovements } = useCollection<Movimento>(movimentiQuery);
@@ -85,7 +85,7 @@ export default function DashboardPage() {
     }
     
     const scadenzeNelPeriodo = deadlines.filter(s => isWithinInterval(parseDate(s.dataScadenza), { start: kpiStartDate, end: kpiEndDate }) && s.stato !== 'Pagato');
-    const importoScadenze = scadenzeNelPeriodo.reduce((acc, s) => acc + (s.importoPrevisto - s.importoPagato), 0);
+    const importoScadenze = scadenzeNelPeriodo.reduce((acc, s) => acc + (s.importoPrevisto - (s.importoPagato || 0)), 0);
 
     const entratePreviste = incomeForecasts
       .filter(p => isWithinInterval(parseDate(p.dataPrevista), { start: kpiStartDate, end: kpiEndDate }))
@@ -133,7 +133,7 @@ export default function DashboardPage() {
                 if (f.anno === today.getFullYear() && parseDate(f.dataScadenza).getMonth() === i) uscite += (f.importoLordo || 0) * f.probabilita;
             });
             deadlines.forEach(d => {
-                if (d.stato !== 'Pagato' && d.anno === today.getFullYear() && parseDate(d.dataScadenza).getMonth() === i) uscite += (d.importoPrevisto - d.importoPagato);
+                if (d.stato !== 'Pagato' && d.anno === today.getFullYear() && parseDate(d.dataScadenza).getMonth() === i) uscite += (d.importoPrevisto - (d.importoPagato || 0));
             });
         }
         return { month: new Date(today.getFullYear(), i).toLocaleString('it-IT', { month: 'short' }), entrate, uscite };
@@ -161,7 +161,7 @@ export default function DashboardPage() {
         } else {
             incomeForecasts.forEach(f => { if (f.anno === yearForSummary && parseDate(f.dataPrevista).getMonth() === i) monthInflows += (f.importoLordo || 0) * f.probabilita; });
             expenseForecasts.forEach(f => { if (f.anno === yearForSummary && parseDate(f.dataScadenza).getMonth() === i) monthOutflows += (f.importoLordo || 0) * f.probabilita; });
-            deadlines.forEach(d => { if (d.stato !== 'Pagato' && d.anno === yearForSummary && parseDate(d.dataScadenza).getMonth() === i) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+            deadlines.forEach(d => { if (d.stato !== 'Pagato' && d.anno === yearForSummary && parseDate(d.dataScadenza).getMonth() === i) monthOutflows += (d.importoPrevisto - (d.importoPagato || 0)); });
         }
         
         const closingBalance = openingBalance + monthInflows - monthOutflows;
@@ -188,9 +188,9 @@ export default function DashboardPage() {
             });
         }
         
-        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
-        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
-        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthInflows += (f.importoLordo || 0) * f.probabilita; });
+        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (f.importoLordo || 0) * f.probabilita; });
+        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - (d.importoPagato || 0)); });
         
         if (i > 0) { // For subsequent months, cashflowBalance is already the opening balance
             cashflowBalance += monthInflows - monthOutflows;
@@ -212,9 +212,9 @@ export default function DashboardPage() {
         let monthInflows = 0;
         let monthOutflows = 0;
 
-        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthInflows += f.importoLordo * f.probabilita; });
-        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += f.importoLordo * f.probabilita; });
-        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - d.importoPagato); });
+        incomeForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataPrevista), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthInflows += (f.importoLordo || 0) * f.probabilita; });
+        expenseForecasts.forEach(f => { if (isWithinInterval(parseDate(f.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (f.importoLordo || 0) * f.probabilita; });
+        deadlines.forEach(d => { if (d.stato !== 'Pagato' && isWithinInterval(parseDate(d.dataScadenza), { start: isCurrentMonth ? today : monthStart, end: monthEnd })) monthOutflows += (d.importoPrevisto - (d.importoPagato || 0)); });
         
         runningBalance += monthInflows - monthOutflows;
         return { month: monthDate.toLocaleString('it-IT', { month: 'short' }), saldo: runningBalance };

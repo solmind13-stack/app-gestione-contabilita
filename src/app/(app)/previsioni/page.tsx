@@ -62,13 +62,13 @@ export default function PrevisioniPage() {
     }
   };
 
-  const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
-  const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
-  const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
-  const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
+  const previsioniEntrateQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user?.uid]);
+  const previsioniUsciteQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user?.uid]);
+  const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user?.uid]);
+  const scadenzeQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user?.uid]);
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
-  const incomeSuggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'incomeForecastSuggestions'), where('status', '==', 'pending')) : null, [firestore, user]);
-    const expenseSuggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'expenseForecastSuggestions'), where('status', '==', 'pending')) : null, [firestore, user]);
+  const incomeSuggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'incomeForecastSuggestions'), where('status', '==', 'pending')) : null, [firestore, user?.uid]);
+    const expenseSuggestionsQuery = useMemo(() => firestore && user ? query(collection(firestore, 'users', user.uid, 'expenseForecastSuggestions'), where('status', '==', 'pending')) : null, [firestore, user?.uid]);
   
   const { data: allPrevisioniEntrate, isLoading: isLoadingIncome } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
   const { data: allPrevisioniUscite, isLoading: isLoadingExpenses } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
@@ -212,7 +212,7 @@ export default function PrevisioniPage() {
 
   const combinedExpenseData = useMemo(() => {
     const fromForecasts = (allPrevisioniUscite || []).filter(filterByCompany).map(f => ({ ...f, type: 'previsione' as const }));
-    const fromDeadlines = (allScadenze || []).filter(filterByCompany).filter(s => s.stato !== 'Pagato').map(s => ({ id: s.id, type: 'scadenza' as const, societa: s.societa, anno: s.anno, descrizione: s.descrizione, dataScadenza: s.dataScadenza, importoLordo: s.importoPrevisto - s.importoPagato, probabilita: 1.0, stato: s.stato, categoria: s.categoria }));
+    const fromDeadlines = (allScadenze || []).filter(filterByCompany).filter(s => s.stato !== 'Pagato').map(s => ({ id: s.id, type: 'scadenza' as const, societa: s.societa, anno: s.anno, descrizione: s.descrizione, dataScadenza: s.dataScadenza, importoLordo: s.importoPrevisto - (s.importoPagato || 0), probabilita: 1.0, stato: s.stato, categoria: s.categoria }));
     return [...fromForecasts, ...fromDeadlines];
   }, [allPrevisioniUscite, allScadenze, filterByCompany]);
   
