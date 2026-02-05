@@ -269,7 +269,7 @@ export function ImportMovementsDialog({
     for (let i = 0; i < importedMovements.length; i++) {
         const movement = importedMovements[i];
         try {
-            const result = await import('/ai/flows/categorize-transactions-with-ai-suggestions').then(m => m.categorizeTransaction({ description: movement.descrizione }));
+            const result = await import('@/ai/flows/categorize-transactions-with-ai-suggestions').then(m => m.categorizeTransaction({ description: movement.descrizione }));
             if (result && result.category && result.category !== 'Da categorizzare') {
                 const updatedMov = { 
                     ...movement, 
