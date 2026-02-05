@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, File as FileIcon, Trash2, Check, Wand2 } from 'lucide-react';
-import type { Movimento, AppUser, CompanyProfile } from '@/lib/types';
+import type { Movimento, AppUser, CompanyProfile, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -48,6 +48,9 @@ export function ImportMovementsDialog({
   currentUser,
   companies,
   allMovements,
+  deadlines,
+  expenseForecasts,
+  incomeForecasts,
 }: {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -57,10 +60,13 @@ export function ImportMovementsDialog({
   companies: CompanyProfile[];
   categories: any;
   allMovements: Movimento[];
+  deadlines: Scadenza[];
+  expenseForecasts: PrevisioneUscita[];
+  incomeForecasts: PrevisioneEntrata[];
 }) {
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [processedRows, setProcessedRows] = useState<(Omit<Movimento, 'id'> & { isDuplicate?: boolean })[]>([]);
+  const [processedRows, setProcessedRows] = useState<(Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string })[]>([]);
   const [importedMovements, setImportedMovements] = useState<Movimento[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -151,6 +157,45 @@ export function ImportMovementsDialog({
       }
   };
 
+  const linkableItems = useMemo((): LinkableItem[] => {
+      const items: LinkableItem[] = [];
+      (deadlines || []).filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato').forEach(d => items.push({ id: d.id, type: 'deadlines', description: d.descrizione, date: d.dataScadenza, amount: d.importoPrevisto - d.importoPagato, societa: d.societa, category: d.categoria, subcategory: d.sottocategoria || '' }));
+      (expenseForecasts || []).filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato').forEach(f => items.push({ id: f.id, type: 'expenseForecasts', description: f.descrizione, date: f.dataScadenza, amount: f.importoLordo - (f.importoEffettivo || 0), societa: f.societa, category: f.categoria, subcategory: f.sottocategoria }));
+      (incomeForecasts || []).filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato').forEach(f => items.push({ id: f.id, type: 'incomeForecasts', description: f.descrizione, date: f.dataPrevista, amount: f.importoLordo - (f.importoEffettivo || 0), societa: f.societa, category: f.categoria, subcategory: f.sottocategoria }));
+      return items;
+  }, [deadlines, expenseForecasts, incomeForecasts]);
+
+  const calculateSimilarity = (item: LinkableItem, movement: Omit<Movimento, 'id'>): number => {
+    let score = 0;
+    const { societa, descrizione, categoria, sottocategoria } = movement;
+    const importo = movement.entrata > 0 ? movement.entrata : movement.uscita;
+
+    if (!societa || !importo || importo === 0 || !descrizione) return 0;
+    if (item.societa !== societa) return -1;
+
+    if (item.amount && importo) {
+        const difference = Math.abs(item.amount - importo);
+        if (difference < 0.02) { // Allow for tiny rounding differences
+            score += 100;
+        } else if (importo < item.amount) {
+            score += Math.max(0, 70 - (difference / item.amount) * 100);
+        } else {
+             score += Math.max(0, 50 - (difference / item.amount) * 100);
+        }
+    }
+    
+    if (categoria && item.category === categoria) score += 30;
+    if (sottocategoria && item.subcategory === sottocategoria) score += 20;
+
+    const movementWords = descrizione.toLowerCase().split(' ').filter(w => w.length > 2);
+    const itemWords = item.description.toLowerCase().split(' ');
+    const commonWords = movementWords.filter(word => itemWords.includes(word));
+    score += commonWords.length * 10;
+
+    return score;
+  };
+
+
   const processFile = async () => {
     if (!file || !currentUser) return;
     setIsProcessing(true);
@@ -194,22 +239,40 @@ export function ImportMovementsDialog({
         
         const processed = result.movements;
 
-        const existingMovementKeys = new Set(
-            (allMovements || []).map(mov => `${mov.data}_${mov.descrizione.trim().toLowerCase()}_${mov.entrata}_${mov.uscita}`)
-        );
-
-        const checkedRows = processed.map(row => {
+        const existingMovementKeys = new Set((allMovements || []).map(mov => `${mov.data}_${mov.descrizione.trim().toLowerCase()}_${mov.entrata}_${mov.uscita}`));
+        const processedKeys = new Set();
+        
+        const checkedAndLinkedRows = processed.map(row => {
             const key = `${row.data}_${row.descrizione.trim().toLowerCase()}_${row.entrata}_${row.uscita}`;
+            const isDbDuplicate = existingMovementKeys.has(key);
+            const isBatchDuplicate = processedKeys.has(key);
+            if (!isBatchDuplicate) {
+                processedKeys.add(key);
+            }
+
+            let bestMatch: { item: LinkableItem, score: number } | null = null;
+            if (!isDbDuplicate && !isBatchDuplicate) {
+                const itemsForCompany = linkableItems.filter(item => item.societa === row.societa && ((row.uscita > 0 && (item.type === 'deadlines' || item.type === 'expenseForecasts')) || (row.entrata > 0 && item.type === 'incomeForecasts')));
+                
+                if (itemsForCompany.length > 0) {
+                    const scoredItems = itemsForCompany.map(item => ({ item, score: calculateSimilarity(item, row) })).sort((a, b) => b.score - a.score);
+                    if (scoredItems.length > 0 && scoredItems[0].score > 80) { // Similarity threshold
+                        bestMatch = scoredItems[0];
+                    }
+                }
+            }
+
             return {
               ...row,
-              isDuplicate: existingMovementKeys.has(key),
+              isDuplicate: isDbDuplicate || isBatchDuplicate,
+              linkedTo: bestMatch ? `${bestMatch.item.type}/${bestMatch.item.id}` : undefined,
             };
         });
 
-        setProcessedRows(checkedRows);
+        setProcessedRows(checkedAndLinkedRows);
         setStage('review');
 
-        const duplicateCount = checkedRows.filter(r => r.isDuplicate).length;
+        const duplicateCount = checkedAndLinkedRows.filter(r => r.isDuplicate).length;
         
         toast({
             title: 'Lettura Completata',
@@ -358,7 +421,7 @@ export function ImportMovementsDialog({
     </div>
   );
   
-  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> & { isDuplicate?: boolean })[], isFinal: boolean) => (
+  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string })[], isFinal: boolean) => (
      <div className="py-4 space-y-4">
         <h3 className="text-lg font-medium">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -366,41 +429,32 @@ export function ImportMovementsDialog({
             <Table className="table-fixed w-full">
                 <TableHeader><TableRow>
                     <TableHead className="w-[10%]">Data</TableHead>
-                    <TableHead className="w-[35%]">Descrizione</TableHead>
-                    <TableHead className="w-[12%]">Categoria</TableHead>
-                    <TableHead className="w-[10%]">Metodo Pag.</TableHead>
+                    <TableHead className="w-[25%]">Descrizione</TableHead>
+                    <TableHead className="w-[20%]">Collegamento Suggerito</TableHead>
                     <TableHead className="w-[8%] text-right">Entrata</TableHead>
                     <TableHead className="w-[8%] text-right">Uscita</TableHead>
                     <TableHead className="w-[7%] text-center">Società</TableHead>
                     <TableHead className="w-[10%] text-center">Stato</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                    {movements.map((row, index) => (
-                        <TableRow key={index} className={cn(
-                          'text-sm',
-                          row.status === 'manual_review' && !row.isDuplicate && 'bg-amber-50 dark:bg-amber-900/20',
-                          row.isDuplicate && 'bg-red-50 dark:bg-red-900/20'
-                        )}>
+                    {movements.map((row, index) => {
+                        const linkedItem = row.linkedTo ? linkableItems.find(item => `${item.type}/${item.id}` === row.linkedTo) : null;
+                        return (
+                        <TableRow key={index} className={cn('text-sm', row.isDuplicate && 'bg-red-50 dark:bg-red-900/20')}>
                             <TableCell className="whitespace-nowrap py-2 px-2">{formatDate(row.data)}</TableCell>
-                            <TableCell className="break-words py-2 px-2">
-                              {row.descrizione}
+                            <TableCell className="break-words py-2 px-2">{row.descrizione}</TableCell>
+                            <TableCell className="py-2 px-2">
+                                {linkedItem ? <Badge variant="secondary" className="bg-green-100 text-green-800 whitespace-normal">{linkedItem.description}</Badge> : 'Nessuno'}
                             </TableCell>
-                            <TableCell className="py-2 px-2"><Badge variant="outline" className="whitespace-nowrap">{row.categoria}</Badge></TableCell>
-                            <TableCell className="py-2 px-2">{row.metodoPag}</TableCell>
                             <TableCell className="text-right text-green-600 whitespace-nowrap py-2 px-2">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
                             <TableCell className="text-right text-red-600 whitespace-nowrap py-2 px-2">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>
                             <TableCell className="text-center py-2 px-2"><Badge variant={row.societa === 'LNC' ? 'default' : 'secondary'}>{row.societa}</Badge></TableCell>
                             <TableCell className="text-center py-2 px-2">
-                              {row.isDuplicate ? (
-                                <Badge variant="destructive">Duplicato</Badge>
-                              ) : (
-                                <Badge variant={row.status === 'manual_review' ? 'destructive' : 'default'} className={cn(row.status === 'ok' && 'bg-green-600', 'whitespace-nowrap')}>
-                                    {row.status === 'manual_review' ? 'Da Revisionare' : 'OK'}
-                                </Badge>
-                              )}
+                              {row.isDuplicate ? <Badge variant="destructive">Duplicato</Badge> : <Badge variant="outline">Nuovo</Badge>}
                             </TableCell>
                         </TableRow>
-                    ))}
+                        )
+                    })}
                 </TableBody>
             </Table>
         </ScrollArea>

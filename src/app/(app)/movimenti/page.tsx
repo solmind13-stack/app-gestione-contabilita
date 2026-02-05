@@ -212,7 +212,7 @@ export default function MovimentiPage() {
                         
                         const updateData: any = { importoEffettivo: newReceivedAmount, stato: newStatus };
                         if (newStatus !== 'Da incassare' && data.stato === 'Da incassare') {
-                            updateData.dataIncasso = newMovementData.data;
+                           updateData.dataIncasso = newMovementData.data;
                         }
                         transaction.update(linkedDocRef, updateData);
                     }
@@ -447,33 +447,76 @@ export default function MovimentiPage() {
     const handleImportMovements = async (importedMovements: Omit<Movimento, 'id'>[]): Promise<Movimento[]> => {
         if (!user || !firestore) return [];
         const newMovementsWithIds: Movimento[] = [];
+        
         try {
-            const batch = writeBatch(firestore);
-            
-            importedMovements.forEach(movement => {
-                const docRef = doc(collection(firestore, 'movements'));
-                const newMovement: Movimento = {
-                    id: docRef.id,
-                    ...movement,
-                    createdBy: user.uid,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                };
-                batch.set(docRef, newMovement);
-                newMovementsWithIds.push(newMovement);
-            });
+            await runTransaction(firestore, async (transaction) => {
+                for (const movement of importedMovements) {
+                    const docRef = doc(collection(firestore, "movements"));
+                    const newMovement: Movimento = {
+                        id: docRef.id,
+                        ...movement,
+                        createdBy: user.uid,
+                        inseritoDa: user.displayName,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    };
+                    transaction.set(docRef, newMovement);
+                    newMovementsWithIds.push(newMovement);
 
-            await batch.commit();
+                    const linkedItemId = movement.linkedTo;
+                    if (linkedItemId) {
+                        const [collectionName, docId] = linkedItemId.split('/');
+                        if (!collectionName || !docId) continue;
+                        
+                        const linkedDocRef = doc(firestore, collectionName, docId);
+                        const linkedDoc = await transaction.get(linkedDocRef);
+                        if (!linkedDoc.exists()) continue;
+
+                        if (collectionName === 'deadlines') {
+                            const data = linkedDoc.data() as Scadenza;
+                            const movementAmount = movement.uscita;
+                            const newPaidAmount = (data.importoPagato || 0) + movementAmount;
+                            const newStatus: Scadenza['stato'] = newPaidAmount >= data.importoPrevisto ? 'Pagato' : 'Parziale';
+                            const updateData: any = { importoPagato: newPaidAmount, stato: newStatus };
+                            if (data.stato === 'Da pagare') {
+                               updateData.dataPagamento = movement.data;
+                            }
+                            transaction.update(linkedDocRef, updateData);
+                        } else if (collectionName === 'expenseForecasts') {
+                            const data = linkedDoc.data() as PrevisioneUscita;
+                            const movementAmount = movement.uscita;
+                            const newEffectiveAmount = (data.importoEffettivo || 0) + movementAmount;
+                            const newStatus: PrevisioneUscita['stato'] = newEffectiveAmount >= data.importoLordo ? 'Pagato' : 'Parziale';
+                            const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
+                             if (data.stato === 'Da pagare') {
+                               updateData.dataPagamento = movement.data;
+                            }
+                            transaction.update(linkedDocRef, updateData);
+                        } else if (collectionName === 'incomeForecasts') {
+                            const data = linkedDoc.data() as PrevisioneEntrata;
+                            const movementAmount = movement.entrata;
+                            const newReceivedAmount = (data.importoEffettivo || 0) + movementAmount;
+                            const newStatus: PrevisioneEntrata['stato'] = newReceivedAmount >= data.importoLordo ? 'Incassato' : 'Parziale';
+                            const updateData: any = { importoEffettivo: newReceivedAmount, stato: newStatus };
+                            if (data.stato === 'Da incassare') {
+                               updateData.dataIncasso = movement.data;
+                            }
+                            transaction.update(linkedDocRef, updateData);
+                        }
+                    }
+                }
+            });
+            
             toast({
                 title: "Importazione completata",
-                description: `${newMovementsWithIds.length} movimenti sono stati salvati nel database.`
+                description: `${newMovementsWithIds.length} movimenti sono stati salvati e sincronizzati nel database.`
             });
             return newMovementsWithIds;
 
         } catch (error: any) {
              console.error("Error importing movements: ", error);
-             toast({ variant: 'destructive', title: 'Errore Importazione', description: `Impossibile salvare i movimenti importati. ${error.message}` });
-             return []; // Return empty array on failure
+             toast({ variant: 'destructive', title: 'Errore Importazione', description: `Impossibile salvare i movimenti. ${error.message}` });
+             return [];
         }
     };
 
@@ -599,6 +642,9 @@ export default function MovimentiPage() {
             companies={companies || []}
             categories={appSettings?.categories || {}}
             allMovements={movimentiData || []}
+            deadlines={deadlines || []}
+            expenseForecasts={expenseForecasts || []}
+            incomeForecasts={incomeForecasts || []}
         />
         <ReviewMovementsDialog
             isOpen={isReviewDialogOpen}
