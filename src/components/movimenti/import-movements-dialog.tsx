@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useUser } from '@/firebase';
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, File as FileIcon, Trash2, Check, Wand2 } from 'lucide-react';
 import type { Movimento, AppUser, CompanyProfile } from '@/lib/types';
-import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
+import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
@@ -73,7 +73,7 @@ export function ImportMovementsDialog({
   const [isDuplicateFileAlertOpen, setIsDuplicateFileAlertOpen] = useState(false);
 
   const SUPPORTED_MIME_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/pdf', 'image/png', 'image/jpeg'];
-  const ACCEPTED_FILES = ".xlsx, .pdf, .png, .jpg, .jpeg";
+  const ACCEPTED_FILES = ".xlsx,.pdf,.png,.jpg,.jpeg";
   
   const clearState = () => {
     setStage('upload');
@@ -117,11 +117,11 @@ export function ImportMovementsDialog({
   }, [selectedCompany, companies]);
   
   const validateFile = (file: File) => {
-    if (!file.type.includes('spreadsheetml')) { // Temporarily only allow excel
+    if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
         toast({
             variant: 'destructive',
             title: 'Formato File Non Supportato',
-            description: `Per favore, carica un file Excel (.xlsx). PDF e immagini saranno supportati a breve.`,
+            description: `Per favore, carica un file Excel (.xlsx), PDF o immagine (.png, .jpg).`,
         });
         return false;
     }
@@ -151,21 +151,48 @@ export function ImportMovementsDialog({
       }
   };
 
-  const processFileContent = async () => {
-    if (!file) return;
+  const processFile = async () => {
+    if (!file || !currentUser) return;
     setIsProcessing(true);
     try {
-        const fileData = await file.arrayBuffer();
-        const workbook = XLSX.read(fileData, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData: { [key: string]: any }[] = XLSX.utils.sheet_to_json(worksheet, { raw: false });
-        
-        if (!jsonData || jsonData.length === 0) {
-            throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
-        }
+        let result: { movements: (Omit<Movimento, 'id'>)[] };
 
-        const processed = processExcelDataClientSide(jsonData);
+        if (file.type.includes('spreadsheetml')) {
+            const fileData = await file.arrayBuffer();
+            const workbook = XLSX.read(fileData, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+            
+            if (!jsonData || jsonData.length === 0) {
+                throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
+            }
+
+            result = await importTransactions({
+                textContent: JSON.stringify(jsonData),
+                fileType: file.type,
+                company: selectedCompany,
+                conto: selectedAccount,
+                inseritoDa: currentUser.displayName!,
+            });
+        } else { // PDF or Image
+            const fileDataUri = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => resolve(event.target?.result as string);
+                reader.onerror = (error) => reject(error);
+                reader.readAsDataURL(file);
+            });
+
+            result = await importTransactions({
+                fileDataUri: fileDataUri,
+                fileType: file.type,
+                company: selectedCompany,
+                conto: selectedAccount,
+                inseritoDa: currentUser.displayName!,
+            });
+        }
+        
+        const processed = result.movements;
 
         const existingMovementKeys = new Set(
             (allMovements || []).map(mov => `${mov.data}_${mov.descrizione.trim().toLowerCase()}_${mov.entrata}_${mov.uscita}`)
@@ -191,7 +218,7 @@ export function ImportMovementsDialog({
         });
 
     } catch (error: any) {
-        console.error("Error reading file:", error);
+        console.error("Error processing file:", error);
         toast({ variant: 'destructive', title: 'Errore Lettura File', description: error.message || 'Impossibile leggere il file.' });
     } finally {
         setIsProcessing(false);
@@ -208,108 +235,8 @@ export function ImportMovementsDialog({
     if (wasFileImported) {
         setIsDuplicateFileAlertOpen(true);
     } else {
-        await processFileContent();
+        await processFile();
     }
-  };
-  
-  const processExcelDataClientSide = (rows: { [key: string]: any }[]): Omit<Movimento, 'id'>[] => {
-    if (!currentUser) return [];
-
-    const findColumn = (data: {[key: string]: any}, possibleKeys: string[]): any => {
-      const dataKeys = Object.keys(data).map(k => k.toLowerCase().trim());
-      for (const key of possibleKeys) {
-        const lowerKey = key.toLowerCase().trim();
-        const dataKeyIndex = dataKeys.indexOf(lowerKey);
-        if (dataKeyIndex !== -1) {
-          const originalKey = Object.keys(data)[dataKeyIndex];
-          return data[originalKey];
-        }
-      }
-      return undefined;
-    };
-    
-    const parseDateValue = (dateValue: any): string => {
-        if (!dateValue) {
-            console.warn("Received empty date value, using today's date.");
-            return new Date().toISOString().split('T')[0];
-        }
-
-        // Handle Excel's numeric date format
-        if (typeof dateValue === 'number' && dateValue > 25569) { // 25569 is 1970-01-01
-            const excelEpoch = new Date(1899, 11, 30);
-            const jsDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
-            if (!isNaN(jsDate.getTime())) {
-                const tzOffset = jsDate.getTimezoneOffset() * 60000;
-                const utcDate = new Date(jsDate.getTime() - tzOffset);
-                return utcDate.toISOString().split('T')[0];
-            }
-        }
-        
-        const dateString = String(dateValue).trim();
-
-        // Attempt to parse formats like DD/MM/YYYY or DD-MM-YY
-        const match = dateString.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
-        if (match) {
-            const day = match[1].padStart(2, '0');
-            const month = match[2].padStart(2, '0');
-            let year = match[3];
-            if (year.length === 2) {
-                year = `20${year}`;
-            }
-            return `${year}-${month}-${day}`;
-        }
-
-        // Fallback for ISO strings or other directly parsable formats
-        try {
-             const parsedDate = new Date(dateString);
-             if (!isNaN(parsedDate.getTime())) {
-                 const tzOffset = parsedDate.getTimezoneOffset() * 60000;
-                 return new Date(parsedDate.getTime() - tzOffset).toISOString().split('T')[0];
-             }
-        } catch(e) {
-             // Fall through
-        }
-        
-        console.warn(`Could not parse date "${dateString}", using today's date.`);
-        return new Date().toISOString().split('T')[0];
-    };
-
-    return rows.map(data => {
-      const description = findColumn(data, ['descrizione operazione', 'descrizione', 'description']);
-      const dateValue = findColumn(data, ['data movimento', 'data', 'date']);
-      const amountValue = findColumn(data, ['importo', 'amount']);
-      
-      if (!description || !dateValue || amountValue === undefined || amountValue === null) {
-        return null;
-      }
-      
-      const dataValida = parseDateValue(dateValue);
-      const anno = new Date(dataValida).getFullYear();
-
-      const numericAmount = parseFloat(String(amountValue).replace(',', '.'));
-      if (isNaN(numericAmount)) return null;
-
-      const entrata = numericAmount > 0 ? numericAmount : 0;
-      const uscita = numericAmount < 0 ? Math.abs(numericAmount) : 0;
-      
-      return {
-        societa: selectedCompany,
-        anno: anno,
-        data: dataValida,
-        descrizione: String(description),
-        categoria: 'Da categorizzare',
-        sottocategoria: 'Da categorizzare',
-        entrata: entrata,
-        uscita: uscita,
-        iva: 0.22,
-        conto: selectedAccount || '',
-        inseritoDa: currentUser.displayName,
-        operatore: `Acquisizione da ${currentUser.displayName}`,
-        metodoPag: 'Importato',
-        note: `Importato da file: ${file?.name}`,
-        status: 'manual_review' as const,
-      };
-    }).filter((mov): mov is NonNullable<typeof mov> => mov !== null);
   };
   
   const handleImport = async (movementsToImport: typeof processedRows) => {
@@ -342,7 +269,7 @@ export function ImportMovementsDialog({
     for (let i = 0; i < importedMovements.length; i++) {
         const movement = importedMovements[i];
         try {
-            const result = await categorizeTransaction({ description: movement.descrizione });
+            const result = await import('/ai/flows/categorize-transactions-with-ai-suggestions').then(m => m.categorizeTransaction({ description: movement.descrizione }));
             if (result && result.category && result.category !== 'Da categorizzare') {
                 const updatedMov = { 
                     ...movement, 
@@ -417,9 +344,9 @@ export function ImportMovementsDialog({
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
                     <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
-                    <p className="text-xs text-muted-foreground">Solo file Excel (.xlsx)</p>
+                    <p className="text-xs text-muted-foreground">XLSX, PDF, PNG, JPG</p>
                 </div>
-                <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept=".xlsx" />
+                <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept={ACCEPTED_FILES} />
             </label>
         </div> 
         {file && (
@@ -495,7 +422,7 @@ export function ImportMovementsDialog({
                     <AlertDialogCancel>Annulla</AlertDialogCancel>
                     <AlertDialogAction onClick={async () => {
                         setIsDuplicateFileAlertOpen(false);
-                        await processFileContent();
+                        await processFile();
                     }}>
                         Procedi Comunque
                     </AlertDialogAction>
@@ -506,7 +433,7 @@ export function ImportMovementsDialog({
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
            <DialogDescription>
-            {stage === 'upload' && "Carica un file Excel (.xlsx) per estrarre i movimenti."}
+            {stage === 'upload' && "Carica un file (Excel, PDF, immagine) per estrarre i movimenti."}
             {stage === 'review' && "Rivedi i dati estratti prima di salvarli nel database."}
             {stage === 'ai_progress' && "I movimenti sono stati importati. Ora puoi avviare l'analisi AI per la categorizzazione."}
             {stage === 'final_review' && "Analisi AI completata. Rivedi i risultati finali."}
