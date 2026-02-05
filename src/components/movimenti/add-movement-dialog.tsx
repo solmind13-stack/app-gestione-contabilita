@@ -474,8 +474,13 @@ export function AddMovementDialog({
                 name="linkedTo"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Collega a Voce Esistente (Opzionale)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isEditMode}>
+                    <FormLabel>
+                        Collega a Voce Esistente (Opzionale)
+                        {field.value && field.value !== 'nessuno' && openItems.some(i => `${i.type}/${i.id}` === field.value) && (
+                            <Badge variant="secondary" className="ml-2 bg-green-100 text-green-800">Suggerimento</Badge>
+                        )}
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Seleziona per collegare il pagamento a una previsione/scadenza..." />
