@@ -135,7 +135,6 @@ export default function MovimentiPage() {
         
         try {
             await runTransaction(firestore, async (transaction) => {
-                // 1. If a link is provided, first READ the linked document
                 let linkedDocRef;
                 let linkedDoc;
                 if (linkedItemId) {
@@ -149,7 +148,6 @@ export default function MovimentiPage() {
                     }
                 }
                 
-                // 2. Perform all WRITES
                 const newMovementRef = doc(collection(firestore, "movements"));
                 const movementPayload = {
                     ...newMovementData,
@@ -157,47 +155,66 @@ export default function MovimentiPage() {
                     inseritoDa: user.displayName,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
-                    linkedTo: linkedItemId || null, // Ensure linkedTo is null, not undefined
+                    linkedTo: linkedItemId || null,
                     status: 'ok' as const,
                 };
                 transaction.set(newMovementRef, movementPayload);
 
-                // 3. Update the linked document if it exists
                 if (linkedDocRef && linkedDoc) {
                     const collectionName = linkedDocRef.parent.id;
                     if (collectionName === 'deadlines') {
                         const data = linkedDoc.data() as Scadenza;
                         const movementAmount = newMovementData.uscita;
                         const newPaidAmount = (data.importoPagato || 0) + movementAmount;
-                        const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : 'Parziale';
                         
-                        transaction.update(linkedDocRef, {
-                            importoPagato: newPaidAmount,
-                            stato: newStatus,
-                            dataPagamento: newMovementData.data
-                        });
+                        let newStatus: Scadenza['stato'] = 'Da pagare';
+                        if (newPaidAmount >= data.importoPrevisto) {
+                            newStatus = 'Pagato';
+                        } else if (newPaidAmount > 0) {
+                            newStatus = 'Parziale';
+                        }
+                        
+                        const updateData: any = { importoPagato: newPaidAmount, stato: newStatus };
+                        if (newStatus !== 'Da pagare' && data.stato === 'Da pagare') {
+                           updateData.dataPagamento = newMovementData.data;
+                        }
+                        transaction.update(linkedDocRef, updateData);
+
                     } else if (collectionName === 'expenseForecasts') {
                         const data = linkedDoc.data() as PrevisioneUscita;
                         const movementAmount = newMovementData.uscita;
-                        const newPaidAmount = (data.importoEffettivo || 0) + movementAmount;
-                        const newStatus = newPaidAmount >= data.importoLordo ? 'Pagato' : 'Parziale';
+                        const newEffectiveAmount = (data.importoEffettivo || 0) + movementAmount;
                         
-                        transaction.update(linkedDocRef, {
-                            importoEffettivo: newPaidAmount,
-                            stato: newStatus,
-                            dataPagamento: newMovementData.data
-                        });
+                        let newStatus: PrevisioneUscita['stato'] = 'Da pagare';
+                        if (newEffectiveAmount >= data.importoLordo) {
+                            newStatus = 'Pagato';
+                        } else if (newEffectiveAmount > 0) {
+                            newStatus = 'Parziale';
+                        }
+
+                        const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
+                        if (newStatus !== 'Da pagare' && data.stato === 'Da pagare') {
+                           updateData.dataPagamento = newMovementData.data;
+                        }
+                        transaction.update(linkedDocRef, updateData);
+
                     } else if (collectionName === 'incomeForecasts') {
                         const data = linkedDoc.data() as PrevisioneEntrata;
                         const movementAmount = newMovementData.entrata;
                         const newReceivedAmount = (data.importoEffettivo || 0) + movementAmount;
-                        const newStatus = newReceivedAmount >= data.importoLordo ? 'Incassato' : 'Parziale';
-
-                        transaction.update(linkedDocRef, {
-                            importoEffettivo: newReceivedAmount,
-                            stato: newStatus,
-                            dataIncasso: newMovementData.data
-                        });
+                        
+                        let newStatus: PrevisioneEntrata['stato'] = 'Da incassare';
+                        if (newReceivedAmount >= data.importoLordo) {
+                            newStatus = 'Incassato';
+                        } else if (newReceivedAmount > 0) {
+                            newStatus = 'Parziale';
+                        }
+                        
+                        const updateData: any = { importoEffettivo: newReceivedAmount, stato: newStatus };
+                        if (newStatus !== 'Da incassare' && data.stato === 'Da incassare') {
+                            updateData.dataIncasso = newMovementData.data;
+                        }
+                        transaction.update(linkedDocRef, updateData);
                     }
                 }
             });
