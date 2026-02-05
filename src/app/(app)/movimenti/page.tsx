@@ -70,10 +70,10 @@ export default function MovimentiPage() {
     const settingsDocRef = useMemo(() => firestore ? doc(firestore, 'settings', 'appConfiguration') : null, [firestore]);
     const { data: appSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
     
-    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user?.uid]);
-    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user?.uid]);
-    const expenseForecastsQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user?.uid]);
-    const incomeForecastsQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user?.uid]);
+    const movimentiQuery = useMemo(() => getQuery(firestore, user, 'movements'), [firestore, user]);
+    const deadlinesQuery = useMemo(() => getQuery(firestore, user, 'deadlines'), [firestore, user]);
+    const expenseForecastsQuery = useMemo(() => getQuery(firestore, user, 'expenseForecasts'), [firestore, user]);
+    const incomeForecastsQuery = useMemo(() => getQuery(firestore, user, 'incomeForecasts'), [firestore, user]);
     const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
     
 
@@ -237,14 +237,22 @@ export default function MovimentiPage() {
                         const change = operation === 'add' ? amount : -amount;
                         const newPaidAmount = (data.importoPagato || 0) + change;
                         const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
-                        transaction.update(linkedDocRef, { importoPagato: newPaidAmount, stato: newStatus });
+                        
+                        const updateData: any = { importoPagato: newPaidAmount, stato: newStatus };
+                        if (newStatus === 'Da pagare') {
+                            updateData.dataPagamento = null;
+                        } else if (operation === 'add' && data.stato === 'Da pagare') {
+                            updateData.dataPagamento = updatedMovement.data;
+                        }
+                        transaction.update(linkedDocRef, updateData);
+
                     } else if (collectionName === 'expenseForecasts' || collectionName === 'incomeForecasts') {
                         const data = linkedDocSnap.data() as PrevisioneUscita | PrevisioneEntrata;
                         const change = operation === 'add' ? amount : -amount;
                         const newEffectiveAmount = (data.importoEffettivo || 0) + change;
                         
                         const isExpense = collectionName === 'expenseForecasts';
-                        let newStatus;
+                        let newStatus: string;
                         if (newEffectiveAmount >= data.importoLordo) {
                             newStatus = isExpense ? 'Pagato' : 'Incassato';
                         } else if (newEffectiveAmount > 0) {
@@ -252,7 +260,22 @@ export default function MovimentiPage() {
                         } else {
                             newStatus = isExpense ? 'Da pagare' : 'Da incassare';
                         }
-                        transaction.update(linkedDocRef, { importoEffettivo: newEffectiveAmount, stato: newStatus });
+
+                        const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
+                        if (isExpense) {
+                            if (newStatus === 'Da pagare') {
+                                updateData.dataPagamento = null;
+                            } else if (operation === 'add' && data.stato === 'Da pagare') {
+                                updateData.dataPagamento = updatedMovement.data;
+                            }
+                        } else { // incomeForecast
+                             if (newStatus === 'Da incassare') {
+                                updateData.dataIncasso = null;
+                            } else if (operation === 'add' && data.stato === 'Da incassare') {
+                                updateData.dataIncasso = updatedMovement.data;
+                            }
+                        }
+                        transaction.update(linkedDocRef, updateData);
                     }
                 };
 
@@ -327,28 +350,41 @@ export default function MovimentiPage() {
                     const linkedDocSnap = await transaction.get(linkedDocRef);
                     
                     if (linkedDocSnap.exists()) {
-                        
                         if (collectionName === 'deadlines') {
                             const data = linkedDocSnap.data() as Scadenza;
                             const movementAmount = movement.uscita;
                             const newPaidAmount = (data.importoPagato || 0) - movementAmount;
                             const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
-                            transaction.update(linkedDocRef, { importoPagato: newPaidAmount, stato: newStatus });
-                        } else if (collectionName === 'expenseForecasts' || collectionName === 'incomeForecasts') {
-                            const data = linkedDocSnap.data() as PrevisioneUscita | PrevisioneEntrata;
-                            const movementAmount = movement.uscita > 0 ? movement.uscita : movement.entrata;
-                            const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
                             
-                            let newStatus;
-                            const isExpense = collectionName === 'expenseForecasts';
-                            if (newEffectiveAmount >= data.importoLordo) {
-                                newStatus = isExpense ? 'Pagato' : 'Incassato';
-                            } else if (newEffectiveAmount > 0) {
-                                newStatus = 'Parziale';
-                            } else {
-                                newStatus = isExpense ? 'Da pagare' : 'Da incassare';
+                            const updateData: any = { importoPagato: newPaidAmount, stato: newStatus };
+                            if (newStatus === 'Da pagare') {
+                                updateData.dataPagamento = null;
                             }
-                            transaction.update(linkedDocRef, { importoEffettivo: newEffectiveAmount, stato: newStatus });
+                            transaction.update(linkedDocRef, updateData);
+
+                        } else if (collectionName === 'expenseForecasts') {
+                            const data = linkedDocSnap.data() as PrevisioneUscita;
+                            const movementAmount = movement.uscita;
+                            const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
+                            const newStatus = newEffectiveAmount >= data.importoLordo ? 'Pagato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da pagare');
+
+                            const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
+                            if (newStatus === 'Da pagare') {
+                                updateData.dataPagamento = null;
+                            }
+                            transaction.update(linkedDocRef, updateData);
+                        
+                        } else if (collectionName === 'incomeForecasts') {
+                            const data = linkedDocSnap.data() as PrevisioneEntrata;
+                            const movementAmount = movement.entrata;
+                            const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
+                            const newStatus = newEffectiveAmount >= data.importoLordo ? 'Incassato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da incassare');
+
+                            const updateData: any = { importoEffettivo: newEffectiveAmount, stato: newStatus };
+                            if (newStatus === 'Da incassare') {
+                                updateData.dataIncasso = null;
+                            }
+                            transaction.update(linkedDocRef, updateData);
                         }
                     } else {
                         console.warn(`Documento collegato ${movement.linkedTo} non trovato durante l'eliminazione.`);
