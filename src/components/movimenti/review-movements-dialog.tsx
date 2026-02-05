@@ -21,8 +21,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useUser } from '@/firebase';
 import { writeBatch, doc } from 'firebase/firestore';
 import type { Movimento, AppSettings, TrainingFeedback } from '@/lib/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 
 interface ReviewMovementsDialogProps {
   isOpen: boolean;
@@ -54,13 +56,29 @@ export function ReviewMovementsDialog({
     }
   }, [isOpen, movementsToReview]);
 
-  const handleFieldChange = (id: string, field: keyof Movimento, value: any) => {
+  const handleFieldChange = (id: string, field: keyof Movimento | 'importo', value: any) => {
     setEditedMovements(prev =>
       prev.map(mov => {
         if (mov.id === id) {
-          const updatedMov = { ...mov, [field]: value };
-          if (field === 'categoria') {
-            updatedMov.sottocategoria = ''; // Reset subcategory when category changes
+          const updatedMov = { ...mov };
+
+          if (field === 'importo') {
+              const newAmount = parseFloat(value) || 0;
+              // To determine if it was an income or expense, we check the original movement
+              const originalMovement = movementsToReview.find(m => m.id === id);
+              
+              if (originalMovement && originalMovement.entrata > 0) {
+                  updatedMov.entrata = newAmount;
+                  updatedMov.uscita = 0;
+              } else {
+                  updatedMov.uscita = newAmount;
+                  updatedMov.entrata = 0;
+              }
+          } else if (field === 'categoria') {
+            updatedMov.categoria = value;
+            updatedMov.sottocategoria = ''; // Reset subcategory
+          } else {
+            (updatedMov as any)[field as keyof Movimento] = value;
           }
           return updatedMov;
         }
@@ -68,6 +86,7 @@ export function ReviewMovementsDialog({
       })
     );
   };
+
 
   const handleSelectAll = (checked: boolean) => {
     setSelectedIds(checked ? editedMovements.map(m => m.id) : []);
@@ -164,7 +183,7 @@ export function ReviewMovementsDialog({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12"><Checkbox onCheckedChange={(e) => handleSelectAll(e as boolean)} checked={selectedIds.length > 0 && selectedIds.length === editedMovements.length && editedMovements.length > 0} /></TableHead>
-                <TableHead className="w-28">Data</TableHead>
+                <TableHead className="w-36">Data</TableHead>
                 <TableHead>Descrizione</TableHead>
                 <TableHead className="w-32 text-right">Importo</TableHead>
                 <TableHead className="w-48">Categoria</TableHead>
@@ -180,9 +199,30 @@ export function ReviewMovementsDialog({
                 return (
                   <TableRow key={mov.id} className="text-sm">
                     <TableCell className="p-2"><Checkbox onCheckedChange={(checked) => handleSelectRow(mov.id, checked as boolean)} checked={selectedIds.includes(mov.id)} /></TableCell>
-                    <TableCell className="p-2 whitespace-nowrap">{formatDate(mov.data)}</TableCell>
-                    <TableCell className="p-2 break-words">{mov.descrizione}</TableCell>
-                    <TableCell className="p-2 text-right whitespace-nowrap">{formatCurrency(mov.entrata > 0 ? mov.entrata : mov.uscita)}</TableCell>
+                    <TableCell className="p-2">
+                        <Input
+                            type="date"
+                            value={mov.data}
+                            onChange={(e) => handleFieldChange(mov.id, 'data', e.target.value)}
+                            className="h-9"
+                        />
+                    </TableCell>
+                    <TableCell className="p-2">
+                         <Textarea
+                            value={mov.descrizione}
+                            onChange={(e) => handleFieldChange(mov.id, 'descrizione', e.target.value)}
+                            className="min-h-[80px]"
+                        />
+                    </TableCell>
+                    <TableCell className="p-2">
+                         <Input
+                            type="number"
+                            value={mov.entrata > 0 ? mov.entrata : mov.uscita}
+                            onChange={(e) => handleFieldChange(mov.id, 'importo', e.target.value)}
+                            className="h-9 text-right"
+                            step="0.01"
+                        />
+                    </TableCell>
                     <TableCell className="p-2">
                       <Select value={mov.categoria} onValueChange={(value) => handleFieldChange(mov.id, 'categoria', value)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
