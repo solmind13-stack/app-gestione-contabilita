@@ -41,7 +41,8 @@ import { doc, writeBatch } from 'firebase/firestore';
 type ImportStage = 'upload' | 'review' | 'ai_progress' | 'final_review';
 
 const getJaccardIndex = (str1: string, str2: string): number => {
-    const clean = (s: string) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").split(' ').filter(w => w.length > 2 && !['del', 'su', 'e', 'di', 'a'].includes(w));
+    const noise = new Set(['e', 'di', 'a', 'da', 'in', 'con', 'su', 'per', 'tra', 'fra', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una', 'del', 'dello', 'della', 'dei', 'degli', 'delle', 'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'dal', 'dallo', 'dalla', 'dai', 'dagli', 'dalle', 'nel', 'nello', 'nella', 'nei', 'negli', 'nelle', 'col', 'coi', 'sul', 'sullo', 'sulla', 'sui', 'sugli', 'sulle', 'pagamento', 'fattura', 'accredito', 'addebito', 'sdd', 'rata', 'canone', 'ft', 'rif', 'n', 'num', 'vs']);
+    const clean = (s: string) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").split(' ').filter(w => w.length > 2 && !noise.has(w));
     const set1 = new Set(clean(str1));
     const set2 = new Set(clean(str2));
     if (set1.size === 0 || set2.size === 0) return 0;
@@ -193,8 +194,15 @@ export function ImportMovementsDialog({
     
     // Date proximity
     try {
-        const diffDays = Math.abs((parseDate(paymentDateStr).getTime() - parseDate(item.date).getTime()) / (1000 * 3600 * 24));
-        score += Math.max(0, 40 - (diffDays / 3));
+        const paymentDate = parseDate(paymentDateStr);
+        const itemDate = parseDate(item.date);
+        const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
+        
+        if (diffDays >= 0) { // Payment is on or after the due date
+             score += Math.max(0, 60 - diffDays * 2); // Loses 2 points per day, drops to 0 after 30 days
+        } else { // Payment is before the due date (pre-payment)
+            score += Math.max(0, 60 + diffDays * 0.5); // Loses 0.5 points per day before, less strict
+        }
     } catch(e) {/* ignore */}
 
     // Description similarity
@@ -287,7 +295,7 @@ export function ImportMovementsDialog({
             return {
               ...row,
               isDuplicate: isDbDuplicate || isBatchDuplicate,
-              linkedTo: bestMatch ? `${bestMatch.item.type}/${bestMatch.item.id}` : undefined,
+              linkedTo: bestMatch ? `${bestMatch.item.type}/${bestMatch.id}` : undefined,
             };
         });
 
@@ -397,10 +405,9 @@ export function ImportMovementsDialog({
   const currentCompanyDetails = companies.find(c => c.sigla === selectedCompany);
   const companyAccounts = currentCompanyDetails?.conti || [];
   
-  const { nonDuplicateRows, duplicateRows } = useMemo(() => {
+  const { nonDuplicateRows } = useMemo(() => {
     return {
         nonDuplicateRows: processedRows.filter(r => !r.isDuplicate),
-        duplicateRows: processedRows.filter(r => r.isDuplicate),
     }
   }, [processedRows]);
 

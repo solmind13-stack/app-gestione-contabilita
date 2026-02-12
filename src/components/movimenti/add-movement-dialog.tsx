@@ -79,7 +79,8 @@ interface AddMovementDialogProps {
 }
 
 const getJaccardIndex = (str1: string, str2: string): number => {
-    const clean = (s: string) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").split(' ').filter(w => w.length > 2 && !['del', 'su', 'e', 'di', 'a'].includes(w));
+    const noise = new Set(['e', 'di', 'a', 'da', 'in', 'con', 'su', 'per', 'tra', 'fra', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una', 'del', 'dello', 'della', 'dei', 'degli', 'delle', 'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'dal', 'dallo', 'dalla', 'dai', 'dagli', 'dalle', 'nel', 'nello', 'nella', 'nei', 'negli', 'nelle', 'col', 'coi', 'sul', 'sullo', 'sulla', 'sui', 'sugli', 'sulle', 'pagamento', 'fattura', 'accredito', 'addebito', 'sdd', 'rata', 'canone', 'ft', 'rif', 'n', 'num', 'vs']);
+    const clean = (s: string) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").split(' ').filter(w => w.length > 2 && !noise.has(w));
     const set1 = new Set(clean(str1));
     const set2 = new Set(clean(str2));
     if (set1.size === 0 || set2.size === 0) return 0;
@@ -112,12 +113,18 @@ const calculateSimilarity = (item: LinkableItem, formValues: Partial<FormValues>
         }
     }
 
-    // Date proximity (max 40 points)
+    // Date proximity (max 60 points) - MORE AGGRESSIVE
     try {
         const paymentDate = parseDate(paymentDateStr);
         const itemDate = parseDate(item.date);
-        const diffDays = Math.abs((paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24));
-        score += Math.max(0, 40 - (diffDays / 3)); // Lose ~1 point every 3 days away.
+        const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
+        
+        if (diffDays >= 0) { // Payment is on or after the due date
+             score += Math.max(0, 60 - diffDays * 2); // Loses 2 points per day, drops to 0 after 30 days
+        } else { // Payment is before the due date (pre-payment)
+            score += Math.max(0, 60 + diffDays * 0.5); // Loses 0.5 points per day before, less strict
+        }
+
     } catch (e) {
         // Ignore date if parsing fails
     }
