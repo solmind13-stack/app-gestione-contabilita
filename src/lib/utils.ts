@@ -25,18 +25,29 @@ export function formatDate(date: string | Date, formatStr: string = 'dd/MM/yyyy'
 }
 
 /**
- * Parses a 'YYYY-MM-DD' string into a Date object, avoiding timezone issues.
- * new Date('YYYY-MM-DD') can result in the previous day depending on the timezone.
- * This function ensures the date is parsed as local time.
+ * Parses a 'YYYY-MM-DD' string or a Date object into a local Date object.
+ * It's robust against timezone issues that `new Date('YYYY-MM-DD')` can cause.
  */
-export function parseDate(dateString: string): Date {
-  if (!/^\d{4}-\d{2}-\d{2}/.test(dateString)) {
-    // throw new Error(`Invalid date format: "${dateString}". Expected "YYYY-MM-DD".`);
-    // Return a default invalid date that can be checked with isNaN(date.getTime())
-    return new Date('invalid');
+export function parseDate(date: string | Date): Date {
+  if (date instanceof Date) {
+    return date;
   }
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day);
+  if (typeof date === 'string') {
+    // Attempt to handle ISO 8601 with or without time
+     if (/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(date)) {
+        const [datePart] = date.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        return new Date(year, month - 1, day);
+     }
+     // Handle DD/MM/YYYY
+     if (/^\d{2}\/\d{2}\/\d{4}$/.test(date)) {
+        const [day, month, year] = date.split('/').map(Number);
+        return new Date(year, month - 1, day);
+     }
+  }
+  // If format is not recognized or input is not a string/date, return an invalid date
+  // which can be checked with isNaN(date.getTime())
+  return new Date('invalid');
 }
 
 

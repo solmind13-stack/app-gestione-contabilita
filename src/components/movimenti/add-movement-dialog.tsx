@@ -41,7 +41,7 @@ import { CATEGORIE, IVA_PERCENTAGES, METODI_PAGAMENTO } from '@/lib/constants';
 import { categorizeTransaction } from '@/ai/flows/categorize-transactions-with-ai-suggestions';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
+import { formatCurrency, formatDate, maskAccountNumber, parseDate } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 
@@ -78,47 +78,63 @@ interface AddMovementDialogProps {
   companies: CompanyProfile[];
 }
 
-// Function to calculate similarity score
+const getJaccardIndex = (str1: string, str2: string): number => {
+    const clean = (s: string) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").split(' ').filter(w => w.length > 2 && !['del', 'su', 'e', 'di', 'a'].includes(w));
+    const set1 = new Set(clean(str1));
+    const set2 = new Set(clean(str2));
+    if (set1.size === 0 || set2.size === 0) return 0;
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+    return intersection.size / union.size;
+};
+
 const calculateSimilarity = (item: LinkableItem, formValues: Partial<FormValues>): number => {
     let score = 0;
-    const { societa, importo, descrizione, categoria, sottocategoria } = formValues;
+    const { societa, importo, descrizione, categoria, sottocategoria, data: paymentDateStr } = formValues;
 
-    if (!societa || !importo || importo === 0 || !descrizione) return 0;
+    if (!societa || !importo || importo === 0 || !descrizione || !paymentDateStr) return 0;
 
     // Company match is essential
     if (item.societa !== societa) {
         return -1; // Exclude items from other companies
     }
 
-    // Amount match (very important)
+    // Amount match (max 100 points)
     if (item.amount && importo) {
         const difference = Math.abs(item.amount - importo);
-        if (difference === 0) {
-            score += 100; // Perfect amount match
-        } else if (importo < item.amount) {
-            // Partial payment scenario
-            score += Math.max(0, 70 - (difference / item.amount) * 100);
-        } else {
+        if (difference < 0.02) { // Almost perfect match
+            score += 100;
+        } else if (importo < item.amount) { // Partial payment
+            const ratio = importo / item.amount;
+            score += 20 + (ratio * 50); // Base score for partial + proportional score
+        } else { // Overpayment or different amount
              score += Math.max(0, 50 - (difference / item.amount) * 100);
         }
     }
-    
-    // Category match
-    if (categoria && item.category === categoria) {
-        score += 30;
+
+    // Date proximity (max 40 points)
+    try {
+        const paymentDate = parseDate(paymentDateStr);
+        const itemDate = parseDate(item.date);
+        const diffDays = Math.abs((paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24));
+        score += Math.max(0, 40 - (diffDays / 3)); // Lose ~1 point every 3 days away.
+    } catch (e) {
+        // Ignore date if parsing fails
     }
+
+    // Description Jaccard similarity (max 50 points)
+    const jaccardIndex = getJaccardIndex(descrizione, item.description);
+    score += jaccardIndex * 50;
     
-    // Subcategory match
-    if (sottocategoria && item.subcategory === sottocategoria) {
+    // Category match (20 points)
+    if (categoria && item.category === categoria) {
         score += 20;
     }
-
-
-    // Description match (simple keyword check)
-    const movementWords = descrizione.toLowerCase().split(' ').filter(w => w.length > 2);
-    const itemWords = item.description.toLowerCase().split(' ');
-    const commonWords = movementWords.filter(word => itemWords.includes(word));
-    score += commonWords.length * 10;
+    
+    // Subcategory match (10 points)
+    if (sottocategoria && item.subcategory === sottocategoria) {
+        score += 10;
+    }
 
     return score;
 };
@@ -195,6 +211,7 @@ export function AddMovementDialog({
   const watchedDescrizione = form.watch('descrizione');
   const watchedCategoria = form.watch('categoria');
   const watchedSottocategoria = form.watch('sottocategoria');
+  const watchedData = form.watch('data');
 
   useEffect(() => {
     const subscription = form.watch((value, { name, type }) => {
@@ -263,18 +280,32 @@ export function AddMovementDialog({
         importo: watchedImporto,
         descrizione: watchedDescrizione,
         categoria: watchedCategoria,
-        sottocategoria: watchedSottocategoria
+        sottocategoria: watchedSottocategoria,
+        data: watchedData
     };
     
     // Calculate scores and sort
     const scoredItems = items
         .map(item => ({ item, score: calculateSimilarity(item, formValuesForSimilarity) }))
         .filter(scored => scored.score >= 0) // Filter out items from wrong company
-        .sort((a, b) => b.score - a.score);
+        .sort((a, b) => {
+            // Primary sort: by score, descending
+            if (a.score > b.score) return -1;
+            if (a.score < b.score) return 1;
+
+            // Secondary sort (tie-breaker): by date, ascending (oldest first)
+            try {
+                const dateA = parseDate(a.item.date).getTime();
+                const dateB = parseDate(b.item.date).getTime();
+                return dateA - dateB;
+            } catch (e) {
+                return 0; // Don't sort by date if parsing fails
+            }
+        });
 
     return scoredItems.map(si => si.item);
 
-  }, [watchedTipo, watchedSocieta, watchedImporto, watchedDescrizione, watchedCategoria, watchedSottocategoria, deadlines, expenseForecasts, incomeForecasts]);
+  }, [watchedTipo, watchedSocieta, watchedImporto, watchedDescrizione, watchedCategoria, watchedSottocategoria, watchedData, deadlines, expenseForecasts, incomeForecasts]);
 
     // Effect to pre-select the best match
     useEffect(() => {
@@ -288,6 +319,7 @@ export function AddMovementDialog({
                 descrizione: watchedDescrizione,
                 categoria: watchedCategoria,
                 sottocategoria: watchedSottocategoria,
+                data: watchedData
             };
             const bestScore = calculateSimilarity(bestMatch, formValuesForSimilarity);
             
@@ -300,7 +332,7 @@ export function AddMovementDialog({
         } else {
              form.setValue('linkedTo', 'nessuno');
         }
-    }, [watchedSocieta, watchedImporto, watchedDescrizione, watchedCategoria, watchedSottocategoria, openItems, form, isEditMode]);
+    }, [watchedSocieta, watchedImporto, watchedDescrizione, watchedCategoria, watchedSottocategoria, watchedData, openItems, form, isEditMode]);
 
     // Effect to set IVA to 0 for "Tasse" category
     useEffect(() => {

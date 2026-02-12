@@ -30,7 +30,7 @@ import type { Movimento, AppUser, CompanyProfile, LinkableItem, Scadenza, Previs
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { formatCurrency, formatDate, maskAccountNumber } from '@/lib/utils';
+import { formatCurrency, formatDate, maskAccountNumber, parseDate } from '@/lib/utils';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
@@ -39,6 +39,16 @@ import { doc, writeBatch } from 'firebase/firestore';
 
 
 type ImportStage = 'upload' | 'review' | 'ai_progress' | 'final_review';
+
+const getJaccardIndex = (str1: string, str2: string): number => {
+    const clean = (s: string) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").split(' ').filter(w => w.length > 2 && !['del', 'su', 'e', 'di', 'a'].includes(w));
+    const set1 = new Set(clean(str1));
+    const set2 = new Set(clean(str2));
+    if (set1.size === 0 || set2.size === 0) return 0;
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+    return intersection.size / union.size;
+};
 
 export function ImportMovementsDialog({
   isOpen,
@@ -167,30 +177,31 @@ export function ImportMovementsDialog({
 
   const calculateSimilarity = (item: LinkableItem, movement: Omit<Movimento, 'id'>): number => {
     let score = 0;
-    const { societa, descrizione, categoria, sottocategoria } = movement;
+    const { societa, descrizione, categoria, sottocategoria, data: paymentDateStr } = movement;
     const importo = movement.entrata > 0 ? movement.entrata : movement.uscita;
 
-    if (!societa || !importo || importo === 0 || !descrizione) return 0;
+    if (!societa || !importo || importo === 0 || !descrizione || !paymentDateStr) return 0;
     if (item.societa !== societa) return -1;
 
+    // Amount match
     if (item.amount && importo) {
         const difference = Math.abs(item.amount - importo);
-        if (difference < 0.02) { // Allow for tiny rounding differences
-            score += 100;
-        } else if (importo < item.amount) {
-            score += Math.max(0, 70 - (difference / item.amount) * 100);
-        } else {
-             score += Math.max(0, 50 - (difference / item.amount) * 100);
-        }
+        if (difference < 0.02) { score += 100; }
+        else if (importo < item.amount) { score += 20 + ((importo / item.amount) * 50); }
+        else { score += Math.max(0, 50 - (difference / item.amount) * 100); }
     }
     
-    if (categoria && item.category === categoria) score += 30;
-    if (sottocategoria && item.subcategory === sottocategoria) score += 20;
+    // Date proximity
+    try {
+        const diffDays = Math.abs((parseDate(paymentDateStr).getTime() - parseDate(item.date).getTime()) / (1000 * 3600 * 24));
+        score += Math.max(0, 40 - (diffDays / 3));
+    } catch(e) {/* ignore */}
 
-    const movementWords = descrizione.toLowerCase().split(' ').filter(w => w.length > 2);
-    const itemWords = item.description.toLowerCase().split(' ');
-    const commonWords = movementWords.filter(word => itemWords.includes(word));
-    score += commonWords.length * 10;
+    // Description similarity
+    score += getJaccardIndex(descrizione, item.description) * 50;
+    
+    if (categoria && item.category === categoria) score += 20;
+    if (sottocategoria && item.subcategory === sottocategoria) score += 10;
 
     return score;
   };
@@ -255,7 +266,18 @@ export function ImportMovementsDialog({
                 const itemsForCompany = linkableItems.filter(item => item.societa === row.societa && ((row.uscita > 0 && (item.type === 'deadlines' || item.type === 'expenseForecasts')) || (row.entrata > 0 && item.type === 'incomeForecasts')));
                 
                 if (itemsForCompany.length > 0) {
-                    const scoredItems = itemsForCompany.map(item => ({ item, score: calculateSimilarity(item, row) })).sort((a, b) => b.score - a.score);
+                    const scoredItems = itemsForCompany
+                        .map(item => ({ item, score: calculateSimilarity(item, row) }))
+                        .sort((a, b) => {
+                            if (a.score > b.score) return -1;
+                            if (a.score < b.score) return 1;
+                            try {
+                                return parseDate(a.item.date).getTime() - parseDate(b.item.date).getTime();
+                            } catch {
+                                return 0;
+                            }
+                        });
+
                     if (scoredItems.length > 0 && scoredItems[0].score > 80) { // Similarity threshold
                         bestMatch = scoredItems[0];
                     }
