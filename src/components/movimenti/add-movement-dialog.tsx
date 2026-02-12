@@ -13,7 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Form,
   FormControl,
@@ -156,6 +156,7 @@ export function AddMovementDialog({
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const [confirmationData, setConfirmationData] = useState<{ data: FormValues; match: LinkableItem } | null>(null);
   
   const isEditMode = !!movementToEdit;
 
@@ -197,13 +198,19 @@ export function AddMovementDialog({
           linkedTo: 'nessuno',
         });
       }
-  }, [isOpen, isEditMode, movementToEdit, defaultCompany, form]);
+  }, [isEditMode, movementToEdit, defaultCompany, form]);
 
   useEffect(() => {
     if (isOpen) {
       resetForm();
     }
   }, [isOpen, resetForm]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setConfirmationData(null);
+    }
+  }, [isOpen]);
   
   const watchedSocieta = form.watch('societa');
   const watchedTipo = form.watch('tipo');
@@ -341,11 +348,16 @@ export function AddMovementDialog({
         }
     }, [watchedCategoria, form]);
 
-
-  const onSubmit = async (data: FormValues) => {
+  const proceedWithSave = async (data: FormValues, linkConfirmed: boolean) => {
+    setConfirmationData(null);
     setIsSubmitting(true);
-    const linkedItemId = data.linkedTo === 'nessuno' ? undefined : data.linkedTo;
-    
+
+    let finalLinkedTo = data.linkedTo;
+    if (linkConfirmed && confirmationData) {
+        finalLinkedTo = `${confirmationData.match.type}/${confirmationData.match.id}`;
+    }
+    const linkedItemId = finalLinkedTo === 'nessuno' ? undefined : finalLinkedTo;
+
     const dataToSave: Omit<Movimento, 'id'> = {
         societa: data.societa,
         data: data.data,
@@ -371,6 +383,38 @@ export function AddMovementDialog({
     }
     setIsSubmitting(false);
     setIsOpen(false);
+  }
+
+
+  const onSubmit = async (data: FormValues) => {
+    const SIMILARITY_THRESHOLD = 100;
+    const userHasLinked = data.linkedTo && data.linkedTo !== 'nessuno';
+
+    if (userHasLinked) {
+        await proceedWithSave(data, false);
+        return;
+    }
+
+    const formValuesForSimilarity = {
+        societa: data.societa,
+        importo: data.importo,
+        descrizione: data.descrizione,
+        categoria: data.categoria,
+        sottocategoria: data.sottocategoria,
+        data: data.data
+    };
+    
+    const scoredItems = openItems
+        .map(item => ({ item, score: calculateSimilarity(item, formValuesForSimilarity) }))
+        .sort((a, b) => b.score - a.score);
+
+    const bestMatch = scoredItems.length > 0 ? scoredItems[0] : null;
+
+    if (bestMatch && bestMatch.score > SIMILARITY_THRESHOLD) {
+        setConfirmationData({ data, match: bestMatch.item });
+    } else {
+        await proceedWithSave(data, false);
+    }
   }
 
   const handleAiCategorize = useCallback(async () => {
@@ -399,7 +443,42 @@ export function AddMovementDialog({
 
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <AlertDialog open={!!confirmationData} onOpenChange={() => setConfirmationData(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Trovata Corrispondenza!</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+                <div>
+                    <p>Il movimento che stai salvando sembra corrispondere a una voce esistente. Vuoi collegarli?</p>
+                    <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
+                    <div className="border p-3 rounded-lg space-y-1">
+                        <h4 className="font-bold mb-1">Movimento</h4>
+                        <p className="line-clamp-2"><strong>Desc:</strong> {confirmationData?.data.descrizione}</p>
+                        <p><strong>Importo:</strong> {formatCurrency(confirmationData?.data.importo || 0)}</p>
+                        <p><strong>Data:</strong> {confirmationData?.data.data ? formatDate(confirmationData.data.data) : '-'}</p>
+                    </div>
+                    <div className="border p-3 rounded-lg bg-muted/50 space-y-1">
+                        <h4 className="font-bold mb-1">Corrispondenza Suggerita</h4>
+                        <p className="line-clamp-2"><strong>Desc:</strong> {confirmationData?.match.description}</p>
+                        <p><strong>Importo:</strong> {formatCurrency(confirmationData?.match.amount || 0)}</p>
+                        <p><strong>Data:</strong> {confirmationData?.match.date ? formatDate(confirmationData.match.date) : '-'}</p>
+                    </div>
+                    </div>
+                </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => proceedWithSave(confirmationData!.data, false)} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : 'Salva Senza Collegare'}
+            </Button>
+            <Button onClick={() => proceedWithSave(confirmationData!.data, true)} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : 'Collega e Salva'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+    <Dialog open={isOpen && !confirmationData} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Modifica Movimento' : 'Aggiungi Nuovo Movimento'}</DialogTitle>
