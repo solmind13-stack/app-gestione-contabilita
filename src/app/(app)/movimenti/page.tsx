@@ -357,7 +357,6 @@ export default function MovimentiPage() {
             
             const movementSnap = await transaction.get(movementDocRef);
             if (!movementSnap.exists()) {
-                // It might have been deleted by another process in the bulk delete
                 console.warn(`Movimento con ID ${movementToDelete.id} non trovato durante l'eliminazione.`);
                 return;
             }
@@ -369,9 +368,10 @@ export default function MovimentiPage() {
                 const linkedDocSnap = await transaction.get(linkedDocRef);
                 
                 if (linkedDocSnap.exists()) {
+                    const movementAmount = movement.uscita > 0 ? movement.uscita : movement.entrata;
+
                     if (collectionName === 'deadlines') {
                         const data = linkedDocSnap.data() as Scadenza;
-                        const movementAmount = movement.uscita;
                         const newPaidAmount = (data.importoPagato || 0) - movementAmount;
                         const newStatus = newPaidAmount >= data.importoPrevisto ? 'Pagato' : (newPaidAmount > 0 ? 'Parziale' : 'Da pagare');
                         
@@ -383,7 +383,6 @@ export default function MovimentiPage() {
 
                     } else if (collectionName === 'expenseForecasts') {
                         const data = linkedDocSnap.data() as PrevisioneUscita;
-                        const movementAmount = movement.uscita;
                         const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
                         const newStatus = newEffectiveAmount >= data.importoLordo ? 'Pagato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da pagare');
 
@@ -395,7 +394,6 @@ export default function MovimentiPage() {
                     
                     } else if (collectionName === 'incomeForecasts') {
                         const data = linkedDocSnap.data() as PrevisioneEntrata;
-                        const movementAmount = movement.entrata;
                         const newEffectiveAmount = (data.importoEffettivo || 0) - movementAmount;
                         const newStatus = newEffectiveAmount >= data.importoLordo ? 'Incassato' : (newEffectiveAmount > 0 ? 'Parziale' : 'Da incassare');
 
