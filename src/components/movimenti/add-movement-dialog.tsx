@@ -113,20 +113,37 @@ const calculateSimilarity = (item: LinkableItem, formValues: Partial<FormValues>
         }
     }
 
-    // Date proximity (max 60 points) - MORE AGGRESSIVE
+    // Date proximity scoring (max 100 points) - PRIORITIZES OVERDUE
     try {
         const paymentDate = parseDate(paymentDateStr);
         const itemDate = parseDate(item.date);
+        // Difference in days. Positive if payment is after due date (late).
         const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
-        
-        if (diffDays >= 0) { // Payment is on or after the due date
-             score += Math.max(0, 60 - diffDays * 2); // Loses 2 points per day, drops to 0 after 30 days
-        } else { // Payment is before the due date (pre-payment)
-            score += Math.max(0, 60 + diffDays * 0.5); // Loses 0.5 points per day before, less strict
+
+        let dateScore = 0;
+
+        // Highest priority: overdue items. Give them a massive base score.
+        if (diffDays >= 0) { 
+            // Base score of 80 for any overdue item.
+            // Then, add points for being closer to the payment date.
+            // The score is highest for recently overdue items.
+            // It decays slowly, ensuring old debts are still considered.
+            dateScore = 80 + Math.max(0, 20 - (diffDays / 15)); // Max 100, drops to 80 over a year.
+        } 
+        // Lower priority: future items.
+        else { 
+            const futureDiff = Math.abs(diffDays);
+            if (futureDiff <= 60) { // Only consider items due within 60 days
+                // Starts at 79 and drops. It will always be lower than the base overdue score.
+                dateScore = 79 - futureDiff;
+            } else {
+                dateScore = 0; // Don't consider items far in the future.
+            }
         }
+        score += dateScore;
 
     } catch (e) {
-        // Ignore date if parsing fails
+        // ignore date if parsing fails
     }
 
     // Description Jaccard similarity (max 50 points)

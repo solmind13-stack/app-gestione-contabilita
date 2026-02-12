@@ -51,6 +51,65 @@ const getJaccardIndex = (str1: string, str2: string): number => {
     return intersection.size / union.size;
 };
 
+const calculateSimilarity = (item: LinkableItem, movement: Omit<Movimento, 'id'>): number => {
+    let score = 0;
+    const { societa, descrizione, categoria, sottocategoria, data: paymentDateStr } = movement;
+    const importo = movement.entrata > 0 ? movement.entrata : movement.uscita;
+
+    if (!societa || !importo || importo === 0 || !descrizione || !paymentDateStr) return 0;
+    if (item.societa !== societa) return -1;
+
+    // Amount match
+    if (item.amount && importo) {
+        const difference = Math.abs(item.amount - importo);
+        if (difference < 0.02) { score += 100; }
+        else if (importo < item.amount) { score += 20 + ((importo / item.amount) * 50); }
+        else { score += Math.max(0, 50 - (difference / item.amount) * 100); }
+    }
+    
+    // Date proximity scoring (max 100 points) - PRIORITIZES OVERDUE
+    try {
+        const paymentDate = parseDate(paymentDateStr);
+        const itemDate = parseDate(item.date);
+        // Difference in days. Positive if payment is after due date (late).
+        const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
+
+        let dateScore = 0;
+
+        // Highest priority: overdue items. Give them a massive base score.
+        if (diffDays >= 0) { 
+            // Base score of 80 for any overdue item.
+            // Then, add points for being closer to the payment date.
+            // The score is highest for recently overdue items.
+            // It decays slowly, ensuring old debts are still considered.
+            dateScore = 80 + Math.max(0, 20 - (diffDays / 15)); // Max 100, drops to 80 over a year.
+        } 
+        // Lower priority: future items.
+        else { 
+            const futureDiff = Math.abs(diffDays);
+            if (futureDiff <= 60) { // Only consider items due within 60 days
+                // Starts at 79 and drops. It will always be lower than the base overdue score.
+                dateScore = 79 - futureDiff;
+            } else {
+                dateScore = 0; // Don't consider items far in the future.
+            }
+        }
+        score += dateScore;
+
+    } catch (e) {
+        // ignore date if parsing fails
+    }
+
+    // Description similarity
+    score += getJaccardIndex(descrizione, item.description) * 50;
+    
+    if (categoria && item.category === categoria) score += 20;
+    if (sottocategoria && item.subcategory === sottocategoria) score += 10;
+
+    return score;
+  };
+
+
 export function ImportMovementsDialog({
   isOpen,
   setIsOpen,
@@ -175,45 +234,6 @@ export function ImportMovementsDialog({
       (incomeForecasts || []).filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato').forEach(f => items.push({ id: f.id, type: 'incomeForecasts', description: f.descrizione, date: f.dataPrevista, amount: f.importoLordo - (f.importoEffettivo || 0), societa: f.societa, category: f.categoria, subcategory: f.sottocategoria }));
       return items;
   }, [deadlines, expenseForecasts, incomeForecasts]);
-
-  const calculateSimilarity = (item: LinkableItem, movement: Omit<Movimento, 'id'>): number => {
-    let score = 0;
-    const { societa, descrizione, categoria, sottocategoria, data: paymentDateStr } = movement;
-    const importo = movement.entrata > 0 ? movement.entrata : movement.uscita;
-
-    if (!societa || !importo || importo === 0 || !descrizione || !paymentDateStr) return 0;
-    if (item.societa !== societa) return -1;
-
-    // Amount match
-    if (item.amount && importo) {
-        const difference = Math.abs(item.amount - importo);
-        if (difference < 0.02) { score += 100; }
-        else if (importo < item.amount) { score += 20 + ((importo / item.amount) * 50); }
-        else { score += Math.max(0, 50 - (difference / item.amount) * 100); }
-    }
-    
-    // Date proximity
-    try {
-        const paymentDate = parseDate(paymentDateStr);
-        const itemDate = parseDate(item.date);
-        const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
-        
-        if (diffDays >= 0) { // Payment is on or after the due date
-             score += Math.max(0, 60 - diffDays * 2); // Loses 2 points per day, drops to 0 after 30 days
-        } else { // Payment is before the due date (pre-payment)
-            score += Math.max(0, 60 + diffDays * 0.5); // Loses 0.5 points per day before, less strict
-        }
-    } catch(e) {/* ignore */}
-
-    // Description similarity
-    score += getJaccardIndex(descrizione, item.description) * 50;
-    
-    if (categoria && item.category === categoria) score += 20;
-    if (sottocategoria && item.subcategory === sottocategoria) score += 10;
-
-    return score;
-  };
-
 
   const processFile = async () => {
     if (!file || !currentUser) return;
