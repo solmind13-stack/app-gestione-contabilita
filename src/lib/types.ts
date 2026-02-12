@@ -303,5 +303,3 @@ export type TrainingFeedback = {
     userId: string;
     createdAt: string;
 }
-
-    
