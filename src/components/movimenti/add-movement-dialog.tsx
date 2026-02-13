@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Wand2 } from 'lucide-react';
+import { Loader2, Wand2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -90,75 +90,54 @@ const getJaccardIndex = (str1: string, str2: string): number => {
 };
 
 const calculateSimilarity = (item: LinkableItem, formValues: Partial<FormValues>): number => {
-    let score = 0;
-    const { societa, importo, descrizione, categoria, sottocategoria, data: paymentDateStr } = formValues;
+    const { societa, importo, descrizione, data: paymentDateStr } = formValues;
 
     if (!societa || !importo || importo === 0 || !descrizione || !paymentDateStr) return 0;
 
-    // Company match is essential
+    // Company must match
     if (item.societa !== societa) {
-        return -1; // Exclude items from other companies
+        return -1;
     }
 
-    // Amount match (max 100 points)
+    let score = 0;
+    const OVERDUE_BASE_SCORE = 1000;
+    const FUTURE_BASE_SCORE = 500;
+
+    // 1. Date Proximity and Priority
+    try {
+        const paymentDate = parseDate(paymentDateStr);
+        const itemDate = parseDate(item.date);
+        const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
+
+        if (diffDays >= 0) { // Overdue or on the same day
+            // Higher score for more recent overdue items
+            score += OVERDUE_BASE_SCORE - (diffDays / 30); // small penalty for being very old
+        } else { // Future item
+            const futureDiff = Math.abs(diffDays);
+            if (futureDiff > 90) { // Penalize items too far in the future
+                return 0;
+            }
+            score += FUTURE_BASE_SCORE - futureDiff;
+        }
+    } catch (e) {
+        return 0; // Invalid date, no score
+    }
+    
+    // 2. Amount Similarity (max 100 points)
     if (item.amount && importo) {
         const difference = Math.abs(item.amount - importo);
         if (difference < 0.02) { // Almost perfect match
             score += 100;
-        } else if (importo < item.amount) { // Partial payment
-            const ratio = importo / item.amount;
-            score += 20 + (ratio * 50); // Base score for partial + proportional score
-        } else { // Overpayment or different amount
+        } else if (importo < item.amount) { // Partial payment, less valuable
+            score += Math.max(0, 50 - (difference / item.amount) * 100);
+        } else { // Overpayment, also less valuable
              score += Math.max(0, 50 - (difference / item.amount) * 100);
         }
     }
-
-    // Date proximity scoring (max 100 points) - PRIORITIZES OVERDUE
-    try {
-        const paymentDate = parseDate(paymentDateStr);
-        const itemDate = parseDate(item.date);
-        // Difference in days. Positive if payment is after due date (late).
-        const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
-
-        let dateScore = 0;
-
-        // Highest priority: overdue items. Give them a massive base score.
-        if (diffDays >= 0) { 
-            // Base score of 80 for any overdue item.
-            // Then, add points for being closer to the payment date.
-            // The score is highest for recently overdue items.
-            // It decays slowly, ensuring old debts are still considered.
-            dateScore = 80 + Math.max(0, 20 - (diffDays / 15)); // Max 100, drops to 80 over a year.
-        } 
-        // Lower priority: future items.
-        else { 
-            const futureDiff = Math.abs(diffDays);
-            if (futureDiff <= 60) { // Only consider items due within 60 days
-                // Starts at 79 and drops. It will always be lower than the base overdue score.
-                dateScore = 79 - futureDiff;
-            } else {
-                dateScore = 0; // Don't consider items far in the future.
-            }
-        }
-        score += dateScore;
-
-    } catch (e) {
-        // ignore date if parsing fails
-    }
-
-    // Description Jaccard similarity (max 50 points)
+    
+    // 3. Description Similarity (max 50 points)
     const jaccardIndex = getJaccardIndex(descrizione, item.description);
     score += jaccardIndex * 50;
-    
-    // Category match (20 points)
-    if (categoria && item.category === categoria) {
-        score += 20;
-    }
-    
-    // Subcategory match (10 points)
-    if (sottocategoria && item.subcategory === sottocategoria) {
-        score += 10;
-    }
 
     return score;
 };
@@ -187,6 +166,19 @@ export function AddMovementDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
   });
+  
+  const isMatchOverdue = useMemo(() => {
+    if (!confirmationData) return false;
+    try {
+        const paymentDate = parseDate(confirmationData.data.data!);
+        const itemDate = parseDate(confirmationData.match.date);
+        // An item is overdue if its due date is before the payment date.
+        return itemDate.getTime() < paymentDate.getTime();
+    } catch {
+        return false;
+    }
+  }, [confirmationData]);
+
 
   const resetForm = useCallback(() => {
      if (isEditMode && movementToEdit) {
@@ -411,7 +403,7 @@ export function AddMovementDialog({
 
 
   const onSubmit = async (data: FormValues) => {
-    const SIMILARITY_THRESHOLD = 100;
+    const SIMILARITY_THRESHOLD = 500; // Adjusted threshold to favor date logic
     const userHasLinked = data.linkedTo && data.linkedTo !== 'nessuno';
 
     if (userHasLinked) {
@@ -470,10 +462,18 @@ export function AddMovementDialog({
       <AlertDialog open={!!confirmationData} onOpenChange={() => setConfirmationData(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Trovata Corrispondenza!</AlertDialogTitle>
+             <AlertDialogTitle className={cn(isMatchOverdue && "text-amber-600 dark:text-amber-500", "flex items-center gap-2")}>
+                {isMatchOverdue && <AlertTriangle className="h-5 w-5" />}
+                {isMatchOverdue ? "Attenzione: Trovata Scadenza Pregressa" : "Trovata Corrispondenza"}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
                 <div>
-                    <p>Il movimento che stai salvando sembra corrispondere a una voce esistente. Vuoi collegarli?</p>
+                     <p>
+                        {isMatchOverdue 
+                            ? "Il movimento che stai inserendo sembra corrispondere a una scadenza già passata. È fortemente raccomandato collegarli per mantenere la contabilità corretta."
+                            : "Il movimento che stai salvando sembra corrispondere a una voce esistente. Vuoi collegarli?"
+                        }
+                    </p>
                     <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
                     <div className="border p-3 rounded-lg space-y-1">
                         <h4 className="font-bold mb-1">Movimento</h4>
