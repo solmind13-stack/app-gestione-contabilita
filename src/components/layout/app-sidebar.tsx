@@ -22,6 +22,7 @@ import {
   Sparkles,
   Settings,
   ClipboardCheck,
+  BrainCircuit,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useUser } from "@/firebase";
@@ -37,6 +38,7 @@ const ICONS: { [key: string]: React.ElementType } = {
   Sparkles,
   Settings,
   ClipboardCheck,
+  BrainCircuit,
 };
 
 export function AppSidebar() {

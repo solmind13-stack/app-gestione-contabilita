@@ -9,6 +9,7 @@ export const NAV_ITEMS = [
     icon: 'TrendingUp', 
     label: 'Previsioni',
   },
+  { href: '/pianificazione', icon: 'BrainCircuit', label: 'Pianificazione' },
   { href: '/report', icon: 'FilePieChart', label: 'Report' },
   { href: '/assistente-ai', icon: 'Sparkles', label: 'Assistente AI' },
 ];
