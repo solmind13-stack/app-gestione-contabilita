@@ -15,5 +15,6 @@ import '@/ai/flows/calculate-cash-flow-projection.ts';
 import '@/ai/flows/calculate-entity-scores.ts';
 import '@/ai/flows/liquidity-early-warning.ts';
 import '@/ai/flows/detect-seasonal-patterns.ts';
+import '@/ai/flows/generate-narrative-insights.ts';
 
     

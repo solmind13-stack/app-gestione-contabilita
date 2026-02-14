@@ -111,7 +111,7 @@ export interface FiscalDeadline {
   dueDate: string;
   estimatedAmount: number;
   isRecurring: boolean;
-  frequency: 'monthly' | 'quarterly' | 'biannual' | 'annual';
+  frequency: 'monthly' | 'quarterly' | 'biannual' | 'annual' | 'once';
   notes?: string;
 }
 
