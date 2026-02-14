@@ -13,5 +13,6 @@ import '@/ai/flows/suggest-expense-forecasts.ts';
 import '@/ai/flows/suggest-income-forecasts.ts';
 import '@/ai/flows/calculate-cash-flow-projection.ts';
 import '@/ai/flows/calculate-entity-scores.ts';
+import '@/ai/flows/liquidity-early-warning.ts';
 
     
