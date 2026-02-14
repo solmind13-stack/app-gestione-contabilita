@@ -349,10 +349,6 @@
           "type": "number",
           "description": "The probability percentage (0-1)."
         },
-        "weightedAmount": {
-          "type": "number",
-          "description": "The weighted amount (calculated)."
-        },
         "contractSource": {
           "type": "string",
           "description": "The source contract related to the forecast."
