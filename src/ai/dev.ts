@@ -11,5 +11,6 @@ import '@/ai/flows/analyze-cash-flow.ts';
 import '@/ai/flows/suggest-fiscal-deadlines.ts';
 import '@/ai/flows/suggest-expense-forecasts.ts';
 import '@/ai/flows/suggest-income-forecasts.ts';
+import '@/ai/flows/calculate-cash-flow-projection.ts';
 
     
