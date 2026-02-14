@@ -1,7 +1,5 @@
 // src/lib/types/pianificazione.ts
 
-import type { Timestamp } from 'firebase/firestore';
-
 /**
  * Rappresenta una proiezione dettagliata del flusso di cassa.
  */
@@ -10,8 +8,8 @@ export interface CashFlowProjection {
   societa: string;
   userId: string;
   weeklyProjections: {
-    weekStart: Date;
-    weekEnd: Date;
+    weekStart: string;
+    weekEnd: string;
     inflows: number;
     outflows: number;
     netFlow: number;
@@ -27,7 +25,7 @@ export interface CashFlowProjection {
   }[];
   scenarioType: 'optimistic' | 'realistic' | 'pessimistic';
   confidenceScore: number; // 0-100
-  generatedAt: Timestamp;
+  generatedAt: string;
   baseBalance: number;
 }
 
@@ -44,8 +42,8 @@ export interface PlanningScenario {
   probability: number; // 0-100
   projections: CashFlowProjection;
   assumptions: string[];
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
@@ -61,9 +59,9 @@ export interface EntityScore {
   averagePaymentDelay: number; // in giorni
   totalTransactions: number;
   onTimePercentage: number;
-  lastUpdated: Timestamp;
+  lastUpdated: string;
   history: {
-    date: Date;
+    date: string;
     score: number;
     reason: string;
   }[];
@@ -78,9 +76,9 @@ export interface LiquidityAlert {
   userId: string;
   status: 'green' | 'yellow' | 'red';
   message: string;
-  projectedDate: Date;
+  projectedDate: string;
   projectedBalance: number;
-  triggeredAt: Timestamp;
+  triggeredAt: string;
   acknowledged: boolean;
 }
 
@@ -98,7 +96,7 @@ export interface CategoryBudget {
   suggestedBudget: number;
   deviation: number; // percentuale
   trend: 'increasing' | 'stable' | 'decreasing';
-  updatedAt: Timestamp;
+  updatedAt: string;
 }
 
 /**
@@ -110,7 +108,7 @@ export interface FiscalDeadline {
   userId: string;
   name: string;
   type: 'IVA' | 'IRPEF' | 'INPS' | 'INAIL' | 'IMU' | 'F24' | 'ALTRO';
-  dueDate: Date;
+  dueDate: string;
   estimatedAmount: number;
   isRecurring: boolean;
   frequency: 'monthly' | 'quarterly' | 'biannual' | 'annual';
@@ -134,7 +132,7 @@ export interface MonthlyReplay {
   accuracyScore: number;
   narrative: string;
   corrections: string[];
-  generatedAt: Timestamp;
+  generatedAt: string;
 }
 
 /**
@@ -153,5 +151,5 @@ export interface AnomalyAlert {
   movementId?: string;
   description: string;
   status: 'pending' | 'confirmed' | 'dismissed';
-  createdAt: Timestamp;
+  createdAt: string;
 }

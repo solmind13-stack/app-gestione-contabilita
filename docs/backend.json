@@ -806,6 +806,37 @@
             "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of feedback creation." }
         },
         "required": ["descriptionPattern", "category", "userId", "createdAt"]
+    },
+    "EntityScore": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EntityScore",
+      "type": "object",
+      "description": "Represents a reliability score for a client or supplier.",
+      "properties": {
+        "id": { "type": "string" },
+        "societa": { "type": "string" },
+        "userId": { "type": "string" },
+        "entityName": { "type": "string" },
+        "entityType": { "type": "string", "enum": ["client", "supplier"] },
+        "reliabilityScore": { "type": "number" },
+        "averagePaymentDelay": { "type": "number" },
+        "totalTransactions": { "type": "number" },
+        "onTimePercentage": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "format": "date-time" },
+              "score": { "type": "number" },
+              "reason": { "type": "string" }
+            },
+            "required": ["date", "score", "reason"]
+          }
+        }
+      },
+      "required": ["id", "societa", "userId", "entityName", "entityType", "reliabilityScore", "lastUpdated"]
     }
   },
   "auth": {
@@ -1026,6 +1057,20 @@
                     "description": "Unique ID for the feedback entry."
                 }
             ]
+        }
+      },
+      {
+        "path": "/users/{userId}/entityScores/{scoreId}",
+        "definition": {
+          "entityName": "EntityScore",
+          "schema": {
+            "$ref": "#/backend/entities/EntityScore"
+          },
+          "description": "Stores reliability scores for clients and suppliers, linked to a specific user.",
+          "params": [
+            { "name": "userId", "description": "The user's UID." },
+            { "name": "scoreId", "description": "Unique ID for the score record, typically derived from company and entity name." }
+          ]
         }
       }
     ],

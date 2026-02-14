@@ -10,6 +10,7 @@ import { Lightbulb, GanttChart, Users, Target, ShieldAlert } from 'lucide-react'
 import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-traffic-light';
 import { CashflowProjectionChart } from '@/components/pianificazione/cashflow-projection-chart';
 import { FiscalDeadlinesCard } from '@/components/pianificazione/fiscal-deadlines-card';
+import { EntityScoresCard } from '@/components/pianificazione/entity-scores-card';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -75,15 +76,7 @@ export default function PianificazionePage() {
 
         <FiscalDeadlinesCard societa={selectedCompany} />
 
-        <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-base font-semibold">Score Clienti/Fornitori</CardTitle>
-                <Users className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
-            </CardContent>
-        </Card>
+        <EntityScoresCard societa={selectedCompany} />
 
         <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
