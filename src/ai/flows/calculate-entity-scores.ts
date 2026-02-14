@@ -33,7 +33,7 @@ const EntityScoreSchema = z.object({
 });
 
 
-export const CalculateEntityScoresInputSchema = z.object({
+const CalculateEntityScoresInputSchema = z.object({
   societa: z.string().describe("La società per cui calcolare i punteggi ('LNC' o 'STG')."),
   userId: z.string().describe("L'ID dell'utente che richiede l'analisi."),
   movements: z.string().describe("Un JSON stringato di tutti i movimenti degli ultimi 24 mesi per la società."),
@@ -41,7 +41,7 @@ export const CalculateEntityScoresInputSchema = z.object({
 });
 export type CalculateEntityScoresInput = z.infer<typeof CalculateEntityScoresInputSchema>;
 
-export const CalculateEntityScoresOutputSchema = z.object({
+const CalculateEntityScoresOutputSchema = z.object({
   scores: z.array(EntityScoreSchema),
   summary: z.string().describe("Un riepilogo testuale in italiano dell'analisi e dei risultati chiave."),
 });

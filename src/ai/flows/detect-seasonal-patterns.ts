@@ -11,14 +11,14 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-export const DetectSeasonalPatternsInputSchema = z.object({
+const DetectSeasonalPatternsInputSchema = z.object({
   societa: z.string().describe("La società per cui calcolare i pattern ('LNC' o 'STG')."),
   userId: z.string().describe("L'ID dell'utente che richiede l'analisi."),
   movements: z.string().describe("Un JSON stringato di tutti i movimenti degli ultimi 24-36 mesi per la società."),
 });
 export type DetectSeasonalPatternsInput = z.infer<typeof DetectSeasonalPatternsInputSchema>;
 
-export const DetectSeasonalPatternsOutputSchema = z.object({
+const DetectSeasonalPatternsOutputSchema = z.object({
   patterns: z.array(z.object({
     month: z.number().min(1).max(12).describe("Il mese a cui si riferisce il pattern (1=Gennaio, 12=Dicembre)."),
     type: z.enum(['expense_peak', 'expense_dip', 'income_peak', 'income_dip']).describe("Il tipo di pattern identificato."),

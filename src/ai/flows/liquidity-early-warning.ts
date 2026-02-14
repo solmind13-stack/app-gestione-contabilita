@@ -26,7 +26,7 @@ const LiquidityAlertSchema = z.object({
   acknowledged: z.boolean().default(false),
 });
 
-export const LiquidityEarlyWarningInputSchema = z.object({
+const LiquidityEarlyWarningInputSchema = z.object({
   societa: z.string().describe("La società per cui generare l'alert ('LNC' o 'STG')."),
   userId: z.string().describe("L'ID dell'utente che richiede l'analisi."),
   safetyThreshold: z.number().optional().default(5000).describe("La soglia di sicurezza del saldo di cassa."),
@@ -35,7 +35,7 @@ export const LiquidityEarlyWarningInputSchema = z.object({
 });
 export type LiquidityEarlyWarningInput = z.infer<typeof LiquidityEarlyWarningInputSchema>;
 
-export const LiquidityEarlyWarningOutputSchema = z.object({
+const LiquidityEarlyWarningOutputSchema = z.object({
   alert: LiquidityAlertSchema,
   hasChanged: z.boolean().describe("Indica se lo stato dell'alert è cambiato rispetto al precedente."),
 });

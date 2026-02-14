@@ -39,7 +39,7 @@ const CashFlowProjectionSchema = z.object({
   baseBalance: z.number(),
 });
 
-export const CalculateCashFlowProjectionInputSchema = z.object({
+const CalculateCashFlowProjectionInputSchema = z.object({
   societa: z.string().describe("La società per cui calcolare la proiezione ('LNC' o 'STG')."),
   userId: z.string().describe("L'ID dell'utente che richiede la proiezione."),
   baseBalance: z.number().describe("Il saldo di cassa di partenza per la proiezione."),
@@ -50,7 +50,7 @@ export const CalculateCashFlowProjectionInputSchema = z.object({
 });
 export type CalculateCashFlowProjectionInput = z.infer<typeof CalculateCashFlowProjectionInputSchema>;
 
-export const CalculateCashFlowProjectionOutputSchema = z.object({
+const CalculateCashFlowProjectionOutputSchema = z.object({
   optimistic: CashFlowProjectionSchema,
   realistic: CashFlowProjectionSchema,
   pessimistic: CashFlowProjectionSchema,
