@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import type { AppUser, CompanyProfile } from '@/lib/types';
 import { BrainCircuit, Scale, Lightbulb, Bot, GanttChart, CalendarClock, Users, Target, ShieldAlert } from 'lucide-react';
+import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-traffic-light';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -24,7 +25,6 @@ export default function PianificazionePage() {
   }, [user]);
 
   const features = [
-    { title: "Semaforo Liquidità", icon: Scale, description: "In fase di implementazione...", colSpan: "lg:col-span-4" },
     { title: "Proiezione Cash Flow", icon: BrainCircuit, description: "In fase di implementazione...", colSpan: "lg:col-span-2" },
     { title: "Scenari Probabilistici", icon: Lightbulb, description: "In fase di implementazione...", colSpan: "lg:col-span-2" },
     { title: "Timeline Decisioni", icon: GanttChart, description: "In fase di implementazione...", colSpan: "lg:col-span-4" },
@@ -57,6 +57,8 @@ export default function PianificazionePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <LiquidityTrafficLight societa={selectedCompany} />
+
         {features.map((feature, index) => {
             const Icon = feature.icon;
             return (
