@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+export * from './types/pianificazione';
 
 export type Kpi = {
     title: string;

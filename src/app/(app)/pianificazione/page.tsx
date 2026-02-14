@@ -6,9 +6,10 @@ import { collection, query } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import type { AppUser, CompanyProfile } from '@/lib/types';
-import { BrainCircuit, Scale, Lightbulb, Bot, GanttChart, CalendarClock, Users, Target, ShieldAlert } from 'lucide-react';
+import { Lightbulb, GanttChart, Users, Target, ShieldAlert } from 'lucide-react';
 import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-traffic-light';
 import { CashflowProjectionChart } from '@/components/pianificazione/cashflow-projection-chart';
+import { FiscalDeadlinesCard } from '@/components/pianificazione/fiscal-deadlines-card';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -24,15 +25,6 @@ export default function PianificazionePage() {
       if (user.company) setSelectedCompany(user.company);
     }
   }, [user]);
-
-  const features = [
-    { title: "Scenari Probabilistici", icon: Lightbulb, description: "In fase di implementazione...", colSpan: "lg:col-span-2" },
-    { title: "Timeline Decisioni", icon: GanttChart, description: "In fase di implementazione...", colSpan: "lg:col-span-4" },
-    { title: "Prossime Scadenze Fiscali", icon: CalendarClock, description: "In fase di implementazione...", colSpan: "lg:col-span-2" },
-    { title: "Score Clienti/Fornitori", icon: Users, description: "In fase di implementazione...", colSpan: "lg:col-span-2" },
-    { title: "Budget per Categoria", icon: Target, description: "In fase di implementazione...", colSpan: "lg:col-span-2" },
-    { title: "Anomalie Rilevate", icon: ShieldAlert, description: "In fase di implementazione...", colSpan: "lg:col-span-2" },
-  ];
 
   return (
     <div className="space-y-6">
@@ -61,20 +53,57 @@ export default function PianificazionePage() {
 
         <CashflowProjectionChart societa={selectedCompany} />
 
-        {features.map((feature, index) => {
-            const Icon = feature.icon;
-            return (
-                 <Card key={index} className={feature.colSpan}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-base font-semibold">{feature.title}</CardTitle>
-                        <Icon className="h-5 w-5 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-sm text-muted-foreground">{feature.description}</p>
-                    </CardContent>
-                </Card>
-            )
-        })}
+        <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base font-semibold">Scenari Probabilistici</CardTitle>
+                <Lightbulb className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
+            </CardContent>
+        </Card>
+        
+        <Card className="lg:col-span-4">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base font-semibold">Timeline Decisioni</CardTitle>
+                <GanttChart className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
+            </CardContent>
+        </Card>
+
+        <FiscalDeadlinesCard societa={selectedCompany} />
+
+        <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base font-semibold">Score Clienti/Fornitori</CardTitle>
+                <Users className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
+            </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base font-semibold">Budget per Categoria</CardTitle>
+                <Target className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
+            </CardContent>
+        </Card>
+        
+        <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base font-semibold">Anomalie Rilevate</CardTitle>
+                <ShieldAlert className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
+            </CardContent>
+        </Card>
       </div>
     </div>
   );
