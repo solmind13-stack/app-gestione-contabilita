@@ -6,11 +6,16 @@ import { collection, query } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import type { AppUser, CompanyProfile } from '@/lib/types';
-import { Lightbulb, GanttChart, Users, Target, ShieldAlert } from 'lucide-react';
-import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-traffic-light';
-import { CashflowProjectionChart } from '@/components/pianificazione/cashflow-projection-chart';
-import { FiscalDeadlinesCard } from '@/components/pianificazione/fiscal-deadlines-card';
-import { EntityScoresCard } from '@/components/pianificazione/entity-scores-card';
+import { 
+  TrafficLight, 
+  LineChart, 
+  Lightbulb, 
+  GanttChart, 
+  CalendarClock, 
+  Users, 
+  Target, 
+  ShieldAlert 
+} from 'lucide-react';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -31,9 +36,9 @@ export default function PianificazionePage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
         <div>
-          <h1 className="text-3xl font-bold">Pianificazione Avanzata</h1>
+          <h1 className="text-3xl font-bold">Pianificazione Spese</h1>
           <p className="text-muted-foreground">
-            Un Digital Twin finanziario per simulare, prevedere e decidere.
+            Digital Twin Finanziario per simulazioni e analisi predittiva.
           </p>
         </div>
         {user && (user.role === 'admin' || user.role === 'editor') && (
@@ -50,52 +55,95 @@ export default function PianificazionePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <LiquidityTrafficLight societa={selectedCompany} />
-
-        <CashflowProjectionChart societa={selectedCompany} />
-
-        <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-base font-semibold">Scenari Probabilistici</CardTitle>
-                <Lightbulb className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
-            </CardContent>
+        {/* Semaforo Liquidità - Full Width */}
+        <Card className="lg:col-span-4 border-2 border-primary/10">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-xl font-bold">Semaforo Liquidità</CardTitle>
+              <CardDescription>Stato attuale e criticità previste</CardDescription>
+            </div>
+            <TrafficLight className="h-8 w-8 text-primary" />
+          </CardHeader>
+          <CardContent className="h-32 flex items-center justify-center text-muted-foreground italic">
+            In fase di attivazione...
+          </CardContent>
         </Card>
-        
+
+        {/* Proiezione Cash Flow - Half Width */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-semibold">Proiezione Cash Flow</CardTitle>
+            <LineChart className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="h-48 flex items-center justify-center text-muted-foreground text-sm italic">
+            In fase di attivazione...
+          </CardContent>
+        </Card>
+
+        {/* Scenari - Half Width */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-semibold">Scenari</CardTitle>
+            <Lightbulb className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="h-48 flex items-center justify-center text-muted-foreground text-sm italic">
+            In fase di attivazione...
+          </CardContent>
+        </Card>
+
+        {/* Timeline Decisioni - Full Width */}
         <Card className="lg:col-span-4">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-base font-semibold">Timeline Decisioni</CardTitle>
-                <GanttChart className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
-            </CardContent>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-semibold">Timeline Decisioni</CardTitle>
+            <GanttChart className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="h-32 flex items-center justify-center text-muted-foreground text-sm italic">
+            In fase di attivazione...
+          </CardContent>
         </Card>
 
-        <FiscalDeadlinesCard societa={selectedCompany} />
-
-        <EntityScoresCard societa={selectedCompany} />
-
+        {/* Prossime Scadenze Fiscali - Half Width */}
         <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-base font-semibold">Budget per Categoria</CardTitle>
-                <Target className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
-            </CardContent>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-semibold">Prossime Scadenze Fiscali</CardTitle>
+            <CalendarClock className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
+            In fase di attivazione...
+          </CardContent>
         </Card>
-        
+
+        {/* Score Clienti/Fornitori - Half Width */}
         <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-base font-semibold">Anomalie Rilevate</CardTitle>
-                <ShieldAlert className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground">In fase di implementazione...</p>
-            </CardContent>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-semibold">Score Clienti/Fornitori</CardTitle>
+            <Users className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
+            In fase di attivazione...
+          </CardContent>
+        </Card>
+
+        {/* Budget per Categoria - Half Width */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-semibold">Budget per Categoria</CardTitle>
+            <Target className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
+            In fase di attivazione...
+          </CardContent>
+        </Card>
+
+        {/* Anomalie Rilevate - Half Width */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-semibold">Anomalie Rilevate</CardTitle>
+            <ShieldAlert className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
+            In fase di attivazione...
+          </CardContent>
         </Card>
       </div>
     </div>
