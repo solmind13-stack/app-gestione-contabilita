@@ -36,6 +36,7 @@ import { PaymentOptimizationCard } from '@/components/pianificazione/payment-opt
 import { DecisionReportDialog } from '@/components/pianificazione/decision-report-dialog';
 import { DataIntegrityCard } from '@/components/pianificazione/data-integrity-card';
 import { SectorBenchmarkCard } from '@/components/pianificazione/sector-benchmark-card';
+import { FiscalSentinelCard } from '@/components/pianificazione/fiscal-sentinel-card';
 
 // AI Flows
 import { calculateCashFlowProjection } from '@/ai/flows/calculate-cash-flow-projection';
@@ -47,6 +48,7 @@ import { runStressTests } from '@/ai/flows/run-stress-tests';
 import { optimizePaymentTiming } from '@/ai/flows/optimize-payment-timing';
 import { verifyDataIntegrity } from '@/ai/flows/data-audit-trail';
 import { fetchSectorBenchmarks } from '@/ai/flows/fetch-sector-benchmarks';
+import { fiscalSentinel } from '@/ai/flows/fiscal-sentinel';
 
 import type { CompanyProfile, Movimento, LiquidityAlert } from '@/lib/types';
 import { formatDate, cn } from '@/lib/utils';
@@ -148,14 +150,19 @@ export default function PianificazionePage() {
       setRefreshProgress(85);
       await fetchSectorBenchmarks({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 8: Early Warning
-      setRefreshStep('Monitoraggio liquidità critiche...');
+      // Step 8: Fiscal Sentinel
+      setRefreshStep('Radar novità fiscali...');
       setRefreshProgress(90);
+      await fiscalSentinel({ societa: societaToAnalyze, userId: user.uid });
+
+      // Step 9: Early Warning
+      setRefreshStep('Monitoraggio liquidità critiche...');
+      setRefreshProgress(95);
       await liquidityEarlyWarning({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 9: Data Integrity
+      // Step 10: Data Integrity
       setRefreshStep('Verifica integrità database...');
-      setRefreshProgress(95);
+      setRefreshProgress(98);
       await verifyDataIntegrity({ societa: societaToAnalyze, userId: user.uid });
 
       setRefreshStep('Completato!');
@@ -367,7 +374,10 @@ export default function PianificazionePage() {
             </h2>
             <div className="h-px flex-1 bg-border" />
           </div>
-          <SectorBenchmarkCard societa={currentSocieta} userId={user?.uid || ''} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <SectorBenchmarkCard societa={currentSocieta} userId={user?.uid || ''} />
+            <FiscalSentinelCard societa={currentSocieta} userId={user?.uid || ''} />
+          </div>
         </div>
 
         {/* Row 9+: Utility Cards (2 per row) */}
