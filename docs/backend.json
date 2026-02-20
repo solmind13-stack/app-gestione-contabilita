@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Movement": {
@@ -101,6 +102,24 @@
         "generatedAt": { "type": "string", "format": "date-time" },
         "monthsAnalyzed": { "type": "number" }
       }
+    },
+    "DataAuditLog": {
+      "title": "DataAuditLog",
+      "type": "object",
+      "description": "Logs every change made to financial data documents.",
+      "properties": {
+        "id": { "type": "string" },
+        "societa": { "type": "string" },
+        "userId": { "type": "string" },
+        "collection": { "type": "string" },
+        "documentId": { "type": "string" },
+        "action": { "type": "string", "enum": ["create", "update", "delete"] },
+        "previousData": { "type": "object" },
+        "newData": { "type": "object" },
+        "changedFields": { "type": "array", "items": { "type": "string" } },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "source": { "type": "string", "enum": ["manual", "import", "ai_suggestion", "bulk_operation"] }
+      }
     }
   },
   "firestore": {
@@ -128,6 +147,10 @@
       {
         "path": "/users/{userId}/seasonalPatterns/{analysisId}",
         "definition": { "entityName": "SeasonalAnalysis" }
+      },
+      {
+        "path": "/dataAuditLog/{logId}",
+        "definition": { "entityName": "DataAuditLog" }
       }
     ]
   }

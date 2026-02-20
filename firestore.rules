@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -66,11 +67,15 @@ service cloud.firestore {
     
     // ========== COLLECTION: training_feedback ==========
     match /training_feedback/{feedbackId} {
-      // Allow any signed-in user to create their own feedback.
-      // This helps the AI learn from everyone's corrections.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Reading feedback could be restricted, but for now, we'll allow all users to read.
       allow read: if isSignedIn();
+    }
+
+    // ========== COLLECTION: dataAuditLog ==========
+    match /dataAuditLog/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Audit logs are immutable
     }
 
 
