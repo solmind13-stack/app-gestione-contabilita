@@ -5,18 +5,17 @@ import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { AppUser, CompanyProfile } from '@/lib/types';
+import type { CompanyProfile } from '@/lib/types';
 import { 
-  LineChart, 
   Lightbulb, 
   GanttChart, 
-  CalendarClock, 
-  Users, 
   Target, 
   ShieldAlert 
 } from 'lucide-react';
 import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-traffic-light';
 import { CashflowProjectionChart } from '@/components/pianificazione/cashflow-projection-chart';
+import { FiscalDeadlinesCard } from '@/components/pianificazione/fiscal-deadlines-card';
+import { EntityScoresCard } from '@/components/pianificazione/entity-scores-card';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -92,27 +91,11 @@ export default function PianificazionePage() {
           </CardContent>
         </Card>
 
-        {/* Prossime Scadenze Fiscali - Half Width */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Prossime Scadenze Fiscali</CardTitle>
-            <CalendarClock className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
-            In fase di attivazione...
-          </CardContent>
-        </Card>
+        {/* Prossime Scadenze Fiscali - Dinamico */}
+        <FiscalDeadlinesCard societa={currentSocieta} />
 
-        {/* Score Clienti/Fornitori - Half Width */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Score Clienti/Fornitori</CardTitle>
-            <Users className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
-            In fase di attivazione...
-          </CardContent>
-        </Card>
+        {/* Score Clienti/Fornitori - Dinamico */}
+        <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
 
         {/* Budget per Categoria - Half Width */}
         <Card className="lg:col-span-2">
@@ -134,7 +117,7 @@ export default function PianificazionePage() {
           <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
             In fase di attivazione...
           </CardContent>
-        </Card>
+        </div>
       </div>
     </div>
   );
