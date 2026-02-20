@@ -17,6 +17,7 @@ import { FiscalDeadlinesCard } from '@/components/pianificazione/fiscal-deadline
 import { EntityScoresCard } from '@/components/pianificazione/entity-scores-card';
 import { VisualTimeline } from '@/components/pianificazione/visual-timeline';
 import { CategoryBudgetCard } from '@/components/pianificazione/category-budget-card';
+import { AnomalyAlertsCard } from '@/components/pianificazione/anomaly-alerts-card';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -93,16 +94,11 @@ export default function PianificazionePage() {
         {/* Budget per Categoria */}
         <CategoryBudgetCard societa={currentSocieta} />
 
-        {/* Anomalie Rilevate - Half Width */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Anomalie Rilevate</CardTitle>
-            <ShieldAlert className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
-            In fase di attivazione...
-          </CardContent>
-        </Card>
+        {/* Anomalie Rilevate */}
+        <AnomalyAlertsCard 
+          societa={currentSocieta} 
+          userId={user?.uid || ''} 
+        />
       </div>
     </div>
   );
