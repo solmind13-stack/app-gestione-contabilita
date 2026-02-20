@@ -5,6 +5,7 @@ import { useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, orderBy, limit } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, AlertTriangle, XCircle, Info, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate, parseDate } from '@/lib/utils';
