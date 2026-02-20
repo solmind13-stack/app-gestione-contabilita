@@ -2,6 +2,7 @@
 
 /**
  * @fileOverview Un flow AI per analizzare lo storico dei movimenti e calcolare un punteggio di affidabilità per clienti e fornitori.
+ * Esegue i calcoli numerici in TypeScript e usa Gemini per generare un riepilogo in linguaggio naturale.
  *
  * - calculateEntityScores - La funzione principale che orchestra l'analisi.
  * - CalculateEntityScoresInput - Lo schema di input per il flow.
@@ -10,87 +11,47 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import type { EntityScore } from '@/lib/types/pianificazione';
+import { getFirestore, collection, query, where, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { initializeApp, getApps } from 'firebase/app';
+import { firebaseConfig } from '@/firebase/config';
+import type { EntityScore, Movimento, Scadenza } from '@/lib/types/pianificazione';
+import { subMonths, startOfToday, differenceInDays, parseISO } from 'date-fns';
 
-// Schema Zod che corrisponde all'interfaccia EntityScore.
-// I Timestamp di Firebase sono rappresentati come stringhe per il trasporto JSON.
-const EntityScoreSchema = z.object({
-  id: z.string().describe("Un ID univoco fittizio per l'entità."),
-  societa: z.string(),
-  userId: z.string(),
-  entityName: z.string().describe("Il nome del cliente o fornitore."),
-  entityType: z.enum(['client', 'supplier']),
-  reliabilityScore: z.number().min(0).max(100).describe("Il punteggio di affidabilità calcolato."),
-  averagePaymentDelay: z.number().describe("Il ritardo medio di pagamento in giorni (solo per fornitori)."),
-  totalTransactions: z.number().describe("Il numero totale di transazioni con l'entità."),
-  onTimePercentage: z.number().min(0).max(100).describe("La percentuale di pagamenti puntuali (solo per fornitori)."),
-  lastUpdated: z.string().describe("Data ISO dell'ultimo aggiornamento."),
-  history: z.array(z.object({
-    date: z.string().describe("Data ISO della registrazione storica."),
-    score: z.number(),
-    reason: z.string(),
-  })),
-});
-
+// Inizializzazione Firebase lato server per l'accesso a Firestore nel flow
+if (getApps().length === 0) {
+  initializeApp(firebaseConfig);
+}
+const db = getFirestore();
 
 const CalculateEntityScoresInputSchema = z.object({
   societa: z.string().describe("La società per cui calcolare i punteggi ('LNC' o 'STG')."),
   userId: z.string().describe("L'ID dell'utente che richiede l'analisi."),
-  movements: z.string().describe("Un JSON stringato di tutti i movimenti degli ultimi 24 mesi per la società."),
-  deadlines: z.string().describe("Un JSON stringato di tutte le scadenze (pagate e non) per la società, per correlare pagamenti e date previste."),
 });
-export type CalculateEntityScoresInput = z.infer<typeof CalculateEntityScoresInputSchema>;
 
 const CalculateEntityScoresOutputSchema = z.object({
-  scores: z.array(EntityScoreSchema),
-  summary: z.string().describe("Un riepilogo testuale in italiano dell'analisi e dei risultati chiave."),
+  scores: z.any().describe("L'array di oggetti EntityScore calcolati."),
+  summary: z.string().describe("Un riepilogo testuale in italiano dei risultati."),
 });
-export type CalculateEntityScoresOutput = z.infer<typeof CalculateEntityScoresOutputSchema>;
 
-
-export async function calculateEntityScores(input: CalculateEntityScoresInput): Promise<CalculateEntityScoresOutput> {
+export async function calculateEntityScores(input: { societa: string, userId: string }) {
   return calculateEntityScoresFlow(input);
 }
 
+// Prompt per Gemini dedicato alla sola generazione della narrativa
+const narrativePrompt = ai.definePrompt({
+  name: 'entityScoresNarrativePrompt',
+  input: { schema: z.object({ analysisData: z.string() }) },
+  output: { schema: z.object({ summary: z.string() }) },
+  prompt: `Sei un esperto analista finanziario per aziende italiane.
+  Ho calcolato degli score di affidabilità (da 0 a 100) per i clienti e i fornitori basandomi sullo storico dei pagamenti degli ultimi 24 mesi.
+  
+  Ecco i dati calcolati (nome, tipo, score, ritardo medio):
+  {{analysisData}}
 
-const prompt = ai.definePrompt({
-  name: 'calculateEntityScoresPrompt',
-  input: { schema: CalculateEntityScoresInputSchema },
-  output: { schema: CalculateEntityScoresOutputSchema },
-  prompt: `
-    Sei un analista finanziario specializzato nel valutare l'affidabilità di clienti e fornitori per aziende italiane.
-    Il tuo compito è analizzare i dati finanziari forniti per la società {{societa}} e calcolare un punteggio di affidabilità (reliabilityScore) per ogni entità.
-
-    DATI A DISPOSIZIONE (in formato JSON stringato):
-    - Movimenti bancari degli ultimi 24 mesi: {{{movements}}}
-    - Scadenze (pagate e non pagate): {{{deadlines}}}
-
-    IL TUO PROCESSO DI ANALISI DETTAGLIATO:
-
-    1.  **Raggruppa Movimenti**: Analizza i movimenti e raggruppali per entità (cliente o fornitore). Usa la 'descrizione' per identificare l'entità. Ad esempio, i movimenti con descrizioni "Affitto Rossi Srl" e "Pagamento fattura Rossi Srl" appartengono entrambi a "Rossi Srl".
-    2.  **Identifica Tipo Entità**: Per ogni entità, determina se è un 'client' (principalmente entrate) o un 'supplier' (principalmente uscite).
-    3.  **Correlazione Pagamenti-Scadenze**: Per ogni entità fornitore, cerca di abbinare i movimenti di uscita con le scadenze corrispondenti nel JSON 'deadlines'. Un abbinamento è valido se la descrizione è simile e l'importo è compatibile.
-    4.  **Calcola Metriche per Ogni Entità**:
-        - **totalTransactions**: Il numero totale di movimenti associati all'entità.
-        - **averagePaymentDelay**: SOLO per i fornitori, calcola la differenza media in giorni tra la 'dataScadenza' della scadenza e la 'data' del movimento di pagamento. Se il pagamento è in anticipo, il ritardo è negativo. Se non trovi scadenze abbinate, metti 0.
-        - **onTimePercentage**: La percentuale di pagamenti effettuati entro la data di scadenza. Se non trovi scadenze abbinate, metti 100.
-    5.  **Calcola reliabilityScore (0-100)**:
-        - Parti da un punteggio base di 50.
-        - Aggiungi/sottrai punti in base a queste regole:
-          - **Puntualità**: +20 se onTimePercentage > 90%; +10 se > 75%.
-          - **Ritardo**: -20 se averagePaymentDelay > 30 giorni; -10 se > 15 giorni.
-          - **Affidabilità Storica**: +10 se totalTransactions > 20.
-        - Il punteggio non può superare 100 o scendere sotto 0.
-    6.  **Genera Storico (Semplificato)**: Per il campo 'history', crea solo una voce con la data odierna, lo score calcolato e "Initial analysis" come 'reason'.
-    7.  **Crea l'Output**: Assembla tutti i dati calcolati in un array 'scores', rispettando lo schema.
-    8.  **Scrivi il Sommario**: Crea un 'summary' testuale in italiano di 2-3 frasi che evidenzi le entità più e meno affidabili. Esempio: "Analizzati 15 clienti e 8 fornitori. L'entità più affidabile risulta Rossi Srl (score 92). Particolare attenzione a Bianchi Spa (score 45, con un ritardo medio di 18 giorni)."
-
-    REQUISITI FINALI:
-    - L'output DEVE essere un singolo oggetto JSON che rispetta esattamente lo schema definito.
-    - Tutti i campi (id, userId, lastUpdated) devono essere compilati. Per l'id usa un UUID fittizio, per le date usa l'ISO string.
-  `,
+  Genera un breve riassunto (summary) in italiano naturale che spieghi i risultati principali.
+  Evidenzia le entità più virtuose e quelle che richiedono attenzione (score bassi o ritardi significativi).
+  Usa un tono professionale ma accessibile. Massimo 3-4 frasi.`,
 });
-
 
 const calculateEntityScoresFlow = ai.defineFlow(
   {
@@ -100,16 +61,149 @@ const calculateEntityScoresFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      const { output } = await prompt(input);
-      if (!output) {
-        throw new Error('Il modello AI non ha restituito un output valido.');
+      const { societa, userId } = input;
+      const today = startOfToday();
+      const twentyFourMonthsAgo = subMonths(today, 24).toISOString();
+      const sixMonthsAgo = subMonths(today, 6).toISOString();
+
+      // 1. Recupero dati da Firestore
+      const movementsRef = collection(db, 'movements');
+      const mvQuery = query(movementsRef, where('societa', '==', societa), where('data', '>=', twentyFourMonthsAgo));
+      const mvSnapshot = await getDocs(mvQuery);
+      const movements: Movimento[] = [];
+      mvSnapshot.forEach(d => movements.push({ id: d.id, ...d.data() } as any));
+
+      const deadlinesRef = collection(db, 'deadlines');
+      const dlQuery = query(deadlinesRef, where('societa', '==', societa), where('dataScadenza', '>=', twentyFourMonthsAgo));
+      const dlSnapshot = await getDocs(dlQuery);
+      const deadlines: Scadenza[] = [];
+      dlSnapshot.forEach(d => deadlines.push({ id: d.id, ...d.data() } as any));
+
+      if (movements.length === 0) {
+        return { scores: [], summary: "Nessun dato storico sufficiente per l'analisi." };
       }
-      return output;
+
+      // 2. Raggruppamento e Analisi (TypeScript Puro)
+      const entities: Record<string, {
+        name: string;
+        type: 'client' | 'supplier';
+        totalTransactions: number;
+        totalDelayDays: number;
+        delaysCount: number;
+        onTimeCount: number;
+        recentTransactions: number;
+        olderTransactions: number;
+      }> = {};
+
+      movements.forEach(m => {
+        // Normalizzazione semplice del nome entità dalla descrizione
+        const entityName = m.descrizione.split(/ - | \/ | \(| n\./)[0].trim();
+        if (!entities[entityName]) {
+          entities[entityName] = {
+            name: entityName,
+            type: m.entrata > 0 ? 'client' : 'supplier',
+            totalTransactions: 0,
+            totalDelayDays: 0,
+            delaysCount: 0,
+            onTimeCount: 0,
+            recentTransactions: 0,
+            olderTransactions: 0,
+          };
+        }
+
+        const entity = entities[entityName];
+        entity.totalTransactions++;
+        if (m.data >= sixMonthsAgo) entity.recentTransactions++;
+        else entity.olderTransactions++;
+
+        // Calcolo ritardo se collegato a una scadenza
+        if (m.linkedTo) {
+          const dlId = m.linkedTo.split('/')[1];
+          const dl = deadlines.find(d => d.id === dlId);
+          if (dl) {
+            const delay = differenceInDays(parseISO(m.data), parseISO(dl.dataScadenza));
+            entity.totalDelayDays += delay;
+            entity.delaysCount++;
+            if (delay <= 0) entity.onTimeCount++;
+          }
+        }
+      });
+
+      const calculatedScores: EntityScore[] = [];
+      const todayIso = today.toISOString();
+
+      for (const name in entities) {
+        const entity = entities[name];
+        let score = 50; // Base
+
+        const onTimePercentage = entity.delaysCount > 0 
+          ? (entity.onTimeCount / entity.delaysCount) * 100 
+          : 80; // Default se non ci sono scadenze collegate
+
+        const avgDelay = entity.delaysCount > 0 
+          ? entity.totalDelayDays / entity.delaysCount 
+          : 0;
+
+        // Applicazione logica a punti
+        if (onTimePercentage > 90) score += 20;
+        else if (onTimePercentage > 75) score += 10;
+
+        if (avgDelay > 30) score -= 20;
+        else if (avgDelay > 15) score -= 10;
+
+        // Trend (semplificato basato sulla frequenza)
+        const recentFreq = entity.recentTransactions / 6;
+        const olderFreq = entity.olderTransactions / 18;
+        if (recentFreq > olderFreq * 1.2) score += 10;
+        else if (recentFreq < olderFreq * 0.8) score -= 10;
+
+        if (entity.totalTransactions > 20) score += 10;
+
+        score = Math.max(0, Math.min(100, score));
+
+        calculatedScores.push({
+          id: `score_${societa}_${name.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          societa,
+          userId,
+          entityName: entity.name,
+          entityType: entity.type,
+          reliabilityScore: Math.round(score),
+          averagePaymentDelay: Math.round(avgDelay),
+          totalTransactions: entity.totalTransactions,
+          onTimePercentage: Math.round(onTimePercentage),
+          lastUpdated: todayIso,
+          history: [{
+            date: todayIso,
+            score: Math.round(score),
+            reason: "Analisi automatica storico movimenti"
+          }]
+        });
+      }
+
+      // 3. Generazione Narrativa con Gemini
+      const analysisData = JSON.stringify(calculatedScores.map(s => ({
+        n: s.entityName,
+        t: s.entityType,
+        s: s.reliabilityScore,
+        d: s.averagePaymentDelay
+      })));
+
+      const { output } = await narrativePrompt({ analysisData });
+      const summary = output?.summary || "Analisi score completata con successo.";
+
+      // 4. Salvataggio su Firestore
+      const batch = writeBatch(db);
+      calculatedScores.forEach(score => {
+        const scoreRef = doc(db, 'users', userId, 'entityScores', score.id);
+        batch.set(scoreRef, score);
+      });
+      await batch.commit();
+
+      return { scores: calculatedScores, summary };
+
     } catch (error) {
       console.error("Errore nel flow 'calculateEntityScoresFlow':", error);
-      throw new Error(
-        "L'analisi dei punteggi di affidabilità non è riuscita. Potrebbe esserci un problema con i dati forniti o con il servizio AI."
-      );
+      throw new Error("L'analisi dei punteggi di affidabilità non è riuscita.");
     }
   }
 );
