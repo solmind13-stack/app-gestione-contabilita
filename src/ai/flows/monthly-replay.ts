@@ -29,9 +29,9 @@ const MonthlyReplayInputSchema = z.object({
 
 const CategoryComparisonSchema = z.object({
   category: z.string(),
-  predicted: number(),
-  actual: number(),
-  deviation: number(),
+  predicted: z.number(),
+  actual: z.number(),
+  deviation: z.number(),
 });
 
 const MonthlyReplayOutputSchema = z.object({
