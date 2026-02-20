@@ -24,3 +24,4 @@ import '@/ai/flows/optimize-payment-timing.ts';
 import '@/ai/flows/generate-decision-report.ts';
 import '@/ai/flows/data-audit-trail.ts';
 import '@/ai/flows/fetch-sector-benchmarks.ts';
+import '@/ai/flows/find-similar-cases.ts';
