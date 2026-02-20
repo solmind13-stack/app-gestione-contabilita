@@ -16,6 +16,7 @@ import {
   ShieldAlert 
 } from 'lucide-react';
 import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-traffic-light';
+import { CashflowProjectionChart } from '@/components/pianificazione/cashflow-projection-chart';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -31,6 +32,8 @@ export default function PianificazionePage() {
       if (user.company) setSelectedCompany(user.company);
     }
   }, [user]);
+
+  const currentSocieta = selectedCompany === 'Tutte' ? (user?.company || 'LNC') : selectedCompany;
 
   return (
     <div className="space-y-6">
@@ -57,36 +60,31 @@ export default function PianificazionePage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Semaforo Liquidità - Componente Dinamico */}
         <LiquidityTrafficLight 
-          societa={selectedCompany === 'Tutte' ? (user?.company || 'LNC') : selectedCompany} 
+          societa={currentSocieta} 
           userId={user?.uid || ''} 
         />
 
-        {/* Proiezione Cash Flow - Half Width */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Proiezione Cash Flow</CardTitle>
-            <LineChart className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="h-48 flex items-center justify-center text-muted-foreground text-sm italic">
-            In fase di attivazione...
-          </CardContent>
-        </Card>
+        {/* Proiezione Cash Flow - Dinamico */}
+        <CashflowProjectionChart 
+          societa={currentSocieta}
+          userId={user?.uid || ''}
+        />
 
         {/* Scenari - Half Width */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Scenari</CardTitle>
+            <CardTitle className="text-base font-semibold">Scenari Strategici</CardTitle>
             <Lightbulb className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
-          <CardContent className="h-48 flex items-center justify-center text-muted-foreground text-sm italic">
-            In fase di attivazione...
+          <CardContent className="h-48 flex items-center justify-center text-muted-foreground text-sm italic text-center p-6">
+            L'AI sta analizzando i possibili scenari di investimento basati sulla tua capacità di cassa...
           </CardContent>
         </Card>
 
         {/* Timeline Decisioni - Full Width */}
         <Card className="lg:col-span-4">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Timeline Decisioni</CardTitle>
+            <CardTitle className="text-base font-semibold">Timeline Decisionale</CardTitle>
             <GanttChart className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent className="h-32 flex items-center justify-center text-muted-foreground text-sm italic">
