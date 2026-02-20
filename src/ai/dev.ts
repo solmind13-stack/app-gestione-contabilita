@@ -20,3 +20,4 @@ import '@/ai/flows/generate-narrative-insights.ts';
 import '@/ai/flows/detect-anomalies.ts';
 import '@/ai/flows/generate-sandbox-insight.ts';
 import '@/ai/flows/run-stress-tests.ts';
+import '@/ai/flows/optimize-payment-timing.ts';
