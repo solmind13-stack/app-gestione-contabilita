@@ -19,6 +19,7 @@ import { VisualTimeline } from '@/components/pianificazione/visual-timeline';
 import { CategoryBudgetCard } from '@/components/pianificazione/category-budget-card';
 import { AnomalyAlertsCard } from '@/components/pianificazione/anomaly-alerts-card';
 import { CrossCompanyPatterns } from '@/components/pianificazione/cross-company-patterns';
+import { NarrativeAiCard } from '@/components/pianificazione/narrative-ai-card';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -70,6 +71,12 @@ export default function PianificazionePage() {
         <CashflowProjectionChart 
           societa={currentSocieta}
           userId={user?.uid || ''}
+        />
+
+        {/* Briefing Narrativo AI & Scenari */}
+        <NarrativeAiCard 
+          societa={currentSocieta} 
+          userId={user?.uid || ''} 
         />
 
         {/* Intelligence Cross-Azienda - Full Width Section */}
