@@ -35,6 +35,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Sparkles, 
   Loader2, 
@@ -46,10 +48,14 @@ import {
   History,
   CheckCircle2,
   XCircle,
-  Lightbulb
+  Lightbulb,
+  Users2,
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateDecisionReport } from '@/ai/flows/generate-decision-report';
+import { findSimilarCases } from '@/ai/flows/find-similar-cases';
 import { formatCurrency, cn } from '@/lib/utils';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
@@ -75,8 +81,10 @@ export function DecisionReportDialog({ isOpen, setIsOpen, societa, userId }: Dec
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingCases, setIsGeneratingCases] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [report, setReport] = useState<any>(null);
+  const [similarCases, setSimilarCases] = useState<any>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -94,14 +102,34 @@ export function DecisionReportDialog({ isOpen, setIsOpen, societa, userId }: Dec
   const onSubmit = async (data: FormValues) => {
     setIsGenerating(true);
     setReport(null);
+    setSimilarCases(null);
     try {
+      // Step 1: Financial Report (Fast)
       const result = await generateDecisionReport({
         ...data,
         societa,
         userId,
       });
       setReport(result);
-      toast({ title: "Analisi AI Completata", className: "bg-green-100 dark:bg-green-900" });
+      toast({ title: "Analisi Finanziaria Completata" });
+
+      // Step 2: External Intelligence / Similar Cases (Slower, async)
+      setIsGeneratingCases(true);
+      try {
+        const casesResult = await findSimilarCases({
+          societa,
+          userId,
+          decisionDescription: data.description,
+          decisionAmount: data.amount,
+          currentBalance: result.simulatedBalance.month1,
+        });
+        setSimilarCases(casesResult);
+      } catch (err) {
+        console.error("Find similar cases flow failed:", err);
+      } finally {
+        setIsGeneratingCases(false);
+      }
+
     } catch (error: any) {
       console.error(error);
       toast({ variant: "destructive", title: "Errore", description: error.message });
@@ -116,6 +144,7 @@ export function DecisionReportDialog({ isOpen, setIsOpen, societa, userId }: Dec
     try {
       await addDoc(collection(firestore, 'decisionReports'), {
         ...report,
+        similarCases: similarCases || null,
         decisionInput: form.getValues(),
         societa,
         userId,
@@ -197,6 +226,97 @@ export function DecisionReportDialog({ isOpen, setIsOpen, societa, userId }: Dec
               "{recommendation}"
             </p>
           </div>
+        </div>
+
+        {/* Similar Cases Section */}
+        <Separator className="my-8" />
+        
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Users2 className="h-5 w-5 text-primary" />
+            <h3 className="text-sm font-black uppercase tracking-widest text-primary">Esperienze e Casi Simili</h3>
+          </div>
+
+          {isGeneratingCases ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </div>
+            </div>
+          ) : similarCases ? (
+            <div className="space-y-6">
+              <div className="grid gap-4">
+                {similarCases.cases.map((c: any, i: number) => (
+                  <div key={i} className="p-4 rounded-xl border bg-background shadow-sm hover:border-primary/20 transition-colors group">
+                    <div className="flex justify-between items-start mb-3">
+                      <Badge variant="outline" className={cn(
+                        "text-[9px] font-black uppercase tracking-tighter px-1.5 h-5",
+                        c.applicability === 'high' ? "text-green-600 border-green-200 bg-green-50" :
+                        c.applicability === 'medium' ? "text-amber-600 border-amber-200 bg-amber-50" :
+                        "text-muted-foreground"
+                      )}>
+                        Applicabilità {c.applicability}
+                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        {c.result.toLowerCase().includes('success') || c.result.toLowerCase().includes('positivo') ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        ) : c.result.toLowerCase().includes('fallimento') || c.result.toLowerCase().includes('negativo') ? (
+                          <XCircle className="h-3.5 w-3.5 text-red-500" />
+                        ) : (
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                        )}
+                        <span className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground">{c.result}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="text-xs font-black uppercase tracking-tight text-foreground/80">{c.who}</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed italic border-l-2 border-muted pl-3 py-1 group-hover:border-primary/30 transition-colors">
+                        "{c.action}"
+                      </p>
+                      <div className="mt-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Lightbulb className="h-3 w-3 text-primary" />
+                          <span className="text-[9px] font-black uppercase tracking-widest text-primary">Lezione Chiave</span>
+                        </div>
+                        <p className="text-[11px] font-medium leading-relaxed text-foreground/90">
+                          {c.lesson}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {similarCases.resources && similarCases.resources.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground/70 tracking-[0.2em]">
+                    <Globe className="h-3 w-3" />
+                    Risorse e Community Consigliate
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {similarCases.resources.map((r: string, i: number) => (
+                      <Badge key={i} variant="secondary" className="text-[10px] gap-1.5 py-1 px-2.5 font-bold cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors group">
+                        {r} <ExternalLink className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100" />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="p-4 rounded-xl bg-muted/30 border border-dashed border-border/50">
+                <p className="text-[9px] text-muted-foreground italic leading-tight flex items-start gap-2">
+                  <Info className="h-3 w-3 shrink-0" />
+                  {similarCases.disclaimer}
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -331,7 +451,7 @@ export function DecisionReportDialog({ isOpen, setIsOpen, societa, userId }: Dec
 
         {report && (
           <DialogFooter className="p-6 pt-0 gap-3">
-            <Button variant="outline" className="flex-1" onClick={() => setReport(null)}>
+            <Button variant="outline" className="flex-1" onClick={() => { setReport(null); setSimilarCases(null); }}>
               Nuova Analisi
             </Button>
             <Button className="flex-1 gap-2" onClick={handleSave} disabled={isSaving}>
