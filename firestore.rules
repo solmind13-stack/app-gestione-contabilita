@@ -117,7 +117,7 @@ service cloud.firestore {
                       );
     }
     
-    match /{collection}/{docId} where collection in ['deadlines', 'incomeForecasts', 'expenseForecasts'] {
+    match /{collection}/{docId} where collection in ['deadlines', 'incomeForecasts', 'expenseForecasts', 'cashFlowProjections', 'liquidityAlerts'] {
       
       function canReadCompanyData() {
         if (!isSignedIn()) { return false; }
@@ -144,7 +144,7 @@ service cloud.firestore {
                   (
                     hasGlobalWriteAccess() ||
                     (
-                      (getUserRole() == 'company' || getUserRole == 'company-editor') &&
+                      (getUserRole() == 'company' || getUserRole() == 'company-editor') &&
                       request.query.where[0][0] == 'societa' && 
                       request.query.where[0][1] == '==' && 
                       request.query.where[0][2] == getUserProfile().company

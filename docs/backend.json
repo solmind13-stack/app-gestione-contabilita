@@ -47,10 +47,8 @@
       }
     },
     "EntityScore": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "EntityScore",
       "type": "object",
-      "description": "Represents a reliability score for a client or supplier.",
       "properties": {
         "id": { "type": "string" },
         "societa": { "type": "string" },
@@ -60,21 +58,36 @@
         "reliabilityScore": { "type": "number" },
         "averagePaymentDelay": { "type": "number" },
         "totalTransactions": { "type": "number" },
-        "onTimePercentage": { "type": "number" },
-        "lastUpdated": { "type": "string", "format": "date-time" },
-        "history": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "date": { "type": "string", "format": "date-time" },
-              "score": { "type": "number" },
-              "reason": { "type": "string" }
-            }
-          }
-        }
-      },
-      "required": ["id", "societa", "userId", "entityName", "entityType", "reliabilityScore", "lastUpdated"]
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
+    },
+    "CashFlowProjection": {
+      "title": "CashFlowProjection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "societa": { "type": "string" },
+        "userId": { "type": "string" },
+        "scenarioType": { "type": "string", "enum": ["optimistic", "realistic", "pessimistic"] },
+        "confidenceScore": { "type": "number" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "weeklyProjections": { "type": "array" }
+      }
+    },
+    "LiquidityAlert": {
+      "title": "LiquidityAlert",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "societa": { "type": "string" },
+        "userId": { "type": "string" },
+        "status": { "type": "string", "enum": ["green", "yellow", "red"] },
+        "message": { "type": "string" },
+        "projectedDate": { "type": "string", "format": "date-time" },
+        "projectedBalance": { "type": "number" },
+        "triggeredAt": { "type": "string", "format": "date-time" },
+        "acknowledged": { "type": "boolean" }
+      }
     }
   },
   "firestore": {
@@ -90,6 +103,14 @@
       {
         "path": "/users/{userId}/entityScores/{scoreId}",
         "definition": { "entityName": "EntityScore" }
+      },
+      {
+        "path": "/cashFlowProjections/{projectionId}",
+        "definition": { "entityName": "CashFlowProjection" }
+      },
+      {
+        "path": "/liquidityAlerts/{alertId}",
+        "definition": { "entityName": "LiquidityAlert" }
       }
     ]
   }
