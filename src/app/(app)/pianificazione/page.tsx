@@ -117,7 +117,7 @@ export default function PianificazionePage() {
           <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
             In fase di attivazione...
           </CardContent>
-        </div>
+        </Card>
       </div>
     </div>
   );
