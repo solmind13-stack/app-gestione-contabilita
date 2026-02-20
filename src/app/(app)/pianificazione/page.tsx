@@ -17,7 +17,8 @@ import {
   BrainCircuit,
   FlaskConical,
   Target,
-  Database
+  Database,
+  Globe
 } from 'lucide-react';
 
 // Components
@@ -34,6 +35,7 @@ import { StressTestCard } from '@/components/pianificazione/stress-test-card';
 import { PaymentOptimizationCard } from '@/components/pianificazione/payment-optimization-card';
 import { DecisionReportDialog } from '@/components/pianificazione/decision-report-dialog';
 import { DataIntegrityCard } from '@/components/pianificazione/data-integrity-card';
+import { SectorBenchmarkCard } from '@/components/pianificazione/sector-benchmark-card';
 
 // AI Flows
 import { calculateCashFlowProjection } from '@/ai/flows/calculate-cash-flow-projection';
@@ -44,6 +46,7 @@ import { liquidityEarlyWarning } from '@/ai/flows/liquidity-early-warning';
 import { runStressTests } from '@/ai/flows/run-stress-tests';
 import { optimizePaymentTiming } from '@/ai/flows/optimize-payment-timing';
 import { verifyDataIntegrity } from '@/ai/flows/data-audit-trail';
+import { fetchSectorBenchmarks } from '@/ai/flows/fetch-sector-benchmarks';
 
 import type { CompanyProfile, Movimento, LiquidityAlert } from '@/lib/types';
 import { formatDate, cn } from '@/lib/utils';
@@ -117,35 +120,40 @@ export default function PianificazionePage() {
 
       // Step 2: Entity Scores
       setRefreshStep('Analisi affidabilità clienti/fornitori...');
-      setRefreshProgress(20);
+      setRefreshProgress(15);
       await calculateEntityScores({ societa: societaToAnalyze, userId: user.uid });
 
       // Step 3: Seasonal Patterns
       setRefreshStep('Rilevamento pattern stagionali...');
-      setRefreshProgress(35);
+      setRefreshProgress(30);
       await detectSeasonalPatterns({ societa: societaToAnalyze, userId: user.uid });
 
       // Step 4: Anomalies
       setRefreshStep('Controllo anomalie recenti...');
-      setRefreshProgress(50);
+      setRefreshProgress(45);
       await detectAnomalies({ societa: societaToAnalyze, userId: user.uid });
 
       // Step 5: Stress Tests
       setRefreshStep('Esecuzione simulazioni di resilienza...');
-      setRefreshProgress(65);
+      setRefreshProgress(60);
       await runStressTests({ societa: societaToAnalyze, userId: user.uid });
 
       // Step 6: Payment Optimization
       setRefreshStep('Ottimizzazione timing pagamenti...');
-      setRefreshProgress(80);
+      setRefreshProgress(75);
       await optimizePaymentTiming({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 7: Early Warning
+      // Step 7: Sector Benchmarks
+      setRefreshStep('Confronto con benchmark nazionali...');
+      setRefreshProgress(85);
+      await fetchSectorBenchmarks({ societa: societaToAnalyze, userId: user.uid });
+
+      // Step 8: Early Warning
       setRefreshStep('Monitoraggio liquidità critiche...');
       setRefreshProgress(90);
       await liquidityEarlyWarning({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 8: Data Integrity
+      // Step 9: Data Integrity
       setRefreshStep('Verifica integrità database...');
       setRefreshProgress(95);
       await verifyDataIntegrity({ societa: societaToAnalyze, userId: user.uid });
@@ -350,7 +358,19 @@ export default function PianificazionePage() {
           <DataIntegrityCard societa={currentSocieta} userId={user?.uid || ''} />
         </div>
 
-        {/* Row 8+: Utility Cards (2 per row) */}
+        {/* Row 8: Intelligence Esterna */}
+        <div className="md:col-span-2 mt-4">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              Intelligence Esterna
+            </h2>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <SectorBenchmarkCard societa={currentSocieta} userId={user?.uid || ''} />
+        </div>
+
+        {/* Row 9+: Utility Cards (2 per row) */}
         <FiscalDeadlinesCard societa={currentSocieta} />
         <CategoryBudgetCard societa={currentSocieta} />
       </div>
