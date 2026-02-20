@@ -3,7 +3,7 @@
 import { firebaseConfig } from '@/firebase/config';
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
 
 // IMPORTANT: DO NOT MODIFY THIS FUNCTION
 export function initializeFirebase(): { firebaseApp: FirebaseApp; auth: Auth; firestore: Firestore; } {
@@ -20,10 +20,24 @@ export function initializeFirebase(): { firebaseApp: FirebaseApp; auth: Auth; fi
 
 
 export function getSdks(firebaseApp: FirebaseApp) {
+  let firestore: Firestore;
+  
+  try {
+    // Utilizziamo initializeFirestore per configurare impostazioni sperimentali.
+    // ForceLongPolling è spesso necessario in ambienti di sviluppo o reti aziendali 
+    // dove i WebSocket potrebbero essere bloccati o instabili.
+    firestore = initializeFirestore(firebaseApp, {
+      experimentalForceLongPolling: true,
+    });
+  } catch (e) {
+    // Se Firestore è già stato inizializzato, usiamo getFirestore come fallback.
+    firestore = getFirestore(firebaseApp);
+  }
+
   return {
     firebaseApp,
     auth: getAuth(firebaseApp),
-    firestore: getFirestore(firebaseApp)
+    firestore
   };
 }
 
