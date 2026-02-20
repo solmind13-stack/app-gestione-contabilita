@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -17,7 +16,8 @@ import {
   Calendar,
   BrainCircuit,
   FlaskConical,
-  Target
+  Target,
+  Database
 } from 'lucide-react';
 
 // Components
@@ -33,6 +33,7 @@ import { NarrativeAiCard } from '@/components/pianificazione/narrative-ai-card';
 import { StressTestCard } from '@/components/pianificazione/stress-test-card';
 import { PaymentOptimizationCard } from '@/components/pianificazione/payment-optimization-card';
 import { DecisionReportDialog } from '@/components/pianificazione/decision-report-dialog';
+import { DataIntegrityCard } from '@/components/pianificazione/data-integrity-card';
 
 // AI Flows
 import { calculateCashFlowProjection } from '@/ai/flows/calculate-cash-flow-projection';
@@ -42,6 +43,7 @@ import { detectAnomalies } from '@/ai/flows/detect-anomalies';
 import { liquidityEarlyWarning } from '@/ai/flows/liquidity-early-warning';
 import { runStressTests } from '@/ai/flows/run-stress-tests';
 import { optimizePaymentTiming } from '@/ai/flows/optimize-payment-timing';
+import { verifyDataIntegrity } from '@/ai/flows/data-audit-trail';
 
 import type { CompanyProfile, Movimento, LiquidityAlert } from '@/lib/types';
 import { formatDate, cn } from '@/lib/utils';
@@ -140,8 +142,13 @@ export default function PianificazionePage() {
 
       // Step 7: Early Warning
       setRefreshStep('Monitoraggio liquidità critiche...');
-      setRefreshProgress(95);
+      setRefreshProgress(90);
       await liquidityEarlyWarning({ societa: societaToAnalyze, userId: user.uid });
+
+      // Step 8: Data Integrity
+      setRefreshStep('Verifica integrità database...');
+      setRefreshProgress(95);
+      await verifyDataIntegrity({ societa: societaToAnalyze, userId: user.uid });
 
       setRefreshStep('Completato!');
       setRefreshProgress(100);
@@ -334,7 +341,16 @@ export default function PianificazionePage() {
           <VisualTimeline societa={currentSocieta} />
         </div>
 
-        {/* Row 7+: Utility Cards (2 per row) */}
+        {/* Row 7: Data Integrity */}
+        <div className="md:col-span-2 mt-4">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-xl font-black uppercase tracking-tighter">Salute dei Dati</h2>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <DataIntegrityCard societa={currentSocieta} userId={user?.uid || ''} />
+        </div>
+
+        {/* Row 8+: Utility Cards (2 per row) */}
         <FiscalDeadlinesCard societa={currentSocieta} />
         <CategoryBudgetCard societa={currentSocieta} />
       </div>
