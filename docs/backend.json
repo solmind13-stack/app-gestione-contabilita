@@ -88,6 +88,19 @@
         "triggeredAt": { "type": "string", "format": "date-time" },
         "acknowledged": { "type": "boolean" }
       }
+    },
+    "SeasonalAnalysis": {
+      "title": "SeasonalAnalysis",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "societa": { "type": "string" },
+        "userId": { "type": "string" },
+        "patterns": { "type": "array" },
+        "narrative": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "monthsAnalyzed": { "type": "number" }
+      }
     }
   },
   "firestore": {
@@ -111,6 +124,10 @@
       {
         "path": "/liquidityAlerts/{alertId}",
         "definition": { "entityName": "LiquidityAlert" }
+      },
+      {
+        "path": "/users/{userId}/seasonalPatterns/{analysisId}",
+        "definition": { "entityName": "SeasonalAnalysis" }
       }
     ]
   }
