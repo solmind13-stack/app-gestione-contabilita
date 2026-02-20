@@ -16,6 +16,7 @@ import { CashflowProjectionChart } from '@/components/pianificazione/cashflow-pr
 import { FiscalDeadlinesCard } from '@/components/pianificazione/fiscal-deadlines-card';
 import { EntityScoresCard } from '@/components/pianificazione/entity-scores-card';
 import { VisualTimeline } from '@/components/pianificazione/visual-timeline';
+import { CategoryBudgetCard } from '@/components/pianificazione/category-budget-card';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -57,13 +58,13 @@ export default function PianificazionePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Semaforo Liquidità - Componente Dinamico */}
+        {/* Semaforo Liquidità */}
         <LiquidityTrafficLight 
           societa={currentSocieta} 
           userId={user?.uid || ''} 
         />
 
-        {/* Proiezione Cash Flow - Dinamico */}
+        {/* Proiezione Cash Flow */}
         <CashflowProjectionChart 
           societa={currentSocieta}
           userId={user?.uid || ''}
@@ -80,25 +81,17 @@ export default function PianificazionePage() {
           </CardContent>
         </Card>
 
-        {/* Timeline Decisionale - Dinamica */}
+        {/* Timeline Decisionale */}
         <VisualTimeline societa={currentSocieta} />
 
-        {/* Prossime Scadenze Fiscali - Dinamico */}
+        {/* Prossime Scadenze Fiscali */}
         <FiscalDeadlinesCard societa={currentSocieta} />
 
-        {/* Score Clienti/Fornitori - Dinamico */}
+        {/* Score Clienti/Fornitori */}
         <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
 
-        {/* Budget per Categoria - Half Width */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Budget per Categoria</CardTitle>
-            <Target className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
-            In fase di attivazione...
-          </CardContent>
-        </Card>
+        {/* Budget per Categoria */}
+        <CategoryBudgetCard societa={currentSocieta} />
 
         {/* Anomalie Rilevate - Half Width */}
         <Card className="lg:col-span-2">
