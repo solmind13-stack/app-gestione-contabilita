@@ -18,6 +18,7 @@ import { EntityScoresCard } from '@/components/pianificazione/entity-scores-card
 import { VisualTimeline } from '@/components/pianificazione/visual-timeline';
 import { CategoryBudgetCard } from '@/components/pianificazione/category-budget-card';
 import { AnomalyAlertsCard } from '@/components/pianificazione/anomaly-alerts-card';
+import { CrossCompanyPatterns } from '@/components/pianificazione/cross-company-patterns';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -37,7 +38,7 @@ export default function PianificazionePage() {
   const currentSocieta = selectedCompany === 'Tutte' ? (user?.company || 'LNC') : selectedCompany;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
         <div>
           <h1 className="text-3xl font-bold">Pianificazione Spese</h1>
@@ -71,16 +72,14 @@ export default function PianificazionePage() {
           userId={user?.uid || ''}
         />
 
-        {/* Scenari - Half Width */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Scenari Strategici</CardTitle>
-            <Lightbulb className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="h-48 flex items-center justify-center text-muted-foreground text-sm italic text-center p-6">
-            L'AI sta analizzando i possibili scenari di investimento basati sulla tua capacità di cassa...
-          </CardContent>
-        </Card>
+        {/* Intelligence Cross-Azienda - Full Width Section */}
+        <div className="lg:col-span-4 mt-4 mb-2">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-xl font-black uppercase tracking-tighter">Intelligence Cross-Azienda</h2>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <CrossCompanyPatterns userId={user?.uid || ''} />
+        </div>
 
         {/* Timeline Decisionale */}
         <VisualTimeline societa={currentSocieta} />
