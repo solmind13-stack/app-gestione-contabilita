@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import type { AppUser, CompanyProfile } from '@/lib/types';
 import { 
-  TrafficLight, 
   LineChart, 
   Lightbulb, 
   GanttChart, 
@@ -16,6 +15,7 @@ import {
   Target, 
   ShieldAlert 
 } from 'lucide-react';
+import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-traffic-light';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -55,19 +55,11 @@ export default function PianificazionePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Semaforo Liquidità - Full Width */}
-        <Card className="lg:col-span-4 border-2 border-primary/10">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle className="text-xl font-bold">Semaforo Liquidità</CardTitle>
-              <CardDescription>Stato attuale e criticità previste</CardDescription>
-            </div>
-            <TrafficLight className="h-8 w-8 text-primary" />
-          </CardHeader>
-          <CardContent className="h-32 flex items-center justify-center text-muted-foreground italic">
-            In fase di attivazione...
-          </CardContent>
-        </Card>
+        {/* Semaforo Liquidità - Componente Dinamico */}
+        <LiquidityTrafficLight 
+          societa={selectedCompany === 'Tutte' ? (user?.company || 'LNC') : selectedCompany} 
+          userId={user?.uid || ''} 
+        />
 
         {/* Proiezione Cash Flow - Half Width */}
         <Card className="lg:col-span-2">
