@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, DocumentData, CollectionReference } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Landmark, 
@@ -52,7 +52,7 @@ export function FiscalDeadlinesCard({ societa }: FiscalDeadlinesCardProps) {
     
     const deadlinesWithEstimates = useMemo(() => {
         // Generiamo le scadenze per i prossimi 12 mesi
-        const upcoming = getUpcomingFiscalDeadlines(12, 'srl');
+        const upcoming = getUpcomingFiscalDeadlines(12);
 
         return upcoming.map((deadline) => {
             // Cerchiamo pagamenti storici simili per stimare l'importo
