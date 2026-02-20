@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { Separator } from '@/components/ui/separator';
 import { 
   Sparkles, 
   Loader2, 
@@ -19,7 +21,13 @@ import {
   Target,
   Database,
   Globe,
-  History
+  History,
+  Activity,
+  Zap,
+  TrendingUp,
+  ShieldAlert,
+  Clock,
+  Briefcase
 } from 'lucide-react';
 
 // Components
@@ -54,6 +62,16 @@ import { fiscalSentinel } from '@/ai/flows/fiscal-sentinel';
 
 import type { CompanyProfile, Movimento, LiquidityAlert } from '@/lib/types';
 import { formatDate, cn } from '@/lib/utils';
+
+const SectionHeader = ({ title, subtitle, icon: Icon }: { title: string, subtitle?: string, icon?: any }) => (
+  <div className="space-y-1 mb-6 border-b pb-3">
+    <div className="flex items-center gap-2">
+      {Icon && <Icon className="h-5 w-5 text-primary" />}
+      <h2 className="text-xl font-black uppercase tracking-tighter">{title}</h2>
+    </div>
+    {subtitle && <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest">{subtitle}</p>}
+  </div>
+);
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -102,7 +120,6 @@ export default function PianificazionePage() {
     const societaToAnalyze = currentSocieta === 'Tutte' ? 'LNC' : currentSocieta;
 
     try {
-      // Step 1: Projection
       setRefreshStep('Proiezione flussi di cassa...');
       setRefreshProgress(5);
       
@@ -122,48 +139,39 @@ export default function PianificazionePage() {
         expenseForecasts: "[]"
       });
 
-      // Step 2: Entity Scores
-      setRefreshStep('Analisi affidabilità clienti/fornitori...');
+      setRefreshStep('Analisi affidabilità partner...');
       setRefreshProgress(15);
       await calculateEntityScores({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 3: Seasonal Patterns
       setRefreshStep('Rilevamento pattern stagionali...');
       setRefreshProgress(30);
       await detectSeasonalPatterns({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 4: Anomalies
       setRefreshStep('Controllo anomalie recenti...');
       setRefreshProgress(45);
       await detectAnomalies({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 5: Stress Tests
-      setRefreshStep('Esecuzione simulazioni di resilienza...');
+      setRefreshStep('Esecuzione stress test...');
       setRefreshProgress(60);
       await runStressTests({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 6: Payment Optimization
-      setRefreshStep('Ottimizzazione timing pagamenti...');
+      setRefreshStep('Ottimizzazione pagamenti...');
       setRefreshProgress(75);
       await optimizePaymentTiming({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 7: Sector Benchmarks
-      setRefreshStep('Confronto con benchmark nazionali...');
+      setRefreshStep('Confronto benchmark...');
       setRefreshProgress(85);
       await fetchSectorBenchmarks({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 8: Fiscal Sentinel
       setRefreshStep('Radar novità fiscali...');
       setRefreshProgress(90);
       await fiscalSentinel({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 9: Early Warning
-      setRefreshStep('Monitoraggio liquidità critiche...');
+      setRefreshStep('Monitoraggio liquidità...');
       setRefreshProgress(95);
       await liquidityEarlyWarning({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 10: Data Integrity
-      setRefreshStep('Verifica integrità database...');
+      setRefreshStep('Verifica integrità...');
       setRefreshProgress(98);
       await verifyDataIntegrity({ societa: societaToAnalyze, userId: user.uid });
 
@@ -185,7 +193,7 @@ export default function PianificazionePage() {
   const isEmptyState = !isLoadingAlerts && (!latestAlerts || latestAlerts.length === 0);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-12 max-w-[1600px] mx-auto pb-20">
       <DecisionReportDialog 
         isOpen={isDecisionDialogOpen} 
         setIsOpen={setIsDecisionDialogOpen} 
@@ -193,46 +201,44 @@ export default function PianificazionePage() {
         userId={user?.uid || ''}
       />
 
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
+      {/* --- HEADER --- */}
+      <div className="flex flex-col md:flex-row gap-6 justify-between md:items-end">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Pianificazione Spese</h1>
+          <h1 className="text-4xl font-black tracking-tighter uppercase text-primary">Pianificazione Spese</h1>
           <div className="flex items-center gap-2 text-muted-foreground">
-            <span className="text-sm font-medium">Digital Twin Finanziario</span>
+            <Badge variant="secondary" className="font-bold tracking-widest text-[10px] uppercase px-2 py-0.5">Digital Twin Finanziario</Badge>
             {lastUpdate && (
-              <>
-                <span className="text-xs opacity-50">•</span>
-                <span className="text-xs flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  Ultimo aggiornamento: {formatDate(lastUpdate, 'dd MMM HH:mm')}
-                </span>
-              </>
+              <span className="text-[10px] flex items-center gap-1 font-bold uppercase opacity-60">
+                <Clock className="h-3.5 w-3.5" />
+                Ultimo Sync: {formatDate(lastUpdate, 'dd MMM HH:mm')}
+              </span>
             )}
           </div>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
           <Button 
-            variant="secondary"
+            variant="outline"
             onClick={() => setIsDecisionDialogOpen(true)}
-            className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9 border-primary/20 hover:bg-primary/10"
+            className="gap-2 font-black uppercase tracking-tighter text-[10px] h-10 border-primary/20 hover:bg-primary/5"
           >
-            <Target className="h-3.5 w-3.5" />
+            <Target className="h-4 w-4 text-primary" />
             Valuta Decisione
           </Button>
 
           <Button 
+            variant="outline"
             onClick={() => router.push('/pianificazione/sandbox')}
-            className="gap-2 bg-gradient-to-r from-primary to-primary/80 shadow-lg hover:shadow-primary/20 transition-all font-bold uppercase tracking-tighter text-[10px] h-9"
+            className="gap-2 font-black uppercase tracking-tighter text-[10px] h-10 border-primary/20 hover:bg-primary/5"
           >
-            <FlaskConical className="h-3.5 w-3.5" />
-            Apri Live Sandbox
+            <FlaskConical className="h-4 w-4 text-primary" />
+            Apri Sandbox
           </Button>
 
           {user && (user.role === 'admin' || user.role === 'editor') && (
             <Select value={selectedCompany} onValueChange={(v) => setSelectedCompany(v)}>
-              <SelectTrigger className="w-full sm:w-[180px] bg-background">
-                <SelectValue placeholder="Seleziona società" />
+              <SelectTrigger className="w-full sm:w-[180px] bg-background h-10 font-bold text-xs">
+                <SelectValue placeholder="Società" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Tutte">Tutte le società</SelectItem>
@@ -242,19 +248,17 @@ export default function PianificazionePage() {
           )}
           
           <Button 
-            variant="outline" 
-            size="sm" 
             onClick={handleRefreshAll} 
             disabled={isGlobalRefreshing}
-            className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9"
+            className="gap-2 font-black uppercase tracking-tighter text-[10px] h-10 shadow-lg shadow-primary/20"
           >
-            {isGlobalRefreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            {isGlobalRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Aggiorna Tutto
           </Button>
         </div>
       </div>
 
-      {/* Global Progress Bar */}
+      {/* --- PROGRESS BAR --- */}
       {isGlobalRefreshing && (
         <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-primary px-1">
@@ -265,142 +269,101 @@ export default function PianificazionePage() {
         </div>
       )}
 
-      {/* Empty State Welcome */}
+      {/* --- EMPTY STATE --- */}
       {isEmptyState && (
-        <Card className="border-primary/20 bg-primary/5 shadow-inner">
-          <CardContent className="py-10 flex flex-col items-center text-center space-y-6">
-            <div className="p-4 rounded-full bg-background shadow-sm border">
-              <BrainCircuit className="h-12 w-12 text-primary animate-pulse" />
+        <Card className="border-2 border-dashed border-primary/20 bg-primary/5">
+          <CardContent className="py-16 flex flex-col items-center text-center space-y-6">
+            <div className="p-6 rounded-3xl bg-background shadow-xl border">
+              <BrainCircuit className="h-16 w-16 text-primary animate-pulse" />
             </div>
             <div className="space-y-2 max-w-xl">
-              <h2 className="text-xl font-bold">Benvenuto nella Pianificazione Spese!</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Il tuo Digital Twin non ha ancora dati analizzati. L'AI ha bisogno di elaborare lo storico dei tuoi movimenti per generare proiezioni, valutare l'affidabilità dei partner e rilevare anomalie.
+              <h2 className="text-2xl font-black uppercase tracking-tighter">Attiva il tuo Digital Twin</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed font-medium">
+                Il sistema di pianificazione richiede un'analisi iniziale per processare lo storico dei movimenti e le scadenze future. Genera ora la prima proiezione di cassa e gli score di affidabilità.
               </p>
             </div>
-            <Button onClick={handleRefreshAll} disabled={isGlobalRefreshing} className="gap-2 px-8">
-              {isGlobalRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            <Button onClick={handleRefreshAll} disabled={isGlobalRefreshing} className="gap-2 px-10 h-12 rounded-2xl shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs">
+              {isGlobalRefreshing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
               Genera Prima Analisi
             </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Main Grid Layout */}
-      <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-6", isGlobalRefreshing && "opacity-50 pointer-events-none transition-opacity")}>
-        
-        {/* Row 1: The most prominent indicator */}
-        <div className="md:col-span-2">
-          <LiquidityTrafficLight 
-            societa={currentSocieta} 
-            userId={user?.uid || ''} 
-          />
-        </div>
-
-        {/* Row 2: Prediction and AI Interpretation */}
-        <CashflowProjectionChart 
-          societa={currentSocieta}
-          userId={user?.uid || ''}
-        />
-        <NarrativeAiCard 
-          societa={currentSocieta} 
-          userId={user?.uid || ''} 
-        />
-
-        {/* Row 3: Group Intelligence */}
-        <div className="md:col-span-2 mt-4">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter">Intelligence Cross-Azienda</h2>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <CrossCompanyPatterns userId={user?.uid || ''} />
-        </div>
-
-        {/* Row 4: Resilience & Optimization Section */}
-        <div className="md:col-span-2 mt-4">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter">Analisi di Resilienza e Strategia</h2>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2">
-               <StressTestCard 
-                societa={currentSocieta} 
-                userId={user?.uid || ''} 
-              />
+      {!isEmptyState && (
+        <div className={cn("space-y-16 transition-opacity duration-500", isGlobalRefreshing && "opacity-40 pointer-events-none")}>
+          
+          {/* SEZIONE 1: Situazione Attuale */}
+          <section>
+            <SectionHeader title="Situazione Attuale" subtitle="Stato della liquidità e briefing direzionale" icon={Activity} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <LiquidityTrafficLight societa={currentSocieta} userId={user?.uid || ''} />
+              <NarrativeAiCard societa={currentSocieta} userId={user?.uid || ''} />
             </div>
-            <div className="md:col-span-1">
-               <PaymentOptimizationCard 
-                societa={currentSocieta} 
-                userId={user?.uid || ''} 
-              />
+          </section>
+
+          {/* SEZIONE 2: Proiezioni e Timeline */}
+          <section>
+            <SectionHeader title="Proiezioni e Timeline" subtitle="Analisi temporale dei flussi di cassa previsti" icon={TrendingUp} />
+            <div className="space-y-8">
+              <CashflowProjectionChart societa={currentSocieta} userId={user?.uid || ''} />
+              <VisualTimeline societa={currentSocieta} />
             </div>
-          </div>
-        </div>
+          </section>
 
-        {/* Row 5: Apprendimento & Feedback Loop */}
-        <div className="md:col-span-2 mt-4">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
-              <History className="h-5 w-5 text-primary" />
-              Apprendimento Continuo
-            </h2>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <MonthlyReplayCard 
-            societa={currentSocieta} 
-            userId={user?.uid || ''} 
-          />
-        </div>
+          {/* SEZIONE 3: Analisi Operativa */}
+          <section>
+            <SectionHeader title="Analisi Operativa" subtitle="Gestione scadenze, budget e ottimizzazione partner" icon={Briefcase} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-8">
+                <FiscalDeadlinesCard societa={currentSocieta} />
+                <CategoryBudgetCard societa={currentSocieta} />
+              </div>
+              <div className="space-y-8">
+                <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
+                <PaymentOptimizationCard societa={currentSocieta} userId={user?.uid || ''} />
+              </div>
+            </div>
+          </section>
 
-        {/* Row 6: Intelligence Esterna */}
-        <div className="md:col-span-2 mt-4">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
-              <Globe className="h-5 w-5 text-primary" />
-              Intelligence Esterna
-            </h2>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <SectorBenchmarkCard societa={currentSocieta} userId={user?.uid || ''} />
-            <FiscalSentinelCard societa={currentSocieta} userId={user?.uid || ''} />
-          </div>
-        </div>
+          {/* SEZIONE 4: Rischi e Anomalie */}
+          <section>
+            <SectionHeader title="Rischi e Anomalie" subtitle="Monitoraggio resilienza e controllo conformità spese" icon={ShieldAlert} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <StressTestCard societa={currentSocieta} userId={user?.uid || ''} />
+              <AnomalyAlertsCard societa={currentSocieta} userId={user?.uid || ''} />
+            </div>
+          </section>
 
-        {/* Row 7: Anomalies & Patterns */}
-        <div className="md:col-span-2 mt-4">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <AnomalyAlertsCard 
-                societa={currentSocieta} 
-                userId={user?.uid || ''} 
-              />
-              <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
-           </div>
-        </div>
+          {/* SEZIONE 5: Multi-Azienda */}
+          <section>
+            <SectionHeader title="Intelligenza di Gruppo" subtitle="Sinergie e flussi cross-aziendali" icon={Zap} />
+            <CrossCompanyPatterns userId={user?.uid || ''} />
+          </section>
 
-        {/* Row 8: Timeline */}
-        <div className="md:col-span-2 mt-4">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter">Mappa Temporale dei Flussi</h2>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <VisualTimeline societa={currentSocieta} />
-        </div>
+          {/* SEZIONE 6: Apprendimento */}
+          <section>
+            <SectionHeader title="Apprendimento Continuo" subtitle="Monthly Replay e calibrazione dei modelli AI" icon={History} />
+            <MonthlyReplayCard societa={currentSocieta} userId={user?.uid || ''} />
+          </section>
 
-        {/* Row 9: Data Integrity */}
-        <div className="md:col-span-2 mt-4">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter">Salute dei Dati</h2>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <DataIntegrityCard societa={currentSocieta} userId={user?.uid || ''} />
-        </div>
+          {/* SEZIONE 7: Intelligence Esterna */}
+          <section>
+            <SectionHeader title="Intelligence Esterna" subtitle="Contesto di mercato e sentinella fiscale" icon={Globe} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <SectorBenchmarkCard societa={currentSocieta} userId={user?.uid || ''} />
+              <FiscalSentinelCard societa={currentSocieta} userId={user?.uid || ''} />
+            </div>
+          </section>
 
-        {/* Row 10+: Utility Cards (2 per row) */}
-        <FiscalDeadlinesCard societa={currentSocieta} />
-        <CategoryBudgetCard societa={currentSocieta} />
-      </div>
+          {/* SEZIONE 8: Salute Dati */}
+          <section>
+            <SectionHeader title="Salute dei Dati" subtitle="Audit trail e integrità del database finanziario" icon={Database} />
+            <DataIntegrityCard societa={currentSocieta} userId={user?.uid || ''} />
+          </section>
+
+        </div>
+      )}
     </div>
   );
 }
