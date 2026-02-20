@@ -31,12 +31,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import type { PrevisioneUscita, AppUser } from '@/lib/types';
+import type { PrevisioneUscita, AppUser, CompanyProfile, Movimento } from '@/lib/types';
 import { CATEGORIE_USCITE, CERTEZZA_LIVELLI, STATI_USCITE, RICORRENZE_USCITE, IVA_PERCENTAGES } from '@/lib/constants';
+import { validateExpenseForecast, crossValidate } from '@/lib/data-validation';
+import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -66,6 +69,8 @@ interface AddExpenseForecastDialogProps {
   forecastToEdit?: PrevisioneUscita | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
+  companies: CompanyProfile[];
+  historicalMovements: Movimento[];
 }
 
 export function AddExpenseForecastDialog({
@@ -76,9 +81,13 @@ export function AddExpenseForecastDialog({
   forecastToEdit,
   defaultCompany,
   currentUser,
+  companies,
+  historicalMovements,
 }: AddExpenseForecastDialogProps) {
   const isEditMode = !!forecastToEdit;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const { toast } = useToast();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -127,6 +136,22 @@ export function AddExpenseForecastDialog({
   }, [isOpen, isEditMode, forecastToEdit, defaultCompany, form, currentUser]);
 
   const onSubmit = async (data: FormValues) => {
+    // Data Validation
+    const validation = validateExpenseForecast(data, companies);
+    const crossVal = crossValidate({ ...data, type: 'expense' }, historicalMovements);
+    
+    const combinedWarnings = [...validation.warnings, ...crossVal.warnings];
+
+    if (!validation.isValid) {
+        toast({ variant: 'destructive', title: 'Errore Validazione', description: validation.errors.join('\n') });
+        return;
+    }
+
+    if (combinedWarnings.length > 0 && validationWarnings.length === 0) {
+        setValidationWarnings(combinedWarnings);
+        return;
+    }
+
     setIsSubmitting(true);
     const commonData = {
         ...data,
@@ -145,6 +170,7 @@ export function AddExpenseForecastDialog({
     }
     setIsSubmitting(false);
     setIsOpen(false);
+    setValidationWarnings([]);
   };
   
   const selectedCategory = form.watch('categoria');
@@ -158,7 +184,35 @@ export function AddExpenseForecastDialog({
 
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <>
+    <AlertDialog open={validationWarnings.length > 0} onOpenChange={(open) => !open && setValidationWarnings([])}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="text-amber-500" />
+                    Avvisi Previsione Uscita
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                    <div className="space-y-2">
+                        <ul className="list-disc pl-5 space-y-1">
+                            {validationWarnings.map((w, i) => <li key={i} className="text-amber-700 font-medium">{w}</li>)}
+                        </ul>
+                        <p className="pt-2 font-bold">Vuoi salvare questa previsione nonostante gli avvisi?</p>
+                    </div>
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setValidationWarnings([])}>Correggi</AlertDialogCancel>
+                <AlertDialogAction onClick={() => {
+                    const data = form.getValues();
+                    setValidationWarnings([]);
+                    onSubmit(data);
+                }}>Procedi</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+
+    <Dialog open={isOpen && validationWarnings.length === 0} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Modifica Previsione Uscita' : 'Aggiungi Previsione Uscita'}</DialogTitle>
@@ -266,5 +320,6 @@ export function AddExpenseForecastDialog({
         </Form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

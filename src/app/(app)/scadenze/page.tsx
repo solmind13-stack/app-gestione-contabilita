@@ -44,6 +44,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImportDeadlinesDialog } from '@/components/scadenze/import-deadlines-dialog';
 import { suggestFiscalDeadlines } from '@/ai/flows/suggest-fiscal-deadlines';
+import { logDataChange } from '@/ai/flows/data-audit-trail';
 import { getYear, subYears } from 'date-fns';
 
 
@@ -107,12 +108,24 @@ export default function ScadenzePage() {
             return;
         }
         try {
-            await addDoc(collection(firestore, 'deadlines'), {
+            const docRef = await addDoc(collection(firestore, 'deadlines'), {
                 ...newDeadlineData,
                 createdBy: user.uid,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             });
+
+            logDataChange({
+                societa: newDeadlineData.societa,
+                userId: user.uid,
+                collection: 'deadlines',
+                documentId: docRef.id,
+                action: 'create',
+                previousData: null,
+                newData: newDeadlineData,
+                source: 'manual'
+            });
+
             toast({ title: "Scadenza Aggiunta", description: "La nuova scadenza è stata salvata." });
         } catch (error) {
             console.error("Error adding deadline: ", error);
@@ -127,12 +140,27 @@ export default function ScadenzePage() {
         }
         try {
             const docRef = doc(firestore, 'deadlines', updatedDeadline.id);
+            const originalSnap = await getDoc(docRef);
+            const previousData = originalSnap.data();
+
             const { id, ...dataToUpdate } = updatedDeadline;
             await updateDoc(docRef, {
                 ...dataToUpdate,
                 createdBy: updatedDeadline.createdBy || user.uid,
                 updatedAt: new Date().toISOString(),
             });
+
+            logDataChange({
+                societa: updatedDeadline.societa,
+                userId: user.uid,
+                collection: 'deadlines',
+                documentId: updatedDeadline.id,
+                action: 'update',
+                previousData: previousData,
+                newData: dataToUpdate,
+                source: 'manual'
+            });
+
             toast({ title: "Scadenza Aggiornata", description: "La scadenza è stata modificata." });
         } catch (error) {
              console.error("Error updating deadline: ", error);
@@ -162,9 +190,22 @@ export default function ScadenzePage() {
     }
     
     const handleDeleteDeadline = async () => {
-        if (!deadlineToDelete) return;
+        if (!deadlineToDelete || !user) return;
         try {
+            const previousData = { ...deadlineToDelete };
             await runDeleteTransaction(deadlineToDelete);
+
+            logDataChange({
+                societa: previousData.societa,
+                userId: user.uid,
+                collection: 'deadlines',
+                documentId: previousData.id,
+                action: 'delete',
+                previousData: previousData,
+                newData: null,
+                source: 'manual'
+            });
+
             toast({ title: "Scadenza Eliminata", description: "La scadenza e i relativi collegamenti sono stati rimossi." });
         } catch (error) {
             console.error("Error deleting deadline: ", error);
@@ -190,7 +231,20 @@ export default function ScadenzePage() {
 
         for (const deadline of deadlinesToDelete) {
             try {
+                const previousData = { ...deadline };
                 await runDeleteTransaction(deadline);
+
+                logDataChange({
+                    societa: previousData.societa,
+                    userId: user.uid,
+                    collection: 'deadlines',
+                    documentId: previousData.id,
+                    action: 'delete',
+                    previousData: previousData,
+                    newData: null,
+                    source: 'bulk_operation'
+                });
+
                 successCount++;
             } catch (error) {
                 console.error(`Failed to delete deadline ${deadline.id}:`, error);
@@ -228,6 +282,20 @@ export default function ScadenzePage() {
             });
     
             await batch.commit();
+
+            newDeadlinesWithIds.forEach(dl => {
+                logDataChange({
+                    societa: dl.societa,
+                    userId: user.uid,
+                    collection: 'deadlines',
+                    documentId: dl.id,
+                    action: 'create',
+                    previousData: null,
+                    newData: dl,
+                    source: 'import'
+                });
+            });
+
             toast({
                 title: "Importazione completata",
                 description: `${newDeadlinesWithIds.length} scadenze sono state salvate nel database.`
@@ -574,6 +642,8 @@ export default function ScadenzePage() {
         deadlineToEdit={editingDeadline}
         defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany as 'LNC' | 'STG' : user?.company as 'LNC' | 'STG'}
         currentUser={user!}
+        existingDeadlines={scadenze || []}
+        companies={companies || []}
       />
 
       <ImportDeadlinesDialog
@@ -731,7 +801,7 @@ export default function ScadenzePage() {
                 <SelectContent>
                     <SelectItem value="Tutti">Tutti gli anni</SelectItem>
                     {YEARS.map(year => (
-                        <SelectItem key={year} value={String(year)}>{String(year)}</SelectItem>
+                        <SelectItem key={year} value={String(year)}>{year}</SelectItem>
                     ))}
                 </SelectContent>
             </Select>

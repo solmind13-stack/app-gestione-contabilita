@@ -35,11 +35,13 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import type { Scadenza, AppUser } from '@/lib/types';
+import type { Scadenza, AppUser, CompanyProfile } from '@/lib/types';
 import { CATEGORIE, RICORRENZE, STATI_SCADENZE } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { CalendarIcon } from 'lucide-react';
 import { Calendar } from '../ui/calendar';
+import { validateDeadline } from '@/lib/data-validation';
+import { useToast } from '@/hooks/use-toast';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -65,6 +67,8 @@ interface AddDeadlineDialogProps {
   deadlineToEdit?: Scadenza | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
+  existingDeadlines: Scadenza[];
+  companies: CompanyProfile[];
 }
 
 export function AddDeadlineDialog({
@@ -75,8 +79,11 @@ export function AddDeadlineDialog({
   deadlineToEdit,
   defaultCompany,
   currentUser,
+  existingDeadlines,
+  companies,
 }: AddDeadlineDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
   const isEditMode = !!deadlineToEdit;
 
   const form = useForm<FormValues>({
@@ -149,6 +156,13 @@ export function AddDeadlineDialog({
 
 
   const onSubmit = async (data: FormValues) => {
+    // Data Validation
+    const validation = validateDeadline({ ...data, id: deadlineToEdit?.id }, existingDeadlines, companies);
+    if (!validation.isValid) {
+        toast({ variant: 'destructive', title: 'Errore di Validazione', description: validation.errors.join('\n') });
+        return;
+    }
+
     setIsSubmitting(true);
     const finalData = {
         ...data,

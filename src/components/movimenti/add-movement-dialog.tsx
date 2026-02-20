@@ -44,6 +44,7 @@ import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { formatCurrency, formatDate, maskAccountNumber, parseDate } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
+import { validateMovement } from '@/lib/data-validation';
 
 
 const FormSchema = z.object({
@@ -76,6 +77,7 @@ interface AddMovementDialogProps {
   expenseForecasts: PrevisioneUscita[];
   incomeForecasts: PrevisioneEntrata[];
   companies: CompanyProfile[];
+  existingMovements: Movimento[];
 }
 
 const getJaccardIndex = (str1: string, str2: string): number => {
@@ -154,12 +156,14 @@ export function AddMovementDialog({
   deadlines,
   expenseForecasts,
   incomeForecasts,
-  companies
+  companies,
+  existingMovements
 }: AddMovementDialogProps) {
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const [confirmationData, setConfirmationData] = useState<{ data: FormValues; match: LinkableItem } | null>(null);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
   
   const isEditMode = !!movementToEdit;
 
@@ -225,6 +229,7 @@ export function AddMovementDialog({
   useEffect(() => {
     if (!isOpen) {
       setConfirmationData(null);
+      setValidationWarnings([]);
     }
   }, [isOpen]);
   
@@ -366,6 +371,7 @@ export function AddMovementDialog({
 
   const proceedWithSave = async (data: FormValues, linkConfirmed: boolean) => {
     setConfirmationData(null);
+    setValidationWarnings([]);
     setIsSubmitting(true);
 
     let finalLinkedTo = data.linkedTo;
@@ -403,7 +409,30 @@ export function AddMovementDialog({
 
 
   const onSubmit = async (data: FormValues) => {
-    const SIMILARITY_THRESHOLD = 500; // Adjusted threshold to favor date logic
+    // 1. Validation
+    const validation = validateMovement(
+        { 
+            ...data, 
+            entrata: data.tipo === 'entrata' ? data.importo : 0, 
+            uscita: data.tipo === 'uscita' ? data.importo : 0,
+            id: movementToEdit?.id
+        }, 
+        existingMovements, 
+        companies
+    );
+
+    if (!validation.isValid) {
+        toast({ variant: 'destructive', title: 'Errore di Validazione', description: validation.errors.join('\n') });
+        return;
+    }
+
+    if (validation.warnings.length > 0 && validationWarnings.length === 0) {
+        setValidationWarnings(validation.warnings);
+        return; // Wait for user to read warnings
+    }
+
+    // 2. Linking logic
+    const SIMILARITY_THRESHOLD = 500;
     const userHasLinked = data.linkedTo && data.linkedTo !== 'nessuno';
 
     if (userHasLinked) {
@@ -459,6 +488,33 @@ export function AddMovementDialog({
 
   return (
     <>
+      <AlertDialog open={validationWarnings.length > 0} onOpenChange={(open) => !open && setValidationWarnings([])}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="text-amber-500" />
+                    Avviso di Validazione
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                    <div className="space-y-2">
+                        <p>L'analisi dei dati ha rilevato le seguenti anomalie:</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            {validationWarnings.map((w, i) => <li key={i} className="text-amber-700 font-medium">{w}</li>)}
+                        </ul>
+                        <p className="pt-2 font-bold">Vuoi procedere comunque con il salvataggio?</p>
+                    </div>
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setValidationWarnings([])}>Correggi i Dati</AlertDialogCancel>
+                <AlertDialogAction onClick={() => {
+                    setValidationWarnings([]);
+                    onSubmit(form.getValues());
+                }}>Procedi Comunque</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={!!confirmationData} onOpenChange={() => setConfirmationData(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -502,7 +558,7 @@ export function AddMovementDialog({
         </AlertDialogContent>
       </AlertDialog>
 
-    <Dialog open={isOpen && !confirmationData} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen && !confirmationData && validationWarnings.length === 0} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Modifica Movimento' : 'Aggiungi Nuovo Movimento'}</DialogTitle>

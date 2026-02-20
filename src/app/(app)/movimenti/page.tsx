@@ -48,6 +48,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CATEGORIE, YEARS } from '@/lib/constants';
 import { ReviewMovementsDialog } from '@/components/movimenti/review-movements-dialog';
+import { logDataChange } from '@/ai/flows/data-audit-trail';
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
     if (!firestore || !user) return null;
@@ -135,7 +136,7 @@ export default function MovimentiPage() {
         if (!user || !firestore) return;
         
         try {
-            await runTransaction(firestore, async (transaction) => {
+            const movementId = await runTransaction(firestore, async (transaction) => {
                 let linkedDocRef;
                 let linkedDoc;
                 if (linkedItemId) {
@@ -218,8 +219,20 @@ export default function MovimentiPage() {
                         transaction.update(linkedDocRef, updateData);
                     }
                 }
+                return newMovementRef.id;
             });
             
+            logDataChange({
+                societa: newMovementData.societa,
+                userId: user.uid,
+                collection: 'movements',
+                documentId: movementId,
+                action: 'create',
+                previousData: null,
+                newData: newMovementData,
+                source: 'manual'
+            });
+
             toast({ title: "Operazione Completata", description: "Il movimento è stato salvato e i dati collegati sono stati aggiornati." });
 
         } catch (error: any) {
@@ -232,7 +245,7 @@ export default function MovimentiPage() {
         if (!user || !firestore || !updatedMovement.id) return;
 
         try {
-            await runTransaction(firestore, async (transaction) => {
+            const originalData = await runTransaction(firestore, async (transaction) => {
                 const movementDocRef = doc(firestore, 'movements', updatedMovement.id);
                 const originalMovementSnap = await transaction.get(movementDocRef);
 
@@ -330,6 +343,18 @@ export default function MovimentiPage() {
                     status: newStatus,
                 };
                 transaction.update(movementDocRef, finalMovementData);
+                return originalMovement;
+            });
+
+            logDataChange({
+                societa: updatedMovement.societa,
+                userId: user.uid,
+                collection: 'movements',
+                documentId: updatedMovement.id,
+                action: 'update',
+                previousData: originalData,
+                newData: updatedMovement,
+                source: 'manual'
             });
 
             // Handle feedback outside the transaction
@@ -413,9 +438,22 @@ export default function MovimentiPage() {
     }
 
     const handleDeleteMovement = async () => {
-        if (!movementToDelete || !firestore) return;
+        if (!movementToDelete || !firestore || !user) return;
         try {
+            const previousData = { ...movementToDelete };
             await runDeleteTransaction(movementToDelete);
+            
+            logDataChange({
+                societa: previousData.societa,
+                userId: user.uid,
+                collection: 'movements',
+                documentId: previousData.id,
+                action: 'delete',
+                previousData: previousData,
+                newData: null,
+                source: 'manual'
+            });
+
             toast({ title: "Movimento Eliminato", description: "Il movimento e la voce collegata sono stati aggiornati." });
         } catch (error: any) {
             console.error("Error deleting movement: ", error);
@@ -441,7 +479,20 @@ export default function MovimentiPage() {
 
         for (const movement of movementsToDelete) {
             try {
+                const previousData = { ...movement };
                 await runDeleteTransaction(movement);
+                
+                logDataChange({
+                    societa: previousData.societa,
+                    userId: user.uid,
+                    collection: 'movements',
+                    documentId: previousData.id,
+                    action: 'delete',
+                    previousData: previousData,
+                    newData: null,
+                    source: 'bulk_operation'
+                });
+
                 successCount++;
             } catch (error) {
                 console.error(`Failed to delete movement ${movement.id}:`, error);
@@ -522,6 +573,19 @@ export default function MovimentiPage() {
                 }
             });
             
+            newMovementsWithIds.forEach(mov => {
+                logDataChange({
+                    societa: mov.societa,
+                    userId: user.uid,
+                    collection: 'movements',
+                    documentId: mov.id,
+                    action: 'create',
+                    previousData: null,
+                    newData: mov,
+                    source: 'import'
+                });
+            });
+
             toast({
                 title: "Importazione completata",
                 description: `${newMovementsWithIds.length} movimenti sono stati salvati e sincronizzati nel database.`
@@ -647,6 +711,7 @@ export default function MovimentiPage() {
             expenseForecasts={expenseForecasts || []}
             incomeForecasts={incomeForecasts || []}
             companies={companies || []}
+            existingMovements={movimentiData || []}
         />
         <ImportMovementsDialog
             isOpen={isImportDialogOpen}
@@ -952,7 +1017,7 @@ export default function MovimentiPage() {
 
       <Card className="w-full md:w-1/2 lg:w-1/3">
           <CardHeader>
-              <CardTitle>Riepilogo Movimenti {selectedCompany !== 'Tutte' && (user?.role === 'admin' || user?.role === 'editor') ? (companies?.find(c => c.sigla === selectedCompany)?.name || selectedCompany) : ''}</CardTitle>
+              <CardTitle>Riepilogo Movimenti {selectedCompany === 'Tutte' ? '' : (companies?.find(c => c.sigla === selectedCompany)?.name || selectedCompany)}</CardTitle>
           </CardHeader>
           <CardContent>
               <div className="space-y-2 text-sm">

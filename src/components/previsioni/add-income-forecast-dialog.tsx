@@ -31,12 +31,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import type { PrevisioneEntrata, AppUser } from '@/lib/types';
+import type { PrevisioneEntrata, AppUser, CompanyProfile, Movimento } from '@/lib/types';
 import { CATEGORIE_ENTRATE, CERTEZZA_LIVELLI, STATI_ENTRATE, IVA_PERCENTAGES } from '@/lib/constants';
+import { validateIncomeForecast, crossValidate } from '@/lib/data-validation';
+import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 
 const FormSchema = z.object({
   societa: z.enum(['LNC', 'STG'], { required_error: 'Seleziona una società' }),
@@ -64,6 +67,8 @@ interface AddIncomeForecastDialogProps {
   forecastToEdit?: PrevisioneEntrata | null;
   defaultCompany?: 'LNC' | 'STG';
   currentUser: AppUser;
+  companies: CompanyProfile[];
+  historicalMovements: Movimento[];
 }
 
 export function AddIncomeForecastDialog({
@@ -74,9 +79,13 @@ export function AddIncomeForecastDialog({
   forecastToEdit,
   defaultCompany,
   currentUser,
+  companies,
+  historicalMovements,
 }: AddIncomeForecastDialogProps) {
   const isEditMode = !!forecastToEdit;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const { toast } = useToast();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -121,6 +130,22 @@ export function AddIncomeForecastDialog({
   }, [isOpen, isEditMode, forecastToEdit, defaultCompany, form, currentUser]);
 
   const onSubmit = async (data: FormValues) => {
+    // Data Validation
+    const validation = validateIncomeForecast(data, companies, historicalMovements);
+    const crossVal = crossValidate({ ...data, type: 'income' }, historicalMovements);
+    
+    const combinedWarnings = [...validation.warnings, ...crossVal.warnings];
+
+    if (!validation.isValid) {
+        toast({ variant: 'destructive', title: 'Errore Validazione', description: validation.errors.join('\n') });
+        return;
+    }
+
+    if (combinedWarnings.length > 0 && validationWarnings.length === 0) {
+        setValidationWarnings(combinedWarnings);
+        return;
+    }
+
     setIsSubmitting(true);
     const commonData = {
         ...data,
@@ -138,6 +163,7 @@ export function AddIncomeForecastDialog({
     }
     setIsSubmitting(false);
     setIsOpen(false);
+    setValidationWarnings([]);
   };
   
   const selectedCategory = form.watch('categoria');
@@ -151,7 +177,35 @@ export function AddIncomeForecastDialog({
 
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <>
+    <AlertDialog open={validationWarnings.length > 0} onOpenChange={(open) => !open && setValidationWarnings([])}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="text-amber-500" />
+                    Avvisi Previsione Entrata
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                    <div className="space-y-2">
+                        <ul className="list-disc pl-5 space-y-1">
+                            {validationWarnings.map((w, i) => <li key={i} className="text-amber-700 font-medium">{w}</li>)}
+                        </ul>
+                        <p className="pt-2 font-bold">Vuoi salvare questa previsione nonostante gli avvisi?</p>
+                    </div>
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setValidationWarnings([])}>Correggi</AlertDialogCancel>
+                <AlertDialogAction onClick={() => {
+                    const data = form.getValues();
+                    setValidationWarnings([]);
+                    onSubmit(data);
+                }}>Procedi</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+
+    <Dialog open={isOpen && validationWarnings.length === 0} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Modifica Previsione Entrata' : 'Aggiungi Previsione Entrata'}</DialogTitle>
@@ -249,5 +303,6 @@ export function AddIncomeForecastDialog({
         </Form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

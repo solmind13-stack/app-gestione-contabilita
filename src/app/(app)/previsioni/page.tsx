@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, query, where, CollectionReference, DocumentData, addDoc, updateDoc, doc, deleteDoc, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ForecastComparison } from '@/components/previsioni/forecast-comparison';
 import { AiCashflowAgent } from '@/components/previsioni/ai-cashflow-agent';
@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { ClipboardCheck, Sparkles, Loader2 } from 'lucide-react';
 import { suggestIncomeForecasts } from '@/ai/flows/suggest-income-forecasts';
 import { suggestExpenseForecasts } from '@/ai/flows/suggest-expense-forecasts';
+import { logDataChange } from '@/ai/flows/data-audit-trail';
 
 
 const getQuery = (firestore: any, user: AppUser | null, collectionName: string) => {
@@ -219,7 +220,19 @@ export default function PrevisioniPage() {
   const handleAddIncomeForecast = async (forecast: Omit<PrevisioneEntrata, 'id'>) => {
     if (!firestore || !user) return;
     try {
-        await addDoc(collection(firestore, 'incomeForecasts'), { ...forecast, createdBy: user.uid, createdAt: new Date().toISOString() });
+        const docRef = await addDoc(collection(firestore, 'incomeForecasts'), { ...forecast, createdBy: user.uid, createdAt: new Date().toISOString() });
+        
+        logDataChange({
+            societa: forecast.societa,
+            userId: user.uid,
+            collection: 'incomeForecasts',
+            documentId: docRef.id,
+            action: 'create',
+            previousData: null,
+            newData: forecast,
+            source: 'manual'
+        });
+
         toast({ title: 'Previsione Aggiunta', description: 'La nuova previsione di entrata è stata salvata.' });
     } catch(e) {
         toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare la previsione.' });
@@ -231,8 +244,23 @@ export default function PrevisioniPage() {
      if (!firestore || !user || !forecast.id) return;
      try {
         const docRef = doc(firestore, 'incomeForecasts', forecast.id);
+        const originalSnap = await getDoc(docRef);
+        const previousData = originalSnap.data();
+
         const { id, ...dataToUpdate } = forecast;
         await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString() });
+
+        logDataChange({
+            societa: forecast.societa,
+            userId: user.uid,
+            collection: 'incomeForecasts',
+            documentId: forecast.id,
+            action: 'update',
+            previousData: previousData,
+            newData: dataToUpdate,
+            source: 'manual'
+        });
+
         toast({ title: 'Previsione Aggiornata', description: 'La previsione di entrata è stata modificata.' });
     } catch(e) {
         toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile aggiornare la previsione.' });
@@ -241,9 +269,12 @@ export default function PrevisioniPage() {
   };
   
   const handleDeleteIncomeForecast = async (forecastId: string) => {
-    if (!firestore) return;
+    if (!firestore || !user) return;
     try {
         const forecastRef = doc(firestore, 'incomeForecasts', forecastId);
+        const originalSnap = await getDoc(forecastRef);
+        const previousData = originalSnap.data();
+
         const movementsRef = collection(firestore, 'movements');
         const q = query(movementsRef, where('linkedTo', '==', `incomeForecasts/${forecastId}`));
         const linkedMovementsSnap = await getDocs(q);
@@ -255,8 +286,18 @@ export default function PrevisioniPage() {
         });
 
         batch.delete(forecastRef);
-        
         await batch.commit();
+
+        logDataChange({
+            societa: previousData?.societa || 'N/A',
+            userId: user.uid,
+            collection: 'incomeForecasts',
+            documentId: forecastId,
+            action: 'delete',
+            previousData: previousData,
+            newData: null,
+            source: 'manual'
+        });
 
         toast({ title: 'Previsione Eliminata', description: 'La previsione di entrata e i collegamenti sono stati rimossi.' });
     } catch (e) {
@@ -268,7 +309,19 @@ export default function PrevisioniPage() {
   const handleAddExpenseForecast = async (forecast: Omit<PrevisioneUscita, 'id'>) => {
     if (!firestore || !user) return;
     try {
-        await addDoc(collection(firestore, 'expenseForecasts'), { ...forecast, createdBy: user.uid, createdAt: new Date().toISOString() });
+        const docRef = await addDoc(collection(firestore, 'expenseForecasts'), { ...forecast, createdBy: user.uid, createdAt: new Date().toISOString() });
+        
+        logDataChange({
+            societa: forecast.societa,
+            userId: user.uid,
+            collection: 'expenseForecasts',
+            documentId: docRef.id,
+            action: 'create',
+            previousData: null,
+            newData: forecast,
+            source: 'manual'
+        });
+
         toast({ title: 'Previsione Aggiunta', description: 'La nuova previsione di uscita è stata salvata.' });
     } catch(e) {
         toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare la previsione.' });
@@ -280,8 +333,23 @@ export default function PrevisioniPage() {
      if (!firestore || !user || !forecast.id) return;
      try {
         const docRef = doc(firestore, 'expenseForecasts', forecast.id);
+        const originalSnap = await getDoc(docRef);
+        const previousData = originalSnap.data();
+
         const { id, ...dataToUpdate } = forecast;
         await updateDoc(docRef, { ...dataToUpdate, updatedAt: new Date().toISOString() });
+
+        logDataChange({
+            societa: forecast.societa,
+            userId: user.uid,
+            collection: 'expenseForecasts',
+            documentId: forecast.id,
+            action: 'update',
+            previousData: previousData,
+            newData: dataToUpdate,
+            source: 'manual'
+        });
+
         toast({ title: 'Previsione Aggiornata', description: 'La previsione di uscita è stata modificata.' });
     } catch(e) {
         toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile aggiornare la previsione.' });
@@ -290,12 +358,15 @@ export default function PrevisioniPage() {
   };
 
    const handleDeleteExpenseForecast = async (itemId: string, type: 'previsione' | 'scadenza') => {
-    if (!firestore) return;
+    if (!firestore || !user) return;
     const collectionName = type === 'previsione' ? 'expenseForecasts' : 'deadlines';
     const toastTitle = type === 'previsione' ? 'Previsione Eliminata' : 'Scadenza Eliminata';
     
     try {
         const itemRef = doc(firestore, collectionName, itemId);
+        const originalSnap = await getDoc(itemRef);
+        const previousData = originalSnap.data();
+
         const movementsRef = collection(firestore, 'movements');
         const q = query(movementsRef, where('linkedTo', '==', `${collectionName}/${itemId}`));
         const linkedMovementsSnap = await getDocs(q);
@@ -307,8 +378,19 @@ export default function PrevisioniPage() {
         });
         
         batch.delete(itemRef);
-
         await batch.commit();
+
+        logDataChange({
+            societa: previousData?.societa || 'N/A',
+            userId: user.uid,
+            collection: collectionName,
+            documentId: itemId,
+            action: 'delete',
+            previousData: previousData,
+            newData: null,
+            source: 'manual'
+        });
+
         toast({ title: toastTitle, description: `L'elemento e i relativi collegamenti sono stati rimossi.` });
     } catch (e) {
         toast({ variant: 'destructive', title: 'Errore', description: "Impossibile eliminare l'elemento." });
@@ -629,6 +711,9 @@ export default function PrevisioniPage() {
               onDelete={handleDeleteIncomeForecast}
               defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany as 'LNC' | 'STG' : user?.company as 'LNC' | 'STG'}
               currentUser={user!}
+              existingForecasts={allPrevisioniEntrate || []}
+              historicalMovements={allMovements || []}
+              companies={companies || []}
           />
         </TabsContent>
         <TabsContent value="uscite" className="space-y-4">
@@ -651,6 +736,9 @@ export default function PrevisioniPage() {
               onDelete={handleDeleteExpenseForecast}
               defaultCompany={selectedCompany !== 'Tutte' ? selectedCompany as 'LNC' | 'STG' : user?.company as 'LNC' | 'STG'}
               currentUser={user!}
+              existingForecasts={allPrevisioniUscite || []}
+              historicalMovements={allMovements || []}
+              companies={companies || []}
           />
         </TabsContent>
         <TabsContent value="agente-ai">
@@ -663,5 +751,3 @@ export default function PrevisioniPage() {
     </div>
   );
 }
-
-    

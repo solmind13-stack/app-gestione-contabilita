@@ -25,7 +25,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UploadCloud, File as FileIcon, Trash2, Check, Wand2 } from 'lucide-react';
+import { Loader2, UploadCloud, File as FileIcon, Trash2, Check, Wand2, AlertTriangle } from 'lucide-react';
 import type { Movimento, AppUser, CompanyProfile, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 import { importTransactions } from '@/ai/flows/import-transactions-flow';
 import { ScrollArea } from '../ui/scroll-area';
@@ -36,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { cn } from '@/lib/utils';
 import { doc, writeBatch } from 'firebase/firestore';
+import { validateMovement } from '@/lib/data-validation';
 
 
 type ImportStage = 'upload' | 'review' | 'ai_progress' | 'final_review';
@@ -122,7 +123,7 @@ export function ImportMovementsDialog({
 }) {
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [processedRows, setProcessedRows] = useState<(Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string })[]>([]);
+  const [processedRows, setProcessedRows] = useState<(Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string, errors?: string[], warnings?: string[] })[]>([]);
   const [importedMovements, setImportedMovements] = useState<Movimento[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -133,6 +134,7 @@ export function ImportMovementsDialog({
   const firestore = useFirestore();
 
   const [isDuplicateFileAlertOpen, setIsDuplicateFileAlertOpen] = useState(false);
+  const [warningConfirmation, setWarningConfirmation] = useState<{ movements: typeof processedRows } | null>(null);
 
   const SUPPORTED_MIME_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/pdf', 'image/png', 'image/jpeg'];
   const ACCEPTED_FILES = ".xlsx,.pdf,.png,.jpg,.jpeg";
@@ -145,6 +147,7 @@ export function ImportMovementsDialog({
     setIsProcessing(false);
     setIsDragging(false);
     setIsDuplicateFileAlertOpen(false);
+    setWarningConfirmation(null);
   };
   
   const handleClose = (open: boolean) => {
@@ -275,6 +278,9 @@ export function ImportMovementsDialog({
                 processedKeys.add(key);
             }
 
+            // Data Validation
+            const validation = validateMovement(row, allMovements, companies);
+
             let bestMatch: { item: LinkableItem, score: number } | null = null;
             if (!isDbDuplicate && !isBatchDuplicate) {
                 const itemsForCompany = linkableItems.filter(item => item.societa === row.societa && ((row.uscita > 0 && (item.type === 'deadlines' || item.type === 'expenseForecasts')) || (row.entrata > 0 && item.type === 'incomeForecasts')));
@@ -302,6 +308,8 @@ export function ImportMovementsDialog({
               ...row,
               isDuplicate: isDbDuplicate || isBatchDuplicate,
               linkedTo: bestMatch ? `${bestMatch.item.type}/${bestMatch.id}` : undefined,
+              errors: validation.errors,
+              warnings: validation.warnings,
             };
         });
 
@@ -309,10 +317,13 @@ export function ImportMovementsDialog({
         setStage('review');
 
         const duplicateCount = checkedAndLinkedRows.filter(r => r.isDuplicate).length;
+        const errorCount = checkedAndLinkedRows.filter(r => r.errors && r.errors.length > 0).length;
         
         toast({
             title: 'Lettura Completata',
-            description: `${processed.length} movimenti pronti per la revisione.` + (duplicateCount > 0 ? ` Attenzione: ${duplicateCount} possibili duplicati trovati.` : ''),
+            description: `${processed.length} movimenti pronti per la revisione.` + 
+                         (duplicateCount > 0 ? ` [${duplicateCount} Duplicati]` : '') +
+                         (errorCount > 0 ? ` [${errorCount} Errori]` : ''),
             duration: 7000
         });
 
@@ -339,10 +350,22 @@ export function ImportMovementsDialog({
   };
   
   const handleImport = async (movementsToImport: typeof processedRows) => {
-    if (movementsToImport.length === 0) {
-      toast({ variant: 'destructive', title: 'Nessun movimento da importare' });
-      return;
+    const errorRows = movementsToImport.filter(r => r.errors && r.errors.length > 0);
+    if (errorRows.length > 0) {
+        toast({ 
+            variant: 'destructive', 
+            title: 'Importazione Bloccata', 
+            description: `Ci sono ${errorRows.length} movimenti con errori critici. Correggi i dati prima di importare.` 
+        });
+        return;
     }
+
+    const warningRows = movementsToImport.filter(r => r.warnings && r.warnings.length > 0);
+    if (warningRows.length > 0 && !warningConfirmation) {
+        setWarningConfirmation({ movements: movementsToImport });
+        return;
+    }
+
     setIsProcessing(true);
     try {
       const newMovements = await onImport(movementsToImport);
@@ -353,6 +376,7 @@ export function ImportMovementsDialog({
       toast({ variant: 'destructive', title: 'Errore', description: 'Importazione fallita.' });
     } finally {
       setIsProcessing(false);
+      setWarningConfirmation(null);
     }
   };
 
@@ -456,7 +480,7 @@ export function ImportMovementsDialog({
     </div>
   );
   
-  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string })[], isFinal: boolean) => (
+  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string, errors?: string[], warnings?: string[] })[], isFinal: boolean) => (
      <div className="py-4 space-y-4">
         <h3 className="text-lg font-medium">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -464,8 +488,9 @@ export function ImportMovementsDialog({
             <Table className="table-fixed w-full">
                 <TableHeader><TableRow>
                     <TableHead className="w-[10%]">Data</TableHead>
-                    <TableHead className="w-[25%]">Descrizione</TableHead>
-                    <TableHead className="w-[20%]">Collegamento Suggerito</TableHead>
+                    <TableHead className="w-[20%]">Descrizione</TableHead>
+                    <TableHead className="w-[15%]">Validazione</TableHead>
+                    <TableHead className="w-[15%]">Collegamento</TableHead>
                     <TableHead className="w-[8%] text-right">Entrata</TableHead>
                     <TableHead className="w-[8%] text-right">Uscita</TableHead>
                     <TableHead className="w-[7%] text-center">Società</TableHead>
@@ -474,10 +499,18 @@ export function ImportMovementsDialog({
                 <TableBody>
                     {movements.map((row, index) => {
                         const linkedItem = row.linkedTo ? linkableItems.find(item => `${item.type}/${item.id}` === row.linkedTo) : null;
+                        const hasErrors = row.errors && row.errors.length > 0;
+                        const hasWarnings = row.warnings && row.warnings.length > 0;
+
                         return (
-                        <TableRow key={index} className={cn('text-sm', row.isDuplicate && 'bg-red-50 dark:bg-red-900/20')}>
+                        <TableRow key={index} className={cn('text-sm', (row.isDuplicate || hasErrors) && 'bg-red-50 dark:bg-red-900/20')}>
                             <TableCell className="whitespace-nowrap py-2 px-2">{formatDate(row.data)}</TableCell>
                             <TableCell className="break-words py-2 px-2">{row.descrizione}</TableCell>
+                            <TableCell className="py-2 px-2">
+                                {hasErrors && row.errors?.map((err, i) => <Badge key={i} variant="destructive" className="mb-1">{err}</Badge>)}
+                                {hasWarnings && row.warnings?.map((war, i) => <Badge key={i} variant="outline" className="border-amber-500 text-amber-600 mb-1">{war}</Badge>)}
+                                {!hasErrors && !hasWarnings && <Badge variant="outline" className="text-green-600 border-green-600">Valido</Badge>}
+                            </TableCell>
                             <TableCell className="py-2 px-2">
                                 {linkedItem ? <Badge variant="secondary" className="bg-green-100 text-green-800 whitespace-normal">{linkedItem.description}</Badge> : 'Nessuno'}
                             </TableCell>
@@ -519,6 +552,26 @@ export function ImportMovementsDialog({
             </AlertDialogContent>
         </AlertDialog>
 
+        <AlertDialog open={!!warningConfirmation} onOpenChange={() => setWarningConfirmation(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                        <AlertTriangle className="text-amber-500" />
+                        Conferma Importazione con Avvisi
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Alcuni movimenti presentano degli avvisi di validazione (es. importi anomali o descrizioni generiche). Vuoi procedere comunque con l'importazione di questi dati?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setWarningConfirmation(null)}>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => warningConfirmation && handleImport(warningConfirmation.movements)}>
+                        Importa Tutto
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
         <DialogHeader>
           <DialogTitle>Importa Movimenti da File</DialogTitle>
            <DialogDescription>
@@ -530,7 +583,7 @@ export function ImportMovementsDialog({
         </DialogHeader>
         
         {stage === 'upload' && renderUploadStage()}
-        {stage === 'review' && renderReviewStage("Dati Estratti - Verifica e Conferma", "Controlla i movimenti estratti. I duplicati sono evidenziati in rosso. Scegli se importare tutto o solo i nuovi movimenti.", processedRows, false)}
+        {stage === 'review' && renderReviewStage("Dati Estratti - Verifica e Conferma", "Controlla i movimenti estratti. I duplicati e gli errori sono evidenziati. Correggi eventuali criticità prima di importare.", processedRows, false)}
         {stage === 'ai_progress' && renderReviewStage("Analisi AI", "I movimenti sono stati importati. Ora puoi avviare l'analisi AI.", importedMovements, false)}
         {stage === 'final_review' && renderReviewStage("Risultati Analisi", "L'AI ha aggiornato le categorie. I movimenti non classificati restano 'Da Revisionare'.", importedMovements, true)}
 
