@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -16,6 +17,7 @@ import {
   Calendar,
   BrainCircuit,
   FlaskConical,
+  Target
 } from 'lucide-react';
 
 // Components
@@ -30,6 +32,7 @@ import { CrossCompanyPatterns } from '@/components/pianificazione/cross-company-
 import { NarrativeAiCard } from '@/components/pianificazione/narrative-ai-card';
 import { StressTestCard } from '@/components/pianificazione/stress-test-card';
 import { PaymentOptimizationCard } from '@/components/pianificazione/payment-optimization-card';
+import { DecisionReportDialog } from '@/components/pianificazione/decision-report-dialog';
 
 // AI Flows
 import { calculateCashFlowProjection } from '@/ai/flows/calculate-cash-flow-projection';
@@ -53,6 +56,7 @@ export default function PianificazionePage() {
   const [isGlobalRefreshing, setIsGlobalRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState(0);
   const [refreshStep, setRefreshStep] = useState('');
+  const [isDecisionDialogOpen, setIsDecisionDialogOpen] = useState(false);
 
   // 1. Fetch Companies
   const companiesQuery = useMemo(() => firestore ? query(collection(firestore, 'companies')) : null, [firestore]);
@@ -158,6 +162,13 @@ export default function PianificazionePage() {
 
   return (
     <div className="space-y-10">
+      <DecisionReportDialog 
+        isOpen={isDecisionDialogOpen} 
+        setIsOpen={setIsDecisionDialogOpen} 
+        societa={currentSocieta}
+        userId={user?.uid || ''}
+      />
+
       {/* Header Section */}
       <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
         <div className="space-y-1">
@@ -177,6 +188,15 @@ export default function PianificazionePage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
+          <Button 
+            variant="secondary"
+            onClick={() => setIsDecisionDialogOpen(true)}
+            className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9 border-primary/20 hover:bg-primary/10"
+          >
+            <Target className="h-3.5 w-3.5" />
+            Valuta Decisione
+          </Button>
+
           <Button 
             onClick={() => router.push('/pianificazione/sandbox')}
             className="gap-2 bg-gradient-to-r from-primary to-primary/80 shadow-lg hover:shadow-primary/20 transition-all font-bold uppercase tracking-tighter text-[10px] h-9"
