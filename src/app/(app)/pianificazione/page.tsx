@@ -18,7 +18,8 @@ import {
   FlaskConical,
   Target,
   Database,
-  Globe
+  Globe,
+  History
 } from 'lucide-react';
 
 // Components
@@ -37,6 +38,7 @@ import { DecisionReportDialog } from '@/components/pianificazione/decision-repor
 import { DataIntegrityCard } from '@/components/pianificazione/data-integrity-card';
 import { SectorBenchmarkCard } from '@/components/pianificazione/sector-benchmark-card';
 import { FiscalSentinelCard } from '@/components/pianificazione/fiscal-sentinel-card';
+import { MonthlyReplayCard } from '@/components/pianificazione/monthly-replay-card';
 
 // AI Flows
 import { calculateCashFlowProjection } from '@/ai/flows/calculate-cash-flow-projection';
@@ -336,36 +338,22 @@ export default function PianificazionePage() {
           </div>
         </div>
 
-        {/* Row 5: Anomalies & Patterns */}
-        <div className="md:col-span-2 mt-4">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <AnomalyAlertsCard 
-                societa={currentSocieta} 
-                userId={user?.uid || ''} 
-              />
-              <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
-           </div>
-        </div>
-
-        {/* Row 6: Timeline */}
+        {/* Row 5: Apprendimento & Feedback Loop */}
         <div className="md:col-span-2 mt-4">
           <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter">Mappa Temporale dei Flussi</h2>
+            <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" />
+              Apprendimento Continuo
+            </h2>
             <div className="h-px flex-1 bg-border" />
           </div>
-          <VisualTimeline societa={currentSocieta} />
+          <MonthlyReplayCard 
+            societa={currentSocieta} 
+            userId={user?.uid || ''} 
+          />
         </div>
 
-        {/* Row 7: Data Integrity */}
-        <div className="md:col-span-2 mt-4">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter">Salute dei Dati</h2>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <DataIntegrityCard societa={currentSocieta} userId={user?.uid || ''} />
-        </div>
-
-        {/* Row 8: Intelligence Esterna */}
+        {/* Row 6: Intelligence Esterna */}
         <div className="md:col-span-2 mt-4">
           <div className="flex items-center gap-4 mb-6">
             <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
@@ -380,7 +368,36 @@ export default function PianificazionePage() {
           </div>
         </div>
 
-        {/* Row 9+: Utility Cards (2 per row) */}
+        {/* Row 7: Anomalies & Patterns */}
+        <div className="md:col-span-2 mt-4">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <AnomalyAlertsCard 
+                societa={currentSocieta} 
+                userId={user?.uid || ''} 
+              />
+              <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
+           </div>
+        </div>
+
+        {/* Row 8: Timeline */}
+        <div className="md:col-span-2 mt-4">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-xl font-black uppercase tracking-tighter">Mappa Temporale dei Flussi</h2>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <VisualTimeline societa={currentSocieta} />
+        </div>
+
+        {/* Row 9: Data Integrity */}
+        <div className="md:col-span-2 mt-4">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-xl font-black uppercase tracking-tighter">Salute dei Dati</h2>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <DataIntegrityCard societa={currentSocieta} userId={user?.uid || ''} />
+        </div>
+
+        {/* Row 10+: Utility Cards (2 per row) */}
         <FiscalDeadlinesCard societa={currentSocieta} />
         <CategoryBudgetCard societa={currentSocieta} />
       </div>
