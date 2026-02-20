@@ -8,7 +8,6 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import type { CompanyProfile } from '@/lib/types';
 import { 
   Lightbulb, 
-  GanttChart, 
   Target, 
   ShieldAlert 
 } from 'lucide-react';
@@ -16,6 +15,7 @@ import { LiquidityTrafficLight } from '@/components/pianificazione/liquidity-tra
 import { CashflowProjectionChart } from '@/components/pianificazione/cashflow-projection-chart';
 import { FiscalDeadlinesCard } from '@/components/pianificazione/fiscal-deadlines-card';
 import { EntityScoresCard } from '@/components/pianificazione/entity-scores-card';
+import { VisualTimeline } from '@/components/pianificazione/visual-timeline';
 
 export default function PianificazionePage() {
   const { user } = useUser();
@@ -80,16 +80,8 @@ export default function PianificazionePage() {
           </CardContent>
         </Card>
 
-        {/* Timeline Decisioni - Full Width */}
-        <Card className="lg:col-span-4">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-semibold">Timeline Decisionale</CardTitle>
-            <GanttChart className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="h-32 flex items-center justify-center text-muted-foreground text-sm italic">
-            In fase di attivazione...
-          </CardContent>
-        </Card>
+        {/* Timeline Decisionale - Dinamica */}
+        <VisualTimeline societa={currentSocieta} />
 
         {/* Prossime Scadenze Fiscali - Dinamico */}
         <FiscalDeadlinesCard societa={currentSocieta} />
@@ -117,7 +109,7 @@ export default function PianificazionePage() {
           <CardContent className="h-40 flex items-center justify-center text-muted-foreground text-sm italic">
             In fase di attivazione...
           </CardContent>
-        </Card>
+        </div>
       </div>
     </div>
   );
