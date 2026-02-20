@@ -1,3 +1,4 @@
+
 // src/lib/types/pianificazione.ts
 
 /**
@@ -151,5 +152,29 @@ export interface AnomalyAlert {
   movementId?: string;
   description: string;
   status: 'pending' | 'confirmed' | 'dismissed';
+  createdAt: string;
+}
+
+/**
+ * Azione simulata all'interno della sandbox.
+ */
+export interface SimulatedAction {
+  id: string;
+  type: 'expense' | 'income' | 'delay' | 'advance' | 'hiring' | 'equipment';
+  description: string;
+  amount: number;
+  date: string;
+  recurrence: 'once' | 'monthly' | 'quarterly' | 'annual';
+}
+
+/**
+ * Sessione salvata della Sandbox.
+ */
+export interface SandboxSession {
+  id: string;
+  name: string;
+  societa: string;
+  userId: string;
+  actions: SimulatedAction[];
   createdAt: string;
 }

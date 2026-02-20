@@ -9,12 +9,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 import { 
   Sparkles, 
   Loader2, 
   RefreshCw, 
   Calendar,
   BrainCircuit,
+  FlaskConical,
 } from 'lucide-react';
 
 // Components
@@ -42,6 +44,7 @@ export default function PianificazionePage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [selectedCompany, setSelectedCompany] = useState<string>('Tutte');
   const [isGlobalRefreshing, setIsGlobalRefreshing] = useState(false);
@@ -161,6 +164,14 @@ export default function PianificazionePage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
+          <Button 
+            onClick={() => router.push('/pianificazione/sandbox')}
+            className="gap-2 bg-gradient-to-r from-primary to-primary/80 shadow-lg hover:shadow-primary/20 transition-all font-bold uppercase tracking-tighter text-[10px] h-9"
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            Apri Live Sandbox
+          </Button>
+
           {user && (user.role === 'admin' || user.role === 'editor') && (
             <Select value={selectedCompany} onValueChange={(v) => setSelectedCompany(v)}>
               <SelectTrigger className="w-full sm:w-[180px] bg-background">

@@ -1,3 +1,4 @@
+
 import { config } from 'dotenv';
 config();
 
@@ -17,5 +18,4 @@ import '@/ai/flows/liquidity-early-warning.ts';
 import '@/ai/flows/detect-seasonal-patterns.ts';
 import '@/ai/flows/generate-narrative-insights.ts';
 import '@/ai/flows/detect-anomalies.ts';
-
-    
+import '@/ai/flows/generate-sandbox-insight.ts';
