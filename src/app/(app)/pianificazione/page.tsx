@@ -29,6 +29,7 @@ import { AnomalyAlertsCard } from '@/components/pianificazione/anomaly-alerts-ca
 import { CrossCompanyPatterns } from '@/components/pianificazione/cross-company-patterns';
 import { NarrativeAiCard } from '@/components/pianificazione/narrative-ai-card';
 import { StressTestCard } from '@/components/pianificazione/stress-test-card';
+import { PaymentOptimizationCard } from '@/components/pianificazione/payment-optimization-card';
 
 // AI Flows
 import { calculateCashFlowProjection } from '@/ai/flows/calculate-cash-flow-projection';
@@ -37,6 +38,7 @@ import { detectSeasonalPatterns } from '@/ai/flows/detect-seasonal-patterns';
 import { detectAnomalies } from '@/ai/flows/detect-anomalies';
 import { liquidityEarlyWarning } from '@/ai/flows/liquidity-early-warning';
 import { runStressTests } from '@/ai/flows/run-stress-tests';
+import { optimizePaymentTiming } from '@/ai/flows/optimize-payment-timing';
 
 import type { CompanyProfile, Movimento, LiquidityAlert } from '@/lib/types';
 import { formatDate, cn } from '@/lib/utils';
@@ -89,7 +91,7 @@ export default function PianificazionePage() {
     try {
       // Step 1: Projection
       setRefreshStep('Proiezione flussi di cassa...');
-      setRefreshProgress(10);
+      setRefreshProgress(5);
       
       const movementsRef = collection(firestore, 'movements');
       const q = query(movementsRef, where('societa', '==', societaToAnalyze));
@@ -109,25 +111,30 @@ export default function PianificazionePage() {
 
       // Step 2: Entity Scores
       setRefreshStep('Analisi affidabilità clienti/fornitori...');
-      setRefreshProgress(25);
+      setRefreshProgress(20);
       await calculateEntityScores({ societa: societaToAnalyze, userId: user.uid });
 
       // Step 3: Seasonal Patterns
       setRefreshStep('Rilevamento pattern stagionali...');
-      setRefreshProgress(40);
+      setRefreshProgress(35);
       await detectSeasonalPatterns({ societa: societaToAnalyze, userId: user.uid });
 
       // Step 4: Anomalies
       setRefreshStep('Controllo anomalie recenti...');
-      setRefreshProgress(60);
+      setRefreshProgress(50);
       await detectAnomalies({ societa: societaToAnalyze, userId: user.uid });
 
       // Step 5: Stress Tests
       setRefreshStep('Esecuzione simulazioni di resilienza...');
-      setRefreshProgress(80);
+      setRefreshProgress(65);
       await runStressTests({ societa: societaToAnalyze, userId: user.uid });
 
-      // Step 6: Early Warning
+      // Step 6: Payment Optimization
+      setRefreshStep('Ottimizzazione timing pagamenti...');
+      setRefreshProgress(80);
+      await optimizePaymentTiming({ societa: societaToAnalyze, userId: user.uid });
+
+      // Step 7: Early Warning
       setRefreshStep('Monitoraggio liquidità critiche...');
       setRefreshProgress(95);
       await liquidityEarlyWarning({ societa: societaToAnalyze, userId: user.uid });
@@ -265,25 +272,40 @@ export default function PianificazionePage() {
           <CrossCompanyPatterns userId={user?.uid || ''} />
         </div>
 
-        {/* Row 4: Resilience Section */}
+        {/* Row 4: Resilience & Optimization Section */}
         <div className="md:col-span-2 mt-4">
           <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-xl font-black uppercase tracking-tighter">Analisi di Resilienza e Rischio</h2>
+            <h2 className="text-xl font-black uppercase tracking-tighter">Analisi di Resilienza e Strategia</h2>
             <div className="h-px flex-1 bg-border" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <StressTestCard 
-              societa={currentSocieta} 
-              userId={user?.uid || ''} 
-            />
-            <AnomalyAlertsCard 
-              societa={currentSocieta} 
-              userId={user?.uid || ''} 
-            />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2">
+               <StressTestCard 
+                societa={currentSocieta} 
+                userId={user?.uid || ''} 
+              />
+            </div>
+            <div className="md:col-span-1">
+               <PaymentOptimizationCard 
+                societa={currentSocieta} 
+                userId={user?.uid || ''} 
+              />
+            </div>
           </div>
         </div>
 
-        {/* Row 5: Timeline */}
+        {/* Row 5: Anomalies & Patterns */}
+        <div className="md:col-span-2 mt-4">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <AnomalyAlertsCard 
+                societa={currentSocieta} 
+                userId={user?.uid || ''} 
+              />
+              <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
+           </div>
+        </div>
+
+        {/* Row 6: Timeline */}
         <div className="md:col-span-2 mt-4">
           <div className="flex items-center gap-4 mb-6">
             <h2 className="text-xl font-black uppercase tracking-tighter">Mappa Temporale dei Flussi</h2>
@@ -292,9 +314,8 @@ export default function PianificazionePage() {
           <VisualTimeline societa={currentSocieta} />
         </div>
 
-        {/* Row 6+: Utility Cards (2 per row) */}
+        {/* Row 7+: Utility Cards (2 per row) */}
         <FiscalDeadlinesCard societa={currentSocieta} />
-        <EntityScoresCard societa={currentSocieta} userId={user?.uid || ''} />
         <CategoryBudgetCard societa={currentSocieta} />
       </div>
     </div>
