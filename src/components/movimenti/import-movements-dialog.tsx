@@ -25,77 +25,43 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UploadCloud, File as FileIcon, Trash2, Check, Wand2, AlertTriangle } from 'lucide-react';
-import type { Movimento, AppUser, CompanyProfile, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
-import { importTransactions } from '@/ai/flows/import-transactions-flow';
-import { ScrollArea } from '../ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { formatCurrency, formatDate, maskAccountNumber, parseDate } from '@/lib/utils';
-import { Badge } from '../ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Label } from '../ui/label';
+import { 
+  Loader2, 
+  UploadCloud, 
+  File as FileIcon, 
+  Trash2, 
+  Check, 
+  Wand2, 
+  AlertTriangle, 
+  Table as TableIcon,
+  FileText,
+  Camera,
+  Keyboard,
+  Info
+} from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { doc, writeBatch } from 'firebase/firestore';
-import { validateMovement } from '@/lib/data-validation';
+import { formatCurrency, formatDate, maskAccountNumber, parseDate } from '@/lib/utils';
+import { validateMovement, checkDuplicate } from '@/lib/data-validation';
+import { importTransactions } from '@/ai/flows/import-transactions-flow';
+import { logDataChange } from '@/ai/flows/data-audit-trail';
+import type { Movimento, AppUser, CompanyProfile, LinkableItem, Scadenza, PrevisioneUscita, PrevisioneEntrata } from '@/lib/types';
 
+type ImportStage = 'upload' | 'processing' | 'review' | 'success';
 
-type ImportStage = 'upload' | 'review' | 'ai_progress' | 'final_review';
-
-const getJaccardIndex = (str1: string, str2: string): number => {
-    const noise = new Set(['e', 'di', 'a', 'da', 'in', 'con', 'su', 'per', 'tra', 'fra', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una', 'del', 'dello', 'della', 'dei', 'degli', 'delle', 'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'dal', 'dallo', 'dalla', 'dai', 'dagli', 'dalle', 'nel', 'nello', 'nella', 'nei', 'negli', 'nelle', 'col', 'coi', 'sul', 'sullo', 'sulla', 'sui', 'sugli', 'sulle', 'pagamento', 'fattura', 'accredito', 'addebito', 'sdd', 'rata', 'canone', 'ft', 'rif', 'n', 'num', 'vs']);
-    const clean = (s: string) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").split(' ').filter(w => w.length > 2 && !noise.has(w));
-    const set1 = new Set(clean(str1));
-    const set2 = new Set(clean(str2));
-    if (set1.size === 0 || set2.size === 0) return 0;
-    const intersection = new Set([...set1].filter(x => set2.has(x)));
-    const union = new Set([...set1, ...set2]);
-    return intersection.size / union.size;
-};
-
-const calculateSimilarity = (item: LinkableItem, movement: Omit<Movimento, 'id'>): number => {
-    const { societa, descrizione, categoria, sottocategoria, data: paymentDateStr } = movement;
-    const importo = movement.entrata > 0 ? movement.entrata : movement.uscita;
-
-    if (!societa || !importo || importo === 0 || !descrizione || !paymentDateStr) return 0;
-    if (item.societa !== societa) return -1;
-
-    let score = 0;
-    const OVERDUE_BASE_SCORE = 1000;
-    const FUTURE_BASE_SCORE = 500;
-
-    // 1. Date Proximity and Priority
-    try {
-        const paymentDate = parseDate(paymentDateStr);
-        const itemDate = parseDate(item.date);
-        const diffDays = (paymentDate.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
-
-        if (diffDays >= 0) { // Overdue or on the same day
-            score += OVERDUE_BASE_SCORE - (diffDays / 30);
-        } else { // Future item
-            const futureDiff = Math.abs(diffDays);
-            if (futureDiff > 90) return 0;
-            score += FUTURE_BASE_SCORE - futureDiff;
-        }
-    } catch (e) {
-        return 0;
-    }
-    
-    // 2. Amount Similarity
-    if (item.amount && importo) {
-        const difference = Math.abs(item.amount - importo);
-        if (difference < 0.02) { score += 100; }
-        else { score += Math.max(0, 50 - (difference / item.amount) * 100); }
-    }
-    
-    // 3. Description Similarity
-    score += getJaccardIndex(descrizione, item.description) * 50;
-    
-    if (categoria && item.category === categoria) score += 20;
-    if (sottocategoria && item.subcategory === sottocategoria) score += 10;
-
-    return score;
-  };
-
+interface ProcessedMovement extends Omit<Movimento, 'id'> {
+    tempId: string;
+    errors: string[];
+    warnings: string[];
+    isDuplicate: boolean;
+    linkedToId?: string;
+    skip?: boolean;
+}
 
 export function ImportMovementsDialog({
   isOpen,
@@ -115,7 +81,6 @@ export function ImportMovementsDialog({
   defaultCompany?: string;
   currentUser: AppUser | null;
   companies: CompanyProfile[];
-  categories: any;
   allMovements: Movimento[];
   deadlines: Scadenza[];
   expenseForecasts: PrevisioneUscita[];
@@ -123,42 +88,33 @@ export function ImportMovementsDialog({
 }) {
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [processedRows, setProcessedRows] = useState<(Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string, errors?: string[], warnings?: string[] })[]>([]);
-  const [importedMovements, setImportedMovements] = useState<Movimento[]>([]);
+  const [processedRows, setProcessedRows] = useState<ProcessedMovement[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  
   const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
-  const firestore = useFirestore();
-
-  const [isDuplicateFileAlertOpen, setIsDuplicateFileAlertOpen] = useState(false);
-  const [warningConfirmation, setWarningConfirmation] = useState<{ movements: typeof processedRows } | null>(null);
-
-  const SUPPORTED_MIME_TYPES = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/pdf', 'image/png', 'image/jpeg'];
-  const ACCEPTED_FILES = ".xlsx,.pdf,.png,.jpg,.jpeg";
   
+  const SUPPORTED_MIME_TYPES = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'text/csv',
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'image/webp'
+  ];
+
   const clearState = () => {
     setStage('upload');
     setFile(null);
     setProcessedRows([]);
-    setImportedMovements([]);
     setIsProcessing(false);
     setIsDragging(false);
-    setIsDuplicateFileAlertOpen(false);
-    setWarningConfirmation(null);
   };
-  
-  const handleClose = (open: boolean) => {
-    if (!open) {
-      clearState();
-    }
-    setIsOpen(open);
-  }
 
   useEffect(() => {
-    if(isOpen) {
+    if (isOpen) {
         if (currentUser?.role === 'company' || currentUser?.role === 'company-editor') {
             setSelectedCompany(currentUser.company!);
         } else if (defaultCompany && defaultCompany !== 'Tutte') {
@@ -176,448 +132,392 @@ export function ImportMovementsDialog({
     if (company) {
         const accounts = company.conti || [];
         setSelectedAccount(accounts.length > 0 ? accounts[0] : '');
-    } else {
-        setSelectedAccount('');
     }
   }, [selectedCompany, companies]);
-  
-  const validateFile = (file: File) => {
-    if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
-        toast({
-            variant: 'destructive',
-            title: 'Formato File Non Supportato',
-            description: `Per favore, carica un file Excel (.xlsx), PDF o immagine (.png, .jpg).`,
-        });
-        return false;
-    }
-    return true;
-  };
-  
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (selectedFile && validateFile(selectedFile)) {
-      setFile(selectedFile);
-    }
-  };
 
-  const handleDragEvents = (e: React.DragEvent<HTMLDivElement>, isOver: boolean) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(isOver);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
-      const droppedFile = e.dataTransfer.files?.[0];
-      if (droppedFile && validateFile(droppedFile)) {
-          setFile(droppedFile);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      if (SUPPORTED_MIME_TYPES.includes(selectedFile.type)) {
+        setFile(selectedFile);
+      } else {
+        toast({ variant: 'destructive', title: 'Formato non supportato', description: 'Carica un file Excel, CSV, PDF o Immagine.' });
       }
+    }
   };
 
-  const linkableItems = useMemo((): LinkableItem[] => {
-      const items: LinkableItem[] = [];
-      (deadlines || []).filter(d => d.stato !== 'Pagato' && d.stato !== 'Annullato').forEach(d => items.push({ id: d.id, type: 'deadlines', description: d.descrizione, date: d.dataScadenza, amount: d.importoPrevisto - d.importoPagato, societa: d.societa, category: d.categoria, subcategory: d.sottocategoria || '' }));
-      (expenseForecasts || []).filter(f => f.stato !== 'Pagato' && f.stato !== 'Annullato').forEach(f => items.push({ id: f.id, type: 'expenseForecasts', description: f.descrizione, date: f.dataScadenza, amount: f.importoLordo - (f.importoEffettivo || 0), societa: f.societa, category: f.categoria, subcategory: f.sottocategoria }));
-      (incomeForecasts || []).filter(f => f.stato !== 'Incassato' && f.stato !== 'Annullato').forEach(f => items.push({ id: f.id, type: 'incomeForecasts', description: f.descrizione, date: f.dataPrevista, amount: f.importoLordo - (f.importoEffettivo || 0), societa: f.societa, category: f.categoria, subcategory: f.sottocategoria }));
-      return items;
-  }, [deadlines, expenseForecasts, incomeForecasts]);
-
-  const processFile = async () => {
+  const handleStartProcessing = async () => {
     if (!file || !currentUser) return;
     setIsProcessing(true);
+    setStage('processing');
+
     try {
-        let result: { movements: (Omit<Movimento, 'id'>)[] };
+        let result;
+        const isStructured = file.type.includes('spreadsheetml') || file.type.includes('csv') || file.type.includes('excel');
 
-        if (file.type.includes('spreadsheetml')) {
-            const fileData = await file.arrayBuffer();
-            const workbook = XLSX.read(fileData, { type: 'buffer' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+        if (isStructured) {
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data);
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
             
-            if (!jsonData || jsonData.length === 0) {
-                throw new Error("Il file Excel è vuoto o in un formato non leggibile.");
-            }
-
             result = await importTransactions({
                 textContent: JSON.stringify(jsonData),
                 fileType: file.type,
                 company: selectedCompany,
                 conto: selectedAccount,
-                inseritoDa: currentUser.displayName!,
+                inseritoDa: currentUser.displayName,
             });
-        } else { // PDF or Image
-            const fileDataUri = await new Promise<string>((resolve, reject) => {
+        } else {
+            const dataUri = await new Promise<string>((resolve) => {
                 const reader = new FileReader();
-                reader.onload = (event) => resolve(event.target?.result as string);
-                reader.onerror = (error) => reject(error);
+                reader.onload = (e) => resolve(e.target?.result as string);
                 reader.readAsDataURL(file);
             });
 
             result = await importTransactions({
-                fileDataUri: fileDataUri,
+                fileDataUri: dataUri,
                 fileType: file.type,
                 company: selectedCompany,
                 conto: selectedAccount,
-                inseritoDa: currentUser.displayName!,
+                inseritoDa: currentUser.displayName,
             });
         }
-        
-        const processed = result.movements;
 
-        const existingMovementKeys = new Set((allMovements || []).map(mov => `${mov.data}_${mov.descrizione.trim().toLowerCase()}_${mov.entrata}_${mov.uscita}`));
-        const processedKeys = new Set();
-        
-        const checkedAndLinkedRows = processed.map(row => {
-            const key = `${row.data}_${row.descrizione.trim().toLowerCase()}_${row.entrata}_${row.uscita}`;
-            const isDbDuplicate = existingMovementKeys.has(key);
-            const isBatchDuplicate = processedKeys.has(key);
-            if (!isBatchDuplicate) {
-                processedKeys.add(key);
-            }
+        const initialRows: ProcessedMovement[] = result.movements.map((m: any) => {
+            const row: Omit<Movimento, 'id'> = {
+                societa: selectedCompany,
+                data: m.data,
+                anno: new Date(m.data).getFullYear() || new Date().getFullYear(),
+                descrizione: m.descrizione,
+                categoria: m.categoria || 'Da categorizzare',
+                sottocategoria: m.sottocategoria || 'Da categorizzare',
+                entrata: m.entrata || 0,
+                uscita: m.uscita || 0,
+                iva: 0.22,
+                conto: selectedAccount,
+                operatore: currentUser.displayName,
+                metodoPag: 'Importato',
+                note: `Importato da: ${file.name}`,
+                status: 'manual_review',
+            };
 
-            // Data Validation
             const validation = validateMovement(row, allMovements, companies);
-
-            let bestMatch: { item: LinkableItem, score: number } | null = null;
-            if (!isDbDuplicate && !isBatchDuplicate) {
-                const itemsForCompany = linkableItems.filter(item => item.societa === row.societa && ((row.uscita > 0 && (item.type === 'deadlines' || item.type === 'expenseForecasts')) || (row.entrata > 0 && item.type === 'incomeForecasts')));
-                
-                if (itemsForCompany.length > 0) {
-                    const scoredItems = itemsForCompany
-                        .map(item => ({ item, score: calculateSimilarity(item, row) }))
-                        .sort((a, b) => {
-                            if (a.score > b.score) return -1;
-                            if (a.score < b.score) return 1;
-                            try {
-                                return parseDate(a.item.date).getTime() - parseDate(b.item.date).getTime();
-                            } catch {
-                                return 0;
-                            }
-                        });
-
-                    if (scoredItems.length > 0 && scoredItems[0].score > 80) { // Similarity threshold
-                        bestMatch = scoredItems[0];
-                    }
-                }
-            }
+            const duplication = checkDuplicate(allMovements, row);
 
             return {
-              ...row,
-              isDuplicate: isDbDuplicate || isBatchDuplicate,
-              linkedTo: bestMatch ? `${bestMatch.item.type}/${bestMatch.id}` : undefined,
-              errors: validation.errors,
-              warnings: validation.warnings,
+                ...row,
+                tempId: crypto.randomUUID(),
+                errors: validation.errors,
+                warnings: validation.warnings,
+                isDuplicate: duplication.isDuplicate,
+                skip: validation.errors.length > 0 || duplication.isDuplicate
             };
         });
 
-        setProcessedRows(checkedAndLinkedRows);
+        setProcessedRows(initialRows);
         setStage('review');
-
-        const duplicateCount = checkedAndLinkedRows.filter(r => r.isDuplicate).length;
-        const errorCount = checkedAndLinkedRows.filter(r => r.errors && r.errors.length > 0).length;
-        
-        toast({
-            title: 'Lettura Completata',
-            description: `${processed.length} movimenti pronti per la revisione.` + 
-                         (duplicateCount > 0 ? ` [${duplicateCount} Duplicati]` : '') +
-                         (errorCount > 0 ? ` [${errorCount} Errori]` : ''),
-            duration: 7000
-        });
-
     } catch (error: any) {
-        console.error("Error processing file:", error);
-        toast({ variant: 'destructive', title: 'Errore Lettura File', description: error.message || 'Impossibile leggere il file.' });
+        console.error(error);
+        toast({ variant: 'destructive', title: 'Errore elaborazione', description: error.message });
+        setStage('upload');
     } finally {
         setIsProcessing(false);
     }
-  }
-
-  const handleStartProcessing = async () => {
-    if (!file) {
-      toast({ variant: 'destructive', title: 'Nessun file selezionato' });
-      return;
-    }
-
-    const wasFileImported = allMovements.some(mov => mov.note === `Importato da file: ${file.name}`);
-    if (wasFileImported) {
-        setIsDuplicateFileAlertOpen(true);
-    } else {
-        await processFile();
-    }
-  };
-  
-  const handleImport = async (movementsToImport: typeof processedRows) => {
-    const errorRows = movementsToImport.filter(r => r.errors && r.errors.length > 0);
-    if (errorRows.length > 0) {
-        toast({ 
-            variant: 'destructive', 
-            title: 'Importazione Bloccata', 
-            description: `Ci sono ${errorRows.length} movimenti con errori critici. Correggi i dati prima di importare.` 
-        });
-        return;
-    }
-
-    const warningRows = movementsToImport.filter(r => r.warnings && r.warnings.length > 0);
-    if (warningRows.length > 0 && !warningConfirmation) {
-        setWarningConfirmation({ movements: movementsToImport });
-        return;
-    }
-
-    setIsProcessing(true);
-    try {
-      const newMovements = await onImport(movementsToImport);
-      setImportedMovements(newMovements);
-      setStage('ai_progress');
-      toast({ title: "Importazione Riuscita", description: "Ora puoi avviare l'analisi AI per la categorizzazione." });
-    } catch (e) {
-      toast({ variant: 'destructive', title: 'Errore', description: 'Importazione fallita.' });
-    } finally {
-      setIsProcessing(false);
-      setWarningConfirmation(null);
-    }
   };
 
-  const handleStartAiAnalysis = async () => {
-    if (!firestore || importedMovements.length === 0) return;
-    
-    setIsProcessing(true);
-    toast({ title: 'Analisi AI in corso...', description: `Analizzo ${importedMovements.length} movimenti.` });
-
-    const updatedMovements = [...importedMovements];
-    const batch = writeBatch(firestore);
-
-    for (let i = 0; i < importedMovements.length; i++) {
-        const movement = importedMovements[i];
-        try {
-            const result = await import('@/ai/flows/categorize-transactions-with-ai-suggestions').then(m => m.categorizeTransaction({ description: movement.descrizione }));
-            if (result && result.category && result.category !== 'Da categorizzare') {
-                const updatedMov = { 
-                    ...movement, 
-                    categoria: result.category, 
-                    sottocategoria: result.subcategory,
-                    iva: result.ivaPercentage,
-                    metodoPag: result.metodoPag,
-                    status: 'ok' as const 
-                };
-                updatedMovements[i] = updatedMov;
-                
-                const movRef = doc(firestore, 'movements', movement.id);
-                batch.update(movRef, {
-                    categoria: result.category,
-                    sottocategoria: result.subcategory,
-                    iva: result.ivaPercentage,
-                    metodoPag: result.metodoPag,
-                    status: 'ok'
-                });
-            }
-        } catch (error) {
-            console.error(`Error categorizing movement ${movement.id}:`, error);
+  const handleUpdateRow = (tempId: string, field: keyof ProcessedMovement, value: any) => {
+    setProcessedRows(prev => prev.map(row => {
+        if (row.tempId === tempId) {
+            const updated = { ...row, [field]: value };
+            // Re-validate
+            const validation = validateMovement(updated, allMovements, companies);
+            const duplication = checkDuplicate(allMovements, updated);
+            return {
+                ...updated,
+                errors: validation.errors,
+                warnings: validation.warnings,
+                isDuplicate: duplication.isDuplicate,
+                skip: validation.errors.length > 0 || duplication.isDuplicate
+            };
         }
+        return row;
+    }));
+  };
+
+  const handleFinalImport = async (onlyValid: boolean) => {
+    const toImport = processedRows.filter(r => !r.skip || (!onlyValid && r.errors.length === 0));
+    if (toImport.length === 0) {
+        toast({ title: "Nessun movimento da importare" });
+        return;
     }
 
+    setIsProcessing(true);
     try {
-        await batch.commit();
-        setImportedMovements(updatedMovements);
-        setStage('final_review');
-        toast({ title: 'Analisi Completata!', description: 'Le categorie sono state aggiornate.' });
+        await onImport(toImport.map(({ tempId, errors, warnings, isDuplicate, skip, ...rest }) => rest));
+        
+        // Log changes
+        for (const m of toImport) {
+            logDataChange({
+                societa: m.societa,
+                userId: currentUser?.uid || '',
+                collection: 'movements',
+                documentId: 'bulk-import',
+                action: 'create',
+                previousData: null,
+                newData: m,
+                source: 'import'
+            });
+        }
+
+        toast({ title: "Importazione completata", description: `${toImport.length} movimenti aggiunti.` });
+        setStage('success');
     } catch (error) {
-        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare le categorie aggiornate.' });
+        toast({ variant: 'destructive', title: "Errore importazione" });
     } finally {
         setIsProcessing(false);
     }
-};
+  };
 
-  
-  const canSelectCompany = currentUser?.role === 'admin' || currentUser?.role === 'editor';
-  const currentCompanyDetails = companies.find(c => c.sigla === selectedCompany);
-  const companyAccounts = currentCompanyDetails?.conti || [];
-  
-  const { nonDuplicateRows } = useMemo(() => {
+  const stats = useMemo(() => {
     return {
-        nonDuplicateRows: processedRows.filter(r => !r.isDuplicate),
-    }
+        total: processedRows.length,
+        valid: processedRows.filter(r => r.errors.length === 0 && r.warnings.length === 0 && !r.isDuplicate).length,
+        warnings: processedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length,
+        errors: processedRows.filter(r => r.errors.length > 0).length,
+        duplicates: processedRows.filter(r => r.isDuplicate).length
+    };
   }, [processedRows]);
-
-  const renderUploadStage = () => (
-     <div className="py-8 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="grid w-full items-center gap-1.5">
-                <Label htmlFor="company-select">Importa per la società</Label>
-                <Select value={selectedCompany} onValueChange={(v) => setSelectedCompany(v)} disabled={!canSelectCompany}>
-                    <SelectTrigger id="company-select"><SelectValue placeholder="Seleziona società..." /></SelectTrigger>
-                    <SelectContent>{companies?.map(c => <SelectItem key={c.id} value={c.sigla}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-            </div>
-             <div className="grid w-full items-center gap-1.5">
-                <Label htmlFor="account-select">Associa al conto (Opzionale)</Label>
-                {companyAccounts.length > 1 ? (
-                    <Select value={selectedAccount} onValueChange={setSelectedAccount} disabled={!selectedCompany}>
-                        <SelectTrigger id="account-select"><SelectValue placeholder="Seleziona conto..." /></SelectTrigger>
-                        <SelectContent>{companyAccounts.map(acc => <SelectItem key={acc} value={acc}>{maskAccountNumber(acc)}</SelectItem>)}</SelectContent>
-                    </Select>
-                ) : ( <Input id="account-select" value={companyAccounts.length === 1 ? maskAccountNumber(companyAccounts[0]) : "Nessun conto definito"} disabled />)}
-            </div>
-        </div>
-         <div className="flex items-center justify-center w-full" onDragOver={(e) => handleDragEvents(e, true)} onDragLeave={(e) => handleDragEvents(e, false)} onDrop={handleDrop}>
-            <label htmlFor="dropzone-file" className={cn("flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80", isDragging && "border-primary bg-primary/10")}>
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
-                    <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Clicca per caricare</span> o trascina il file</p>
-                    <p className="text-xs text-muted-foreground">XLSX, PDF, PNG, JPG</p>
-                </div>
-                <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept={ACCEPTED_FILES} />
-            </label>
-        </div> 
-        {file && (
-            <div className="mt-4 flex items-center justify-between p-3 rounded-lg border bg-muted/50">
-                <div className='flex items-center gap-2'><FileIcon className="h-5 w-5 text-muted-foreground" /><span className="text-sm font-medium">{file.name}</span></div>
-                <Button variant="ghost" size="icon" onClick={() => setFile(null)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-            </div>
-        )}
-    </div>
-  );
-  
-  const renderReviewStage = (title: string, description: string, movements: (Omit<Movimento, 'id'> & { isDuplicate?: boolean, linkedTo?: string, errors?: string[], warnings?: string[] })[], isFinal: boolean) => (
-     <div className="py-4 space-y-4">
-        <h3 className="text-lg font-medium">{title}</h3>
-        <p className="text-sm text-muted-foreground">{description}</p>
-        <ScrollArea className="h-[60vh] border rounded-md">
-            <Table className="table-fixed w-full">
-                <TableHeader><TableRow>
-                    <TableHead className="w-[10%]">Data</TableHead>
-                    <TableHead className="w-[20%]">Descrizione</TableHead>
-                    <TableHead className="w-[15%]">Validazione</TableHead>
-                    <TableHead className="w-[15%]">Collegamento</TableHead>
-                    <TableHead className="w-[8%] text-right">Entrata</TableHead>
-                    <TableHead className="w-[8%] text-right">Uscita</TableHead>
-                    <TableHead className="w-[7%] text-center">Società</TableHead>
-                    <TableHead className="w-[10%] text-center">Stato</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                    {movements.map((row, index) => {
-                        const linkedItem = row.linkedTo ? linkableItems.find(item => `${item.type}/${item.id}` === row.linkedTo) : null;
-                        const hasErrors = row.errors && row.errors.length > 0;
-                        const hasWarnings = row.warnings && row.warnings.length > 0;
-
-                        return (
-                        <TableRow key={index} className={cn('text-sm', (row.isDuplicate || hasErrors) && 'bg-red-50 dark:bg-red-900/20')}>
-                            <TableCell className="whitespace-nowrap py-2 px-2">{formatDate(row.data)}</TableCell>
-                            <TableCell className="break-words py-2 px-2">{row.descrizione}</TableCell>
-                            <TableCell className="py-2 px-2">
-                                {hasErrors && row.errors?.map((err, i) => <Badge key={i} variant="destructive" className="mb-1">{err}</Badge>)}
-                                {hasWarnings && row.warnings?.map((war, i) => <Badge key={i} variant="outline" className="border-amber-500 text-amber-600 mb-1">{war}</Badge>)}
-                                {!hasErrors && !hasWarnings && <Badge variant="outline" className="text-green-600 border-green-600">Valido</Badge>}
-                            </TableCell>
-                            <TableCell className="py-2 px-2">
-                                {linkedItem ? <Badge variant="secondary" className="bg-green-100 text-green-800 whitespace-normal">{linkedItem.description}</Badge> : 'Nessuno'}
-                            </TableCell>
-                            <TableCell className="text-right text-green-600 whitespace-nowrap py-2 px-2">{row.entrata > 0 ? formatCurrency(row.entrata) : '-'}</TableCell>
-                            <TableCell className="text-right text-red-600 whitespace-nowrap py-2 px-2">{row.uscita > 0 ? formatCurrency(row.uscita) : '-'}</TableCell>
-                            <TableCell className="text-center py-2 px-2"><Badge variant={row.societa === 'LNC' ? 'default' : 'secondary'}>{row.societa}</Badge></TableCell>
-                            <TableCell className="text-center py-2 px-2">
-                              {row.isDuplicate ? <Badge variant="destructive">Duplicato</Badge> : <Badge variant="outline">Nuovo</Badge>}
-                            </TableCell>
-                        </TableRow>
-                        )
-                    })}
-                </TableBody>
-            </Table>
-        </ScrollArea>
-    </div>
-  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-7xl">
-         <AlertDialog open={isDuplicateFileAlertOpen} onOpenChange={setIsDuplicateFileAlertOpen}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>File Già Importato?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Un file con nome "{file?.name}" sembra essere già stato importato. Importarlo di nuovo potrebbe creare movimenti duplicati. Vuoi procedere comunque?
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Annulla</AlertDialogCancel>
-                    <AlertDialogAction onClick={async () => {
-                        setIsDuplicateFileAlertOpen(false);
-                        await processFile();
-                    }}>
-                        Procedi Comunque
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-
-        <AlertDialog open={!!warningConfirmation} onOpenChange={() => setWarningConfirmation(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2">
-                        <AlertTriangle className="text-amber-500" />
-                        Conferma Importazione con Avvisi
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Alcuni movimenti presentano degli avvisi di validazione (es. importi anomali o descrizioni generiche). Vuoi procedere comunque con l'importazione di questi dati?
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setWarningConfirmation(null)}>Annulla</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => warningConfirmation && handleImport(warningConfirmation.movements)}>
-                        Importa Tutto
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-
+      <DialogContent className={cn("transition-all duration-500", stage === 'review' ? "max-w-7xl h-[90vh]" : "max-w-2xl")}>
         <DialogHeader>
-          <DialogTitle>Importa Movimenti da File</DialogTitle>
-           <DialogDescription>
-            {stage === 'upload' && "Carica un file (Excel, PDF, immagine) per estrarre i movimenti."}
-            {stage === 'review' && "Rivedi i dati estratti prima di salvarli nel database."}
-            {stage === 'ai_progress' && "I movimenti sono stati importati. Ora puoi avviare l'analisi AI per la categorizzazione."}
-            {stage === 'final_review' && "Analisi AI completata. Rivedi i risultati finali."}
+          <DialogTitle className="flex items-center gap-2">
+            <UploadCloud className="h-6 w-6 text-primary" />
+            Centro Importazione Intelligente
+          </DialogTitle>
+          <DialogDescription>
+            Supporta Excel, CSV, PDF e Immagini. L'AI estrarrà e categorizzerà i movimenti automaticamente.
           </DialogDescription>
         </DialogHeader>
-        
-        {stage === 'upload' && renderUploadStage()}
-        {stage === 'review' && renderReviewStage("Dati Estratti - Verifica e Conferma", "Controlla i movimenti estratti. I duplicati e gli errori sono evidenziati. Correggi eventuali criticità prima di importare.", processedRows, false)}
-        {stage === 'ai_progress' && renderReviewStage("Analisi AI", "I movimenti sono stati importati. Ora puoi avviare l'analisi AI.", importedMovements, false)}
-        {stage === 'final_review' && renderReviewStage("Risultati Analisi", "L'AI ha aggiornato le categorie. I movimenti non classificati restano 'Da Revisionare'.", importedMovements, true)}
 
-        <DialogFooter className="gap-2">
-          {stage !== 'final_review' && <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={isProcessing}>Annulla</Button>}
-           
-           {stage === 'upload' && (
-              <Button type="button" onClick={handleStartProcessing} disabled={isProcessing || !file}>
-                {isProcessing ? <Loader2 className="animate-spin" /> : <>Procedi alla revisione</>}
-              </Button>
-           )}
-           {stage === 'review' && (
-               <>
-                <Button type="button" variant="secondary" onClick={() => handleImport(nonDuplicateRows)} disabled={isProcessing || nonDuplicateRows.length === 0}>
-                    {isProcessing ? <Loader2 className="animate-spin" /> : <>Importa solo Nuovi ({nonDuplicateRows.length})</>}
+        {stage === 'upload' && (
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Società di destinazione</Label>
+                    <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {companies.map(c => <SelectItem key={c.sigla} value={c.sigla}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Conto predefinito</Label>
+                    <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {companyAccounts.map(a => <SelectItem key={a} value={a}>{maskAccountNumber(a)}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            <div 
+                className={cn(
+                    "border-2 border-dashed rounded-2xl h-64 flex flex-col items-center justify-center gap-4 transition-all cursor-pointer",
+                    isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/50"
+                )}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) setFile(f); }}
+                onClick={() => document.getElementById('file-upload')?.click()}
+            >
+                <input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept={ACCEPTED_FILES} />
+                <div className="p-4 rounded-full bg-primary/10 text-primary">
+                    <UploadCloud className="h-10 w-10" />
+                </div>
+                <div className="text-center">
+                    <p className="font-bold">{file ? file.name : "Trascina qui il documento"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Excel, CSV, PDF o Immagini (max 10MB)</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+                <div className="flex flex-col items-center gap-1 p-3 rounded-xl border bg-muted/30 opacity-60">
+                    <TableIcon className="h-5 w-5" />
+                    <span className="text-[10px] font-black uppercase">Excel/CSV</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 p-3 rounded-xl border bg-muted/30 opacity-60">
+                    <FileText className="h-5 w-5" />
+                    <span className="text-[10px] font-black uppercase">PDF</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 p-3 rounded-xl border bg-muted/30 opacity-60">
+                    <Camera className="h-5 w-5" />
+                    <span className="text-[10px] font-black uppercase">Immagini</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 p-3 rounded-xl border bg-muted/30 opacity-60">
+                    <Keyboard className="h-5 w-5" />
+                    <span className="text-[10px] font-black uppercase">Manuale</span>
+                </div>
+            </div>
+          </div>
+        )}
+
+        {stage === 'processing' && (
+          <div className="py-20 flex flex-col items-center justify-center text-center space-y-6">
+            <div className="relative">
+                <Loader2 className="h-16 w-16 animate-spin text-primary opacity-20" />
+                <Sparkles className="h-8 w-8 text-primary absolute inset-0 m-auto animate-pulse" />
+            </div>
+            <div className="space-y-2">
+                <h3 className="text-lg font-bold">Analisi AI in corso...</h3>
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                    Gemini sta analizzando il contenuto di <span className="font-bold text-foreground">{file?.name}</span> per estrarre ogni singola riga.
+                </p>
+            </div>
+            <div className="w-full max-w-xs space-y-1">
+                <Progress value={undefined} className="h-1.5" />
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">OCR & Data Extraction</p>
+            </div>
+          </div>
+        )}
+
+        {stage === 'review' && (
+          <div className="flex flex-col h-full space-y-6 overflow-hidden">
+            <div className="grid grid-cols-4 gap-4">
+                <div className="p-3 rounded-xl border bg-green-50 dark:bg-green-950/20 flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-green-600">Validi</span>
+                    <span className="text-xl font-black">{stats.valid}</span>
+                </div>
+                <div className="p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/20 flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-amber-600">Avvisi</span>
+                    <span className="text-xl font-black">{stats.warnings}</span>
+                </div>
+                <div className="p-3 rounded-xl border bg-red-50 dark:bg-red-950/20 flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-red-600">Errori</span>
+                    <span className="text-xl font-black">{stats.errors}</span>
+                </div>
+                <div className="p-3 rounded-xl border bg-muted flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-muted-foreground">Duplicati</span>
+                    <span className="text-xl font-black">{stats.duplicates}</span>
+                </div>
+            </div>
+
+            <ScrollArea className="flex-1 border rounded-2xl bg-muted/5">
+                <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                        <TableRow>
+                            <TableHead className="w-12"></TableHead>
+                            <TableHead className="w-32">Data</TableHead>
+                            <TableHead>Descrizione</TableHead>
+                            <TableHead className="w-32 text-right">Importo</TableHead>
+                            <TableHead className="w-48">Validazione</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {processedRows.map((row) => (
+                            <TableRow key={row.tempId} className={cn(row.skip && "opacity-60")}>
+                                <TableCell>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={!row.skip} 
+                                        onChange={(e) => handleUpdateRow(row.tempId, 'skip', !e.target.checked)}
+                                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <Input 
+                                        type="date" 
+                                        value={row.data} 
+                                        className="h-8 text-xs"
+                                        onChange={(e) => handleUpdateRow(row.tempId, 'data', e.target.value)}
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <Input 
+                                        value={row.descrizione} 
+                                        className="h-8 text-xs"
+                                        onChange={(e) => handleUpdateRow(row.tempId, 'descrizione', e.target.value)}
+                                    />
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <Input 
+                                        type="number" 
+                                        value={row.entrata > 0 ? row.entrata : row.uscita} 
+                                        className="h-8 text-xs text-right"
+                                        onChange={(e) => {
+                                            const val = Number(e.target.value);
+                                            handleUpdateRow(row.tempId, row.entrata > 0 ? 'entrata' : 'uscita', val);
+                                        }}
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex flex-wrap gap-1">
+                                        {row.errors.map((e, i) => <Badge key={i} variant="destructive" className="text-[8px] px-1 py-0">{e}</Badge>)}
+                                        {row.warnings.map((w, i) => <Badge key={i} variant="secondary" className="bg-amber-100 text-amber-800 text-[8px] px-1 py-0">{w}</Badge>)}
+                                        {row.isDuplicate && <Badge variant="outline" className="text-red-500 border-red-500 text-[8px] px-1 py-0">Già presente</Badge>}
+                                        {row.errors.length === 0 && !row.isDuplicate && <Badge className="bg-green-500 text-[8px] px-1 py-0">OK</Badge>}
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setProcessedRows(prev => prev.filter(r => r.tempId !== row.tempId))}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </ScrollArea>
+          </div>
+        )}
+
+        {stage === 'success' && (
+            <div className="py-20 flex flex-col items-center justify-center text-center space-y-6 animate-in zoom-in-95 duration-500">
+                <div className="h-20 w-20 rounded-full bg-green-500 flex items-center justify-center text-white shadow-lg shadow-green-500/30">
+                    <Check className="h-10 w-10 stroke-[3]" />
+                </div>
+                <div className="space-y-2">
+                    <h3 className="text-2xl font-black uppercase tracking-tighter">Importazione Riuscita!</h3>
+                    <p className="text-sm text-muted-foreground">I movimenti sono stati registrati e sono ora visibili nella tabella principale.</p>
+                </div>
+                <Button onClick={() => handleClose(false)} className="px-10">Torna ai Movimenti</Button>
+            </div>
+        )}
+
+        <DialogFooter className="gap-2 p-6 border-t bg-muted/10">
+          {stage === 'upload' && (
+            <>
+                <Button variant="outline" onClick={() => handleClose(false)}>Annulla</Button>
+                <Button onClick={handleStartProcessing} disabled={!file || isProcessing} className="gap-2">
+                    {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                    Analizza con AI
                 </Button>
-                 <Button type="button" onClick={() => handleImport(processedRows)} disabled={isProcessing || processedRows.length === 0}>
-                    {isProcessing ? <Loader2 className="animate-spin" /> : <><Check className="mr-2 h-4 w-4" />Importa Tutti ({processedRows.length})</>}
+            </>
+          )}
+          {stage === 'review' && (
+            <>
+                <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground font-medium">
+                    <Info className="h-4 w-4" />
+                    I movimenti con errori critici o duplicati sono esclusi per default.
+                </div>
+                <Button variant="outline" onClick={() => setStage('upload')}>Indietro</Button>
+                <Button variant="secondary" onClick={() => handleFinalImport(true)} disabled={isProcessing}>
+                    Importa solo validi ({stats.valid})
                 </Button>
-               </>
-           )}
-           {stage === 'ai_progress' && (
-               <Button type="button" onClick={handleStartAiAnalysis} disabled={isProcessing}>
-                {isProcessing ? <Loader2 className="animate-spin" /> : <><Wand2 className="mr-2 h-4 w-4" />Avvia Analisi AI</>}
-              </Button>
-           )}
-            {stage === 'final_review' && (
-               <Button type="button" onClick={() => handleClose(false)}>
-                <Check className="mr-2 h-4 w-4" />
-                Chiudi
-              </Button>
-           )}
+                <Button onClick={() => handleFinalImport(false)} disabled={isProcessing || stats.errors > 0} className="gap-2">
+                    {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    Conferma e Importa ({processedRows.filter(r => !r.skip).length})
+                </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
+const ACCEPTED_FILES = ".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp";
