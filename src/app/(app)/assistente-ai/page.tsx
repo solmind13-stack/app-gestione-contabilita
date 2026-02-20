@@ -9,11 +9,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Send, Sparkles, Loader2 } from 'lucide-react';
 import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query } from 'firebase/firestore';
+import { collection, query, orderBy, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { provideAiChatAssistant } from '@/ai/flows/provide-ai-chat-assistant';
-import type { Movimento, Scadenza, PrevisioneEntrata, PrevisioneUscita } from '@/lib/types';
+import type { 
+  Movimento, 
+  Scadenza, 
+  PrevisioneEntrata, 
+  PrevisioneUscita,
+  CashFlowProjection,
+  LiquidityAlert,
+  EntityScore,
+  SeasonalAnalysis
+} from '@/lib/types';
 
 type Message = {
   role: 'user' | 'model';
@@ -30,24 +39,42 @@ export default function AssistenteAiPage() {
 
   const firestore = useFirestore();
 
+  // Core Data Queries
   const movimentiQuery = useMemo(() => firestore ? collection(firestore, 'movements') : null, [firestore]);
   const scadenzeQuery = useMemo(() => firestore ? collection(firestore, 'deadlines') : null, [firestore]);
   const previsioniEntrateQuery = useMemo(() => firestore ? collection(firestore, 'incomeForecasts') : null, [firestore]);
   const previsioniUsciteQuery = useMemo(() => firestore ? collection(firestore, 'expenseForecasts') : null, [firestore]);
 
+  // Planning Data Queries
+  const projectionsQuery = useMemo(() => firestore ? query(collection(firestore, 'cashFlowProjections'), orderBy('generatedAt', 'desc'), limit(5)) : null, [firestore]);
+  const alertsQuery = useMemo(() => firestore ? query(collection(firestore, 'liquidityAlerts'), orderBy('triggeredAt', 'desc'), limit(3)) : null, [firestore]);
+  const scoresQuery = useMemo(() => firestore && user ? collection(firestore, 'users', user.uid, 'entityScores') : null, [firestore, user?.uid]);
+  const seasonalQuery = useMemo(() => firestore && user ? collection(firestore, 'users', user.uid, 'seasonalPatterns') : null, [firestore, user?.uid]);
+
   const { data: movimenti } = useCollection<Movimento>(movimentiQuery);
   const { data: scadenze } = useCollection<Scadenza>(scadenzeQuery);
   const { data: previsioniEntrate } = useCollection<PrevisioneEntrata>(previsioniEntrateQuery);
   const { data: previsioniUscite } = useCollection<PrevisioneUscita>(previsioniUsciteQuery);
+  
+  const { data: projections } = useCollection<CashFlowProjection>(projectionsQuery);
+  const { data: alerts } = useCollection<LiquidityAlert>(alertsQuery);
+  const { data: scores } = useCollection<EntityScore>(scoresQuery);
+  const { data: seasonal } = useCollection<SeasonalAnalysis>(seasonalQuery);
 
   const getFinancialData = useCallback(() => {
     return JSON.stringify({
-      movimenti: movimenti || [],
+      movimenti: (movimenti || []).slice(0, 100), // Limit for context window
       scadenze: scadenze || [],
       previsioniEntrate: previsioniEntrate || [],
       previsioniUscite: previsioniUscite || [],
+      pianificazione: {
+        proiezioni: (projections || []).filter(p => p.scenarioType === 'realistic').slice(0, 1),
+        alerts: alerts || [],
+        entityScores: scores || [],
+        seasonalPatterns: seasonal || []
+      }
     }, null, 2);
-  }, [movimenti, scadenze, previsioniEntrate, previsioniUscite]);
+  }, [movimenti, scadenze, previsioniEntrate, previsioniUscite, projections, alerts, scores, seasonal]);
 
 
   const handleSendMessage = async () => {
@@ -65,7 +92,7 @@ export default function AssistenteAiPage() {
       const result = await provideAiChatAssistant({
         query: currentInput,
         financialData: financialData,
-        company: 'Tutte', // Or make this dynamic
+        company: user?.company || 'Tutte',
         chatHistory: messages.map(m => ({ role: m.role, content: m.content })),
       });
       
@@ -92,33 +119,65 @@ export default function AssistenteAiPage() {
   useEffect(() => {
     if (scrollAreaRef.current) {
       setTimeout(() => {
-        scrollAreaRef.current?.scrollTo({
-          top: scrollAreaRef.current.scrollHeight,
-          behavior: 'smooth',
-        });
+        const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+        if (scrollContainer) {
+          scrollContainer.scrollTo({
+            top: scrollContainer.scrollHeight,
+            behavior: 'smooth',
+          });
+        }
       }, 100);
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
-      <Card className="flex flex-col flex-1">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="text-primary" />
-            Assistente Finanziario AI
-          </CardTitle>
-          <CardDescription>
-            Poni domande sui tuoi dati finanziari. L'assistente è collegato ai dati in tempo reale del database.
-          </CardDescription>
+      <Card className="flex flex-col flex-1 shadow-xl border-primary/5 overflow-hidden">
+        <CardHeader className="bg-muted/30 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary rounded-lg text-primary-foreground shadow-lg">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-black uppercase tracking-tighter">
+                  Financial Twin Assistant
+                </CardTitle>
+                <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Sincronizzato con dati reali e proiezioni AI
+                </CardDescription>
+              </div>
+            </div>
+            {user?.company && <Badge variant="outline" className="font-mono">{user.company}</Badge>}
+          </div>
         </CardHeader>
-        <CardContent className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full pr-4" ref={scrollAreaRef}>
-            <div className="space-y-6">
+        <CardContent className="flex-1 overflow-hidden p-0 bg-background/50">
+          <ScrollArea className="h-full px-6 py-8" ref={scrollAreaRef}>
+            <div className="space-y-8 max-w-4xl mx-auto">
               {messages.length === 0 ? (
-                 <div className="text-center text-muted-foreground p-8">
-                    <p>Inizia a chattare con il tuo assistente finanziario!</p>
-                    <p className="text-sm">Puoi chiedere: "Qual è la mia liquidità prevista per la fine del mese?" o "Come posso scaglionare i pagamenti di dicembre?".</p>
+                 <div className="flex flex-col items-center justify-center h-[40vh] text-center space-y-6">
+                    <div className="p-6 rounded-full bg-muted/20 border-2 border-dashed">
+                      <Sparkles className="h-12 w-12 text-primary opacity-20" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-lg font-bold">Chiedimi qualsiasi cosa sui tuoi conti</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
+                        {[
+                          "Posso permettermi un nuovo computer da 2000€?",
+                          "Qual è il miglior momento per assumere?",
+                          "Come sta andando la liquidità per STG?",
+                          "Chi sono i fornitori meno puntuali?"
+                        ].map((q, i) => (
+                          <button 
+                            key={i} 
+                            onClick={() => setInput(q)}
+                            className="text-[11px] font-bold uppercase tracking-wider p-3 rounded-xl border bg-background hover:bg-primary hover:text-primary-foreground transition-all text-left shadow-sm"
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                  </div>
               ) : (
                 messages.map((message, index) => (
@@ -130,47 +189,51 @@ export default function AssistenteAiPage() {
                     )}
                   >
                     {message.role === 'model' && (
-                      <Avatar className="h-9 w-9 border">
-                        <AvatarFallback><Sparkles /></AvatarFallback>
+                      <Avatar className="h-9 w-9 border-2 border-primary/20 shadow-sm shrink-0">
+                        <AvatarFallback className="bg-primary text-primary-foreground"><Sparkles className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                     )}
                     <div
                       className={cn(
-                        "max-w-xl rounded-lg px-4 py-3",
+                        "max-w-[85%] sm:max-w-[70%] rounded-2xl px-5 py-4 shadow-sm",
                         message.role === 'user'
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
+                          : 'bg-muted/80 border border-border/50 text-foreground'
                       )}
                     >
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">
+                        {message.content}
+                      </p>
                     </div>
                      {message.role === 'user' && user && (
-                       <Avatar className="h-9 w-9 border">
+                       <Avatar className="h-9 w-9 border-2 border-primary shadow-sm shrink-0">
                          {user.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || 'User'}/>}
-                         <AvatarFallback>{user.displayName?.charAt(0) || 'U'}</AvatarFallback>
+                         <AvatarFallback className="bg-primary/10 text-primary font-black uppercase text-xs">
+                           {user.displayName?.charAt(0) || 'U'}
+                         </AvatarFallback>
                        </Avatar>
                      )}
                   </div>
                 ))
               )}
                {isLoading && (
-                    <div className="flex items-start gap-4 justify-start">
-                        <Avatar className="h-9 w-9 border">
-                            <AvatarFallback><Sparkles /></AvatarFallback>
+                    <div className="flex items-start gap-4 justify-start animate-in fade-in slide-in-from-left-2">
+                        <Avatar className="h-9 w-9 border-2 border-primary/20 shadow-sm shrink-0">
+                            <AvatarFallback className="bg-primary text-primary-foreground animate-pulse"><Sparkles className="h-4 w-4" /></AvatarFallback>
                         </Avatar>
-                        <div className="max-w-xl rounded-lg px-4 py-3 bg-muted flex items-center">
-                            <Loader2 className="h-5 w-5 animate-spin mr-2"/>
-                            <span>Analizzo...</span>
+                        <div className="rounded-2xl px-5 py-4 bg-muted flex items-center gap-3">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary"/>
+                            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Analizzo i dati di pianificazione...</span>
                         </div>
                     </div>
                 )}
             </div>
           </ScrollArea>
         </CardContent>
-        <CardFooter className="pt-6">
-          <div className="relative w-full">
+        <CardFooter className="p-6 bg-background border-t">
+          <div className="relative w-full max-w-4xl mx-auto flex gap-3">
             <Textarea
-              placeholder="Scrivi la tua domanda qui..."
+              placeholder="Chiedi al tuo Twin: 'Posso fare questo investimento?'"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -179,17 +242,16 @@ export default function AssistenteAiPage() {
                   handleSendMessage();
                 }
               }}
-              className="pr-20"
+              className="min-h-[60px] max-h-[200px] rounded-2xl resize-none py-4 px-6 border-muted bg-muted/30 focus-visible:ring-primary focus-visible:ring-offset-0"
               disabled={isLoading}
             />
             <Button
               size="icon"
-              className="absolute top-1/2 right-3 -translate-y-1/2"
+              className="h-[60px] w-[60px] rounded-2xl shadow-lg shadow-primary/20 transition-transform active:scale-95 shrink-0"
               onClick={handleSendMessage}
               disabled={isLoading || input.trim() === ''}
-              aria-label="Invia messaggio"
             >
-              <Send className="h-5 w-5" />
+              <Send className="h-6 w-6" />
             </Button>
           </div>
         </CardFooter>
