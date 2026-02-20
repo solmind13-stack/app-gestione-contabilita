@@ -122,7 +122,7 @@ service cloud.firestore {
                       );
     }
     
-    match /{collection}/{docId} where collection in ['deadlines', 'incomeForecasts', 'expenseForecasts', 'cashFlowProjections', 'liquidityAlerts'] {
+    match /{collection}/{docId} where collection in ['deadlines', 'incomeForecasts', 'expenseForecasts', 'cashFlowProjections', 'liquidityAlerts', 'monthlyReplays', 'modelCalibrations'] {
       
       function canReadCompanyData() {
         if (!isSignedIn()) { return false; }

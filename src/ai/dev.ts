@@ -26,3 +26,4 @@ import '@/ai/flows/data-audit-trail.ts';
 import '@/ai/flows/fetch-sector-benchmarks.ts';
 import '@/ai/flows/find-similar-cases.ts';
 import '@/ai/flows/fiscal-sentinel.ts';
+import '@/ai/flows/monthly-replay.ts';
